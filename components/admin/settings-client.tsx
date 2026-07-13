@@ -1,0 +1,144 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { CheckCircle2, Loader2, Pencil, Plus, Power, RotateCcw } from "lucide-react";
+import { saveCampaign, updateSettings } from "@/app/actions/admin";
+import { Button } from "@/components/ui/button";
+import { Field, Input, Textarea } from "@/components/ui/field";
+import type { AppSettings, Campaign } from "@/lib/types";
+
+export function SettingsClient({
+  settings,
+  campaigns
+}: {
+  settings: AppSettings;
+  campaigns: Campaign[];
+}) {
+  const [deadlineReminderDays, setDeadlineReminderDays] = useState(settings.deadline_reminder_days);
+  const [maxConcurrentEdits, setMaxConcurrentEdits] = useState(settings.max_concurrent_edits);
+  const [campaignName, setCampaignName] = useState("");
+  const [campaignDescription, setCampaignDescription] = useState("");
+  const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function persistSettings() {
+    setMessage(null);
+    startTransition(async () => {
+      const response = await updateSettings({
+        twoStepApproval: false,
+        deadlineReminderDays,
+        maxConcurrentEdits
+      });
+      setMessage(response.ok ? "Settings saved." : response.message ?? "Unable to save settings.");
+    });
+  }
+
+  function persistCampaign() {
+    setMessage(null);
+    startTransition(async () => {
+      const response = await saveCampaign({
+        id: editingCampaign?.id,
+        name: campaignName,
+        description: campaignDescription,
+        active: editingCampaign?.active ?? true
+      });
+      setMessage(response.ok ? (editingCampaign ? "Campaign updated." : "Campaign created.") : response.message ?? "Unable to save campaign.");
+      if (response.ok) {
+        resetCampaignForm();
+      }
+    });
+  }
+
+  function editCampaign(campaign: Campaign) {
+    setEditingCampaign(campaign);
+    setCampaignName(campaign.name);
+    setCampaignDescription(campaign.description ?? "");
+    setMessage(null);
+  }
+
+  function resetCampaignForm() {
+    setEditingCampaign(null);
+    setCampaignName("");
+    setCampaignDescription("");
+  }
+
+  function toggleCampaign(campaign: Campaign) {
+    setMessage(null);
+    startTransition(async () => {
+      const response = await saveCampaign({
+        id: campaign.id,
+        name: campaign.name,
+        description: campaign.description ?? undefined,
+        active: !campaign.active
+      });
+      setMessage(response.ok ? `${campaign.name} ${campaign.active ? "deactivated" : "activated"}.` : response.message ?? "Unable to update campaign.");
+    });
+  }
+
+  return (
+    <main className="page-container">
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-slate-950">Settings</h1>
+        <p className="mt-1 text-sm text-slate-500">Production workflow, reminders, and campaign setup.</p>
+      </div>
+      <div className="grid gap-5 xl:grid-cols-[minmax(300px,0.7fr)_minmax(0,1.3fr)]">
+        <section className="panel p-5">
+          <h2 className="section-heading">Production workflow</h2>
+          <div className="mt-5 space-y-5">
+            <Field label="Deadline reminder days">
+              <Input
+                type="number"
+                min={1}
+                max={30}
+                value={deadlineReminderDays}
+                onChange={(event) => setDeadlineReminderDays(Number(event.target.value))}
+              />
+            </Field>
+            <Field label="Max concurrent edits per editor" hint="How many videos an editor can have in progress at once.">
+              <Input
+                type="number"
+                min={1}
+                max={10}
+                value={maxConcurrentEdits}
+                onChange={(event) => setMaxConcurrentEdits(Number(event.target.value))}
+              />
+            </Field>
+            <Button className="w-full" disabled={isPending} onClick={persistSettings}>
+              {isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+              Save reminder settings
+            </Button>
+          </div>
+        </section>
+
+        <section className="panel overflow-hidden">
+          <div className="border-b border-border p-5"><div className="flex items-center justify-between gap-3"><div><h2 className="section-heading">Campaigns</h2><p className="mt-1 text-xs text-slate-500">{campaigns.filter((item) => item.active).length} active of {campaigns.length}</p></div>{editingCampaign ? <Button size="sm" variant="ghost" onClick={resetCampaignForm}><RotateCcw className="size-3.5" aria-hidden />Cancel edit</Button> : null}</div>
+          <div className="mt-5 grid gap-3 md:grid-cols-[minmax(180px,0.7fr)_minmax(240px,1fr)_auto] md:items-end">
+            <Field label="Campaign name">
+              <Input value={campaignName} onChange={(event) => setCampaignName(event.target.value)} />
+            </Field>
+            <Field label="Description">
+              <Textarea className="min-h-10" value={campaignDescription} onChange={(event) => setCampaignDescription(event.target.value)} />
+            </Field>
+            <Button disabled={isPending || !campaignName.trim()} onClick={persistCampaign}>
+              {isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : editingCampaign ? <CheckCircle2 className="size-4" aria-hidden /> : <Plus className="size-4" aria-hidden />}
+              {editingCampaign ? "Save" : "Add"}
+            </Button>
+          </div></div>
+            <div className="divide-y divide-border">
+              {campaigns.map((campaign) => (
+                <div key={campaign.id} className={`flex items-center justify-between gap-3 px-5 py-3 transition hover:bg-slate-50 ${!campaign.active ? "bg-slate-50/60" : ""}`}>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-950">{campaign.name}</p>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">{campaign.description ?? "No description"}</p>
+                  </div>
+                  <div className="flex items-center gap-1"><span className={`mr-2 inline-flex items-center gap-1.5 text-xs font-medium ${campaign.active ? "text-emerald-700" : "text-slate-400"}`}><span className={`size-1.5 rounded-full ${campaign.active ? "bg-emerald-500" : "bg-slate-300"}`} />{campaign.active ? "Active" : "Inactive"}</span><Button size="icon" variant="ghost" className="size-9" title="Edit campaign" onClick={() => editCampaign(campaign)}><Pencil className="size-4" aria-hidden /></Button><Button size="icon" variant="ghost" className="size-9" title={campaign.active ? "Deactivate campaign" : "Activate campaign"} onClick={() => toggleCampaign(campaign)}><Power className="size-4" aria-hidden /></Button></div>
+                </div>
+              ))}
+            </div>
+        </section>
+      </div>
+      {message ? <p className="mt-4 rounded-md border border-border bg-white px-3 py-2 text-sm text-slate-700 shadow-soft">{message}</p> : null}
+    </main>
+  );
+}

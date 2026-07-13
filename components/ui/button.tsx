@@ -1,0 +1,36 @@
+import type { ButtonHTMLAttributes } from "react";
+import { cn } from "@/lib/utils";
+
+type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: "primary" | "secondary" | "ghost" | "danger";
+  size?: "sm" | "md" | "icon";
+};
+
+export function Button({
+  className,
+  variant = "primary",
+  size = "md",
+  type = "button",
+  ...props
+}: ButtonProps) {
+  return (
+    <button
+      type={type}
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center gap-2 rounded-md border font-medium transition focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-55 disabled:active:translate-y-0",
+        variant === "primary" &&
+          "border-primary bg-primary text-primary-foreground shadow-sm hover:bg-teal-700",
+        variant === "secondary" &&
+          "border-border bg-white text-slate-800 shadow-sm hover:border-slate-300 hover:bg-slate-50",
+        variant === "ghost" && "border-transparent bg-transparent text-slate-700 hover:bg-slate-100",
+        variant === "danger" &&
+          "border-destructive bg-destructive text-destructive-foreground hover:bg-rose-700",
+        size === "sm" && "h-9 px-3 text-sm",
+        size === "md" && "h-10 px-4 text-sm",
+        size === "icon" && "size-10 p-0",
+        className
+      )}
+      {...props}
+    />
+  );
+}
