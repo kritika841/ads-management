@@ -16,12 +16,11 @@ import { Input, Select, Textarea } from "@/components/ui/field";
 import { useToast } from "@/components/ui/toast";
 import { platforms } from "@/lib/constants";
 import { canDeleteAd } from "@/lib/permissions";
+import { readDashboardFilters, writeDashboardFilters, type DashboardView } from "@/lib/dashboard-filter-state";
 import { creatorEditableStages, isFinalMediaVisible, productionStageLabels, productionStages, workflowWaitingLabel } from "@/lib/production-workflow";
 import type { AdStatus, AdWithRelations, Campaign, Product, Profile } from "@/lib/types";
 import { cn, dateOnlyDaysFromToday, formatDateOnly } from "@/lib/utils";
 import { matchesQueue, queueForRole, queuesForRole, type QueueKey } from "@/lib/work-queues";
-
-type ViewMode = "grid" | "table";
 
 export function DashboardClient({ profile, ads, campaigns, products, profiles, availableTags, editorWorkloads, initialQueue }: { profile: Profile; ads: AdWithRelations[]; campaigns: Campaign[]; products: Product[]; profiles: Profile[]; availableTags: string[]; editorWorkloads: Record<string, number>; initialQueue: QueueKey }) {
   const router = useRouter();
@@ -38,7 +37,8 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
   const [tag, setTag] = useState("all");
   const [deadline, setDeadline] = useState("all");
   const [sort, setSort] = useState("all");
-  const [view, setView] = useState<ViewMode>("grid");
+  const [view, setView] = useState<DashboardView>("grid");
+  const [urlInitialized, setUrlInitialized] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editingAd, setEditingAd] = useState<AdWithRelations | null>(null);
@@ -54,29 +54,18 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
 
   useEffect(() => {
     const saved = window.localStorage.getItem("adflow-dashboard-view");
-    if (saved === "grid" || saved === "table") setView(saved);
-    const params = new URLSearchParams(window.location.search);
-    setQuery(params.get("q") ?? "");
-    setStage(params.get("stage") ?? "all");
-    setEditor(params.get("editor") ?? "all");
-    setCreator(params.get("creator") ?? "all");
-    setCampaign(params.get("campaign") ?? "all");
-    setProduct(params.get("product") ?? "all");
-    setPlatform(params.get("platform") ?? "all");
-    setTag(params.get("tag") ?? "all");
-    setDeadline(params.get("deadline") ?? "all");
-    setSort(params.get("sort") ?? "all");
+    const state = readDashboardFilters(window.location.search, saved);
+    setQuery(state.q); setStage(state.stage); setEditor(state.editor); setCreator(state.creator);
+    setCampaign(state.campaign); setProduct(state.product); setPlatform(state.platform);
+    setTag(state.tag); setDeadline(state.deadline); setSort(state.sort); setView(state.view);
+    setUrlInitialized(true);
   }, []);
   useEffect(() => { window.localStorage.setItem("adflow-dashboard-view", view); }, [view]);
   useEffect(() => {
-    const url = new URL(window.location.href);
-    const values = { q: query, stage, editor, creator, campaign, product, platform, tag, deadline, sort };
-    for (const [key, value] of Object.entries(values)) {
-      if (!value || value === "all") url.searchParams.delete(key);
-      else url.searchParams.set(key, value);
-    }
+    if (!urlInitialized) return;
+    const url = writeDashboardFilters(new URL(window.location.href), { q: query, stage, editor, creator, campaign, product, platform, tag, deadline, sort, view });
     window.history.replaceState(null, "", url);
-  }, [campaign, creator, deadline, editor, platform, product, query, sort, stage, tag]);
+  }, [campaign, creator, deadline, editor, platform, product, query, sort, stage, tag, urlInitialized, view]);
   useEffect(() => { setQueue(queueForRole(profile.role, initialQueue) ?? queueOptions[0].key); }, [initialQueue, profile.role, queueOptions]);
   useEffect(() => {
     function keydown(event: KeyboardEvent) {
@@ -118,9 +107,25 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
 
   const filtersActive = [stage, editor, creator, campaign, product, platform, tag, deadline, sort].some((value) => value !== "all");
 
-  function clearFilters() {
+  const activeFilters = useMemo(() => {
+    const labelFor = (items: { id: string; name: string }[], value: string) => items.find((item) => item.id === value)?.name ?? value;
+    const chips: { key: string; label: string; clear: () => void }[] = [];
+    if (stage !== "all") chips.push({ key: "stage", label: `Status: ${productionStageLabels[stage as keyof typeof productionStageLabels] ?? stage}`, clear: () => setStage("all") });
+    if (editor !== "all") chips.push({ key: "editor", label: `Editor: ${labelFor(editors, editor)}`, clear: () => setEditor("all") });
+    if (creator !== "all") chips.push({ key: "creator", label: `Creator: ${labelFor(creators, creator)}`, clear: () => setCreator("all") });
+    if (campaign !== "all") chips.push({ key: "campaign", label: `Campaign: ${labelFor(campaigns, campaign)}`, clear: () => setCampaign("all") });
+    if (product !== "all") chips.push({ key: "product", label: `Product: ${labelFor(products, product)}`, clear: () => setProduct("all") });
+    if (platform !== "all") chips.push({ key: "platform", label: `Platform: ${platform}`, clear: () => setPlatform("all") });
+    if (tag !== "all") chips.push({ key: "tag", label: `Tag: #${tag}`, clear: () => setTag("all") });
+    if (deadline !== "all") chips.push({ key: "deadline", label: `Deadline: ${deadline === "soon" ? "Due in 3 days" : deadline === "today" ? "Due today" : "Overdue"}`, clear: () => setDeadline("all") });
+    if (sort !== "all") chips.push({ key: "sort", label: `Sort: ${sort === "deadline" ? "Deadline first" : sort === "waiting" ? "Waiting longest" : "Oldest created"}`, clear: () => setSort("all") });
+    return chips;
+  }, [campaign, campaigns, creator, creators, deadline, editor, editors, platform, product, products, sort, stage, tag]);
+
+  function clearFilters(clearSearch = false) {
     setStage("all"); setEditor("all"); setCreator("all"); setCampaign("all"); setProduct("all");
     setPlatform("all"); setTag("all"); setDeadline("all"); setSort("all");
+    if (clearSearch) setQuery("");
   }
 
   function openCreatorForm(ad?: AdWithRelations) {
@@ -176,7 +181,11 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
 
     <div className="mt-6 overflow-x-auto pb-1"><div className="inline-flex min-w-max rounded-md border border-border bg-card p-1 shadow-sm">{queueOptions.map((option) => <button key={option.key} className={cn("flex h-9 items-center gap-2 rounded px-3 text-sm font-medium transition", queue === option.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")} onClick={() => selectQueue(option.key)}>{option.label}<span className={cn("rounded-full px-1.5 py-0.5 text-[10px]", queue === option.key ? "bg-primary-foreground/15" : "bg-muted text-muted-foreground")}>{ads.filter((ad) => matchesQueue(ad, option.key)).length}</span></button>)}</div></div>
 
-    <section className="panel mt-4 p-3"><div className="flex flex-col gap-2 lg:flex-row"><div className="relative flex-1"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden /><Input ref={searchRef} className="pl-9" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search ads, scripts, people, products, or tags" /></div><Button variant={filtersOpen || filtersActive ? "primary" : "secondary"} onClick={() => setFiltersOpen((current) => !current)}><Filter className="size-4" aria-hidden />Filters{filtersActive ? <span className="size-1.5 rounded-full bg-current" /> : null}</Button><div className="flex rounded-md border border-border bg-muted p-1"><Button size="icon" variant={view === "grid" ? "secondary" : "ghost"} className="size-8" title="Grid view" onClick={() => setView("grid")}><Grid2X2 className="size-4" aria-hidden /></Button><Button size="icon" variant={view === "table" ? "secondary" : "ghost"} className="size-8" title="Table view" onClick={() => setView("table")}><Table2 className="size-4" aria-hidden /></Button></div></div>{filtersOpen ? <div className="mt-3 border-t border-border pt-3"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><FilterSelect label="Status" value={stage} onChange={setStage} options={productionStages.map((item) => ({ value: item, label: productionStageLabels[item] }))} />{profile.role === "admin" || profile.role === "manager" ? <><FilterSelect label="Editor" value={editor} onChange={setEditor} options={editors.map((item) => ({ value: item.id, label: item.name }))} /><FilterSelect label="Creator" value={creator} onChange={setCreator} options={creators.map((item) => ({ value: item.id, label: item.name }))} /></> : null}<FilterSelect label="Campaign" value={campaign} onChange={setCampaign} options={campaigns.map((item) => ({ value: item.id, label: item.name }))} /><FilterSelect label="Product" value={product} onChange={setProduct} options={products.map((item) => ({ value: item.id, label: item.name }))} /><FilterSelect label="Platform" value={platform} onChange={setPlatform} options={platforms.map((item) => ({ value: item, label: item }))} /><FilterSelect label="Tag" value={tag} onChange={setTag} options={availableTags.map((item) => ({ value: item, label: `#${item}` }))} /><FilterSelect label="Deadline" value={deadline} onChange={setDeadline} options={[{ value: "overdue", label: "Overdue" }, { value: "today", label: "Due today" }, { value: "soon", label: "Due in 3 days" }]} /><FilterSelect label="Sort" value={sort} onChange={setSort} options={[{ value: "deadline", label: "Deadline first" }, { value: "waiting", label: "Waiting longest" }, { value: "oldest", label: "Oldest created" }]} /></div>{filtersActive ? <div className="mt-3 flex justify-end"><Button size="sm" variant="ghost" onClick={clearFilters}><X className="size-3.5" aria-hidden />Clear filters</Button></div> : null}</div> : null}</section>
+    <section className="panel mt-4 p-3">
+      <div className="flex flex-col gap-2 lg:flex-row"><div className="relative flex-1"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden /><Input ref={searchRef} className="pl-9" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search ads, scripts, people, products, or tags" /></div><Button variant={filtersOpen || filtersActive ? "primary" : "secondary"} onClick={() => setFiltersOpen((current) => !current)}><Filter className="size-4" aria-hidden />Filters{filtersActive ? <span className="size-1.5 rounded-full bg-current" /> : null}</Button><div className="flex rounded-lg border border-border bg-muted p-1"><Button size="icon" variant={view === "grid" ? "secondary" : "ghost"} className="size-8" title="Grid view" onClick={() => setView("grid")}><Grid2X2 className="size-4" aria-hidden /></Button><Button size="icon" variant={view === "table" ? "secondary" : "ghost"} className="size-8" title="Table view" onClick={() => setView("table")}><Table2 className="size-4" aria-hidden /></Button></div></div>
+      {activeFilters.length || query ? <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">{query ? <FilterChip label={`Search: ${query}`} onRemove={() => setQuery("")} /> : null}{activeFilters.map((filter) => <FilterChip key={filter.key} label={filter.label} onRemove={filter.clear} />)}<button type="button" className="h-7 px-2 text-xs font-medium text-muted-foreground hover:text-foreground" onClick={() => clearFilters(true)}>Clear all</button></div> : null}
+      {filtersOpen ? <div className="mt-3 border-t border-border pt-3"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><FilterSelect label="Status" value={stage} onChange={setStage} options={productionStages.map((item) => ({ value: item, label: productionStageLabels[item] }))} />{profile.role === "admin" || profile.role === "manager" ? <><FilterSelect label="Editor" value={editor} onChange={setEditor} options={editors.map((item) => ({ value: item.id, label: item.name }))} /><FilterSelect label="Creator" value={creator} onChange={setCreator} options={creators.map((item) => ({ value: item.id, label: item.name }))} /></> : null}<FilterSelect label="Campaign" value={campaign} onChange={setCampaign} options={campaigns.map((item) => ({ value: item.id, label: item.name }))} /><FilterSelect label="Product" value={product} onChange={setProduct} options={products.map((item) => ({ value: item.id, label: item.name }))} /><FilterSelect label="Platform" value={platform} onChange={setPlatform} options={platforms.map((item) => ({ value: item, label: item }))} /><FilterSelect label="Tag" value={tag} onChange={setTag} options={availableTags.map((item) => ({ value: item, label: `#${item}` }))} /><FilterSelect label="Deadline" value={deadline} onChange={setDeadline} options={[{ value: "overdue", label: "Overdue" }, { value: "today", label: "Due today" }, { value: "soon", label: "Due in 3 days" }]} /><FilterSelect label="Sort" value={sort} onChange={setSort} options={[{ value: "deadline", label: "Deadline first" }, { value: "waiting", label: "Waiting longest" }, { value: "oldest", label: "Oldest created" }]} /></div></div> : null}
+    </section>
 
     <div className="mt-4 flex items-center justify-between"><p className="text-sm text-muted-foreground"><span className="font-medium text-foreground">{filteredAds.length}</span> items</p></div>
     {filteredAds.length ? view === "grid" ? <section className="mt-3 grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">{filteredAds.map((ad) => <WorkflowCard key={ad.id} ad={ad} profile={profile} editors={editors} editorWorkloads={editorWorkloads} pending={actingAdId === ad.id} onPreview={() => setPreviewAd(ad)} onEdit={() => openCreatorForm(ad)} onApprove={() => decide(ad, "approve")} onRequestChanges={() => setCancelAd(ad)} onAssignEditor={(editorId, deadline) => assign(ad, editorId, deadline)} />)}</section> : <WorkflowTable ads={filteredAds} profile={profile} pendingId={actingAdId} onApprove={(ad) => decide(ad, "approve")} onRequestChanges={setCancelAd} /> : <EmptyQueue canCreate={canCreate} onCreate={() => openCreatorForm()} />}
@@ -263,4 +272,5 @@ function WorkflowTable({ ads, profile, pendingId, onApprove, onRequestChanges }:
 function Person({ label, person }: { label: string; person: AdWithRelations["creator"] }) { return <div className="flex min-w-0 items-center gap-2"><Avatar className="size-7" name={person?.name ?? "Unassigned"} src={person?.avatar_url} /><div className="min-w-0"><p className="text-[10px] font-medium uppercase text-muted-foreground">{label}</p><p className="truncate text-xs font-medium text-muted-foreground">{person?.name ?? "Unassigned"}</p></div></div>; }
 function Deadline({ deadline, status }: { deadline: string | null; status: AdStatus }) { if (!deadline) return <span className="text-muted-foreground">No deadline</span>; const days = dateOnlyDaysFromToday(deadline); const active = status !== "approved" && status !== "published"; return <span className={cn("inline-flex items-center gap-1", active && days < 0 ? "text-destructive" : "text-muted-foreground")}><CalendarClock className="size-3.5" aria-hidden />{active && days < 0 ? `${Math.abs(days)}d overdue` : formatDateOnly(deadline)}</span>; }
 function FilterSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: { value: string; label: string }[] }) { return <label className="space-y-1"><span className="text-xs font-medium text-muted-foreground">{label}</span><Select value={value} onChange={(event) => onChange(event.target.value)}><option value="all">{label === "Sort" ? "Recently updated" : `All ${label.toLowerCase()}`}</option>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select></label>; }
+function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) { return <span className="inline-flex h-7 items-center gap-1 rounded-full border border-border bg-muted pl-2.5 pr-1 text-xs font-medium text-foreground">{label}<button type="button" className="inline-flex size-5 items-center justify-center rounded-full text-muted-foreground hover:bg-card hover:text-foreground" aria-label={`Remove ${label} filter`} onClick={onRemove}><X className="size-3" aria-hidden /></button></span>; }
 function EmptyQueue({ canCreate, onCreate }: { canCreate: boolean; onCreate: () => void }) { return <div className="mt-6 flex min-h-64 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card px-6 text-center"><span className="flex size-12 items-center justify-center rounded-full bg-muted"><ListFilter className="size-5 text-muted-foreground" aria-hidden /></span><h2 className="mt-3 text-base font-semibold text-foreground">Nothing in this queue</h2><p className="mt-1 text-sm text-muted-foreground">Items will appear here when they reach this status.</p>{canCreate ? <Button className="mt-4" onClick={onCreate}><Plus className="size-4" aria-hidden />Add creative</Button> : null}</div>; }
