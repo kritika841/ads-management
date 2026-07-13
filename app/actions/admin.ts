@@ -172,6 +172,51 @@ export async function deactivateUser(userId: string) {
   return { ok: true };
 }
 
+export async function deleteUser(userId: string) {
+  const adminProfile = await requireRole(["admin"]);
+  const parsedId = z.string().uuid().safeParse(userId);
+  if (!parsedId.success) return { ok: false, message: "Invalid user id." };
+  if (parsedId.data === adminProfile.id) return { ok: false, message: "You cannot delete your own account." };
+
+  const admin = createSupabaseAdminClient();
+  const { data: target, error: targetError } = await admin
+    .from("profiles")
+    .select("id,name,email,role,active")
+    .eq("id", parsedId.data)
+    .maybeSingle();
+  if (targetError || !target) return { ok: false, message: targetError?.message ?? "User not found." };
+
+  if (target.role === "admin" && target.active) {
+    const { count, error: countError } = await admin
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("role", "admin")
+      .eq("active", true);
+    if (countError) return { ok: false, message: countError.message };
+    if ((count ?? 0) <= 1) return { ok: false, message: "Add another active admin before deleting this account." };
+  }
+
+  const { error: profileError } = await admin.from("profiles").update({ active: false }).eq("id", parsedId.data);
+  if (profileError) return { ok: false, message: profileError.message };
+
+  const { error: authError } = await admin.auth.admin.deleteUser(parsedId.data, true);
+  if (authError) {
+    await admin.from("profiles").update({ active: target.active }).eq("id", parsedId.data);
+    return { ok: false, message: authError.message };
+  }
+
+  await audit(adminProfile.id, "deleted_user_access", "profile", parsedId.data, {
+    name: target.name,
+    email: target.email,
+    role: target.role,
+    historical_attribution_preserved: true
+  });
+  revalidatePath("/admin/users");
+  revalidatePath("/library");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
 export async function saveCampaign(payload: { id?: string; name: string; description?: string; active?: boolean }) {
   const adminProfile = await requireRole(["admin"]);
   const parsed = campaignSchema.safeParse(payload);

@@ -1,17 +1,22 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { Check, Copy, Loader2, Pencil, Power, RefreshCw, Search, UserPlus, Users, X } from "lucide-react";
-import { deactivateUser, saveUser } from "@/app/actions/admin";
+import { useRouter } from "next/navigation";
+import { Check, Copy, Loader2, Pencil, Power, RefreshCw, Search, Trash2, UserPlus, Users, X } from "lucide-react";
+import { deactivateUser, deleteUser, saveUser } from "@/app/actions/admin";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
+import { Modal } from "@/components/ui/modal";
+import { useToast } from "@/components/ui/toast";
 import { averageApprovalHours, approvalRate } from "@/lib/analytics";
 import { userRoles } from "@/lib/constants";
 import type { AdWithRelations, Profile, UserRole } from "@/lib/types";
 import { cn, formatDurationHours } from "@/lib/utils";
 
 export function AdminUsersClient({ profiles, ads, currentProfileId }: { profiles: Profile[]; ads: AdWithRelations[]; currentProfileId: string }) {
+  const router = useRouter();
+  const { toast } = useToast();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Profile | null>(null);
   const [name, setName] = useState("");
@@ -23,6 +28,7 @@ export function AdminUsersClient({ profiles, ads, currentProfileId }: { profiles
   const [roleFilter, setRoleFilter] = useState("all");
   const [message, setMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [deleting, setDeleting] = useState<Profile | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const stats = useMemo(() => new Map(profiles.map((profile) => {
@@ -69,6 +75,22 @@ export function AdminUsersClient({ profiles, ads, currentProfileId }: { profiles
     startTransition(async () => {
       const response = await deactivateUser(profile.id);
       setMessage(response.ok ? `${profile.name} was deactivated.` : response.message ?? "Action failed.");
+      if (response.ok) router.refresh();
+    });
+  }
+
+  function removeUser() {
+    if (!deleting) return;
+    const profile = deleting;
+    startTransition(async () => {
+      const response = await deleteUser(profile.id);
+      if (!response.ok) {
+        toast({ title: "User not deleted", description: response.message ?? "Action failed.", tone: "error" });
+        return;
+      }
+      setDeleting(null);
+      toast({ title: "User deleted", description: `${profile.name} can no longer sign in. Historical work is preserved.`, tone: "success" });
+      router.refresh();
     });
   }
 
@@ -115,7 +137,7 @@ export function AdminUsersClient({ profiles, ads, currentProfileId }: { profiles
                     <td className="px-4 py-3 text-muted-foreground">{userStats?.approved ?? 0}</td>
                     <td className="px-4 py-3"><span className="font-medium text-foreground">{userStats?.approvalRate ?? 0}%</span></td>
                     <td className="px-4 py-3 text-muted-foreground">{formatDurationHours(userStats?.avgApproval ?? null)}</td>
-                    <td className="px-4 py-3"><div className="flex justify-end gap-1"><Button size="icon" variant="ghost" className="size-9" title="Edit user" onClick={() => open(profile)}><Pencil className="size-4" aria-hidden /></Button><Button size="icon" variant="ghost" className="size-9 text-destructive hover:bg-destructive/10 hover:text-destructive" title={profile.id === currentProfileId ? "You cannot deactivate yourself" : "Deactivate user"} disabled={!profile.active || profile.id === currentProfileId} onClick={() => deactivate(profile)}><Power className="size-4" aria-hidden /></Button></div></td>
+                    <td className="px-4 py-3"><div className="flex justify-end gap-1"><Button size="icon" variant="ghost" className="size-9" title="Edit user" onClick={() => open(profile)}><Pencil className="size-4" aria-hidden /></Button><Button size="icon" variant="ghost" className="size-9" title={profile.id === currentProfileId ? "You cannot deactivate yourself" : "Deactivate user"} disabled={!profile.active || profile.id === currentProfileId || isPending} onClick={() => deactivate(profile)}><Power className="size-4" aria-hidden /></Button><Button size="icon" variant="ghost" className="size-9 text-destructive hover:bg-destructive/10 hover:text-destructive" title={profile.id === currentProfileId ? "You cannot delete yourself" : "Delete user"} disabled={profile.id === currentProfileId || isPending} onClick={() => setDeleting(profile)}><Trash2 className="size-4" aria-hidden /></Button></div></td>
                   </tr>
                 );
               })}
@@ -140,6 +162,8 @@ export function AdminUsersClient({ profiles, ads, currentProfileId }: { profiles
           </section>
         </div>
       ) : null}
+
+      {deleting ? <Modal open labelledBy="delete-user-title" onClose={() => { if (!isPending) setDeleting(null); }} className="flex items-center justify-center p-4"><section className="w-full max-w-md rounded-xl border border-border bg-card shadow-float dark:shadow-none"><div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4"><div><h2 id="delete-user-title" className="text-lg font-semibold text-foreground">Delete {deleting.name}?</h2><p className="mt-1 text-sm text-muted-foreground">This permanently removes their login access.</p></div><Button size="icon" variant="ghost" className="size-9" title="Close" disabled={isPending} onClick={() => setDeleting(null)}><X className="size-5" aria-hidden /></Button></div><div className="space-y-3 p-5"><p className="text-sm leading-6 text-muted-foreground">Their profile will be marked inactive, but past creatives, reviews, comments, and audit records will continue to show their name.</p><div className="rounded-lg border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive">This user will not be able to sign in again with this account.</div></div><div className="flex justify-end gap-2 border-t border-border px-5 py-4"><Button variant="secondary" disabled={isPending} onClick={() => setDeleting(null)}>Cancel</Button><Button variant="danger" disabled={isPending} onClick={removeUser}>{isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Trash2 className="size-4" aria-hidden />}Delete user</Button></div></section></Modal> : null}
     </main>
   );
 }
