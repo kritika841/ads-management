@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ArrowDown, ArrowRight, ArrowUp, CalendarClock, Check, ChevronsUpDown, Eye, Filter, Grid2X2, ListFilter, Loader2, Plus, Search, Table2, UserCheck, Video, X } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, CalendarClock, Check, ChevronsUpDown, Eye, Filter, Grid2X2, ListFilter, Loader2, Play, Plus, Search, Table2, UserCheck, Video, X } from "lucide-react";
 import { assignEditor, reviewAd } from "@/app/actions/ads";
 import { AdPreviewModal } from "@/components/dashboard/ad-preview-modal";
 import { DeleteAdButton } from "@/components/dashboard/delete-ad-button";
@@ -46,6 +46,7 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
   const [formOpen, setFormOpen] = useState(false);
   const [editingAd, setEditingAd] = useState<AdWithRelations | null>(null);
   const [previewAd, setPreviewAd] = useState<AdWithRelations | null>(null);
+  const [playingAdId, setPlayingAdId] = useState<string | null>(null);
   const [cancelAd, setCancelAd] = useState<AdWithRelations | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [actingAdId, setActingAdId] = useState<string | null>(null);
@@ -117,6 +118,7 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
 
   useEffect(() => {
     setVisibleGridCount(gridPageSize);
+    setPlayingAdId(null);
   }, [gridFilterKey]);
 
   useEffect(() => {
@@ -217,7 +219,7 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
     </section>
 
     <div className="mt-4 flex items-center justify-between"><p className="text-sm text-muted-foreground"><span className="font-medium text-foreground">{filteredAds.length}</span> items{view === "grid" && filteredAds.length > gridPageSize ? <span> · showing {visibleGridAds.length}</span> : null}</p></div>
-    {filteredAds.length ? view === "grid" ? <><section className="mt-3 grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">{visibleGridAds.map((ad) => <WorkflowCard key={ad.id} ad={ad} profile={profile} editors={editors} editorWorkloads={editorWorkloads} pending={actingAdId === ad.id} onPreview={() => setPreviewAd(ad)} onEdit={() => openCreatorForm(ad)} onApprove={() => decide(ad, "approve")} onRequestChanges={() => setCancelAd(ad)} onAssignEditor={(editorId, deadline) => assign(ad, editorId, deadline)} />)}</section>{hasMoreGridAds ? <div ref={loadMoreRef} className="flex h-20 items-center justify-center" role="status" aria-label="Loading more creatives"><Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden /><span className="sr-only">Loading more creatives</span></div> : null}</> : <WorkflowTable ads={filteredAds} profile={profile} pendingId={actingAdId} onApprove={(ad) => decide(ad, "approve")} onRequestChanges={setCancelAd} /> : <EmptyQueue canCreate={canCreate} onCreate={() => openCreatorForm()} />}
+    {filteredAds.length ? view === "grid" ? <><section className="mt-3 grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">{visibleGridAds.map((ad) => <WorkflowCard key={ad.id} ad={ad} profile={profile} editors={editors} editorWorkloads={editorWorkloads} pending={actingAdId === ad.id} playing={playingAdId === ad.id} onPlay={() => setPlayingAdId(ad.id)} onStopPlaying={() => setPlayingAdId(null)} onPlaybackError={() => { setPlayingAdId(null); toast({ title: "Video unavailable", description: `${ad.name} could not be played.`, tone: "error" }); }} onPreview={() => setPreviewAd(ad)} onEdit={() => openCreatorForm(ad)} onApprove={() => decide(ad, "approve")} onRequestChanges={() => setCancelAd(ad)} onAssignEditor={(editorId, deadline) => assign(ad, editorId, deadline)} />)}</section>{hasMoreGridAds ? <div ref={loadMoreRef} className="flex h-20 items-center justify-center" role="status" aria-label="Loading more creatives"><Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden /><span className="sr-only">Loading more creatives</span></div> : null}</> : <WorkflowTable ads={filteredAds} profile={profile} pendingId={actingAdId} onApprove={(ad) => decide(ad, "approve")} onRequestChanges={setCancelAd} /> : <EmptyQueue canCreate={canCreate} onCreate={() => openCreatorForm()} />}
 
     {formOpen ? <Modal open labelledBy="creator-form-title" onClose={() => { setFormOpen(false); setEditingAd(null); }} className="p-0 sm:p-6"><section className="mx-auto min-h-full w-full bg-card shadow-float sm:min-h-0 sm:max-w-5xl sm:rounded-xl"><div className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-border bg-card px-5 sm:rounded-t-lg"><div><h2 id="creator-form-title" className="text-lg font-semibold text-foreground">{editingAd ? "Update creative" : "Add creative"}</h2><p className="text-xs text-muted-foreground">Set the current preparation status and save.</p></div><Button size="icon" variant="ghost" title="Close" onClick={() => { setFormOpen(false); setEditingAd(null); }}><X className="size-5" aria-hidden /></Button></div><div className="p-5"><CreatorItemForm profile={profile} creators={creators} editors={editors} campaigns={campaigns.filter((item) => item.active)} products={products.filter((item) => item.active)} initialAd={editingAd} availableTags={availableTags} editorWorkloads={editorWorkloads} onSaved={() => { setFormOpen(false); setEditingAd(null); router.refresh(); }} /></div></section></Modal> : null}
 
@@ -226,7 +228,7 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
   </main>;
 }
 
-function WorkflowCard({ ad, profile, editors, editorWorkloads, pending, onPreview, onEdit, onApprove, onRequestChanges, onAssignEditor }: { ad: AdWithRelations; profile: Profile; editors: Profile[]; editorWorkloads: Record<string, number>; pending: boolean; onPreview: () => void; onEdit: () => void; onApprove: () => void; onRequestChanges: () => void; onAssignEditor: (editorId: string, deadline: string) => void }) {
+function WorkflowCard({ ad, profile, editors, editorWorkloads, pending, playing, onPlay, onStopPlaying, onPlaybackError, onPreview, onEdit, onApprove, onRequestChanges, onAssignEditor }: { ad: AdWithRelations; profile: Profile; editors: Profile[]; editorWorkloads: Record<string, number>; pending: boolean; playing: boolean; onPlay: () => void; onStopPlaying: () => void; onPlaybackError: () => void; onPreview: () => void; onEdit: () => void; onApprove: () => void; onRequestChanges: () => void; onAssignEditor: (editorId: string, deadline: string) => void }) {
   const [selectedEditor, setSelectedEditor] = useState("");
   const [selectedDeadline, setSelectedDeadline] = useState(ad.deadline ?? "");
   const mediaVisible = isFinalMediaVisible(ad.production_stage);
@@ -242,9 +244,11 @@ function WorkflowCard({ ad, profile, editors, editorWorkloads, pending, onPrevie
     <article className="group/card relative overflow-hidden rounded-xl border border-border bg-card shadow-soft transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-ring/40 hover:shadow-float dark:shadow-none dark:hover:border-ring/60">
       {pending ? <div className="absolute inset-0 z-20 flex items-center justify-center bg-card/75 backdrop-blur-[1px]" role="status"><span className="inline-flex items-center gap-2 rounded-lg border border-border bg-popover px-3 py-2 text-sm font-medium text-foreground shadow-soft dark:shadow-none"><Loader2 className="size-4 animate-spin text-primary" aria-hidden />Saving...</span></div> : null}
       {canPreview ? (
-        <button className="relative block aspect-video w-full overflow-hidden bg-neutral-950" onClick={onPreview} aria-label={`Preview ${ad.name}`}>
+        playing ? <div className="relative aspect-video w-full overflow-hidden bg-neutral-950"><video src={`/api/ads/${ad.id}/media?fileId=${encodeURIComponent(ad.drive_file_id!)}`} className="size-full object-contain" controls autoPlay playsInline preload="metadata" onError={onPlaybackError} /><button type="button" className="absolute right-3 top-3 inline-flex size-8 items-center justify-center rounded-full border border-white/20 bg-black/65 text-white backdrop-blur-sm transition hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white" aria-label={`Stop playing ${ad.name}`} onClick={onStopPlaying}><X className="size-4" aria-hidden /></button></div> :
+        <button className="relative block aspect-video w-full overflow-hidden bg-neutral-950" onClick={onPlay} aria-label={`Play ${ad.name}`}>
           {thumbnail ? <CardThumbnail src={thumbnail} name={ad.name} /> : <MediaPlaceholder label="Final video submitted" />}
           <span className="absolute left-3 top-3 max-w-[75%]"><ProductionStageBadge stage={ad.production_stage} /></span>
+          <span className="absolute left-1/2 top-1/2 inline-flex size-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-black/65 text-white shadow-lg backdrop-blur-sm transition duration-200 group-hover/card:scale-105 group-hover/card:bg-black/80"><Play className="ml-0.5 size-5 fill-current" aria-hidden /></span>
         </button>
       ) : (
         <div className="relative aspect-video overflow-hidden bg-neutral-950">
