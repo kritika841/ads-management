@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ExternalLink, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useVideoTimestamp } from "@/components/review/video-timestamp-context";
 import { resolveAdThumbnailUrl } from "@/lib/drive-urls";
 import type { AdVersion, AdWithRelations } from "@/lib/types";
 import { formatDateTime } from "@/lib/utils";
@@ -53,6 +54,8 @@ export function AdVersionPreview({
   }, [ad, versions]);
 
   const [selectedKey, setSelectedKey] = useState(items[0]?.key ?? "current");
+  const [failedMedia, setFailedMedia] = useState<Set<string>>(() => new Set());
+  const { registerVideo } = useVideoTimestamp();
   const selected = items.find((item) => item.key === selectedKey) ?? items[0];
   const thumbnailSrc = selected?.key === "current" && ad.drive_file_id
     ? `/api/ads/${ad.id}/thumbnail?v=${encodeURIComponent(ad.drive_file_id)}`
@@ -89,7 +92,22 @@ export function AdVersionPreview({
 
       <div className="grid lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)]">
         <div className="min-h-[360px] bg-neutral-950">
-          {selected?.previewUrl ? (
+          {selected?.driveFileId && !failedMedia.has(selected.key) ? (
+            <video
+              key={`${selected.key}-${selected.driveFileId}`}
+              ref={registerVideo}
+              src={`/api/ads/${ad.id}/media?fileId=${encodeURIComponent(selected.driveFileId)}`}
+              title={`${ad.name} ${selected.label}`}
+              className="h-full min-h-[360px] w-full object-contain"
+              controls
+              playsInline
+              preload="metadata"
+              onError={() => {
+                registerVideo(null);
+                setFailedMedia((current) => new Set(current).add(selected.key));
+              }}
+            />
+          ) : selected?.previewUrl ? (
             <iframe
               key={`${selected.key}-${selected.previewUrl}`}
               src={selected.previewUrl}

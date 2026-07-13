@@ -6,6 +6,7 @@ import { DeleteAdButton } from "@/components/dashboard/delete-ad-button";
 import { AdVersionPreview } from "@/components/review/ad-version-preview";
 import { CommentThread } from "@/components/review/comment-thread";
 import { ReviewPanel } from "@/components/review/review-panel";
+import { VideoTimestampProvider } from "@/components/review/video-timestamp-context";
 import { VersionHistory } from "@/components/review/version-history";
 import { SetupState } from "@/components/setup-state";
 import { Avatar } from "@/components/ui/avatar";
@@ -112,6 +113,7 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
           </div>
         </section>
 
+        <VideoTimestampProvider>
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
           <section className="min-w-0 space-y-5">
             {mediaVisible && ad.drive_file_id ? <AdVersionPreview ad={ad} versions={versions} /> : null}
@@ -169,6 +171,7 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
             <CommentThread adId={ad.id} comments={comments} />
           </aside>
         </div>
+        </VideoTimestampProvider>
       </main>
     </AppShell>
   );

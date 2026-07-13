@@ -7,6 +7,7 @@ import { addAnnotation, resolveAnnotation, reviewAd } from "@/app/actions/ads";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { useToast } from "@/components/ui/toast";
+import { formatVideoTime, useVideoTimestamp } from "@/components/review/video-timestamp-context";
 import type { AdWithRelations, Annotation, Profile, ReviewAction } from "@/lib/types";
 import { formatDateTime } from "@/lib/utils";
 
@@ -146,6 +147,7 @@ export function ReviewPanel({
 
 function ReviewNotes({ adId, annotations }: { adId: string; annotations: Annotation[] }) {
   const router = useRouter();
+  const { currentTime, hasVideo, seekTo } = useVideoTimestamp();
   const [kind, setKind] = useState<"video_timestamp" | "script_inline">("video_timestamp");
   const [seconds, setSeconds] = useState("");
   const [anchor, setAnchor] = useState("");
@@ -192,7 +194,8 @@ function ReviewNotes({ adId, annotations }: { adId: string; annotations: Annotat
             <option value="video_timestamp">Video timestamp</option>
             <option value="script_inline">Script note</option>
           </Select>
-          {kind === "video_timestamp" ? <Input type="number" min="0" step="1" value={seconds} onChange={(event) => setSeconds(event.target.value)} placeholder="Time in seconds, for example 14" /> : <Input value={anchor} onChange={(event) => setAnchor(event.target.value)} placeholder="Script section or quoted words" />}
+          {kind === "video_timestamp" ? <div className="flex flex-col gap-2 sm:flex-row"><Input type="number" min="0" step="1" value={seconds} onChange={(event) => setSeconds(event.target.value)} placeholder="Time in seconds, for example 14" /><Button className="sm:w-auto" variant="secondary" disabled={!hasVideo} onClick={() => { const time = currentTime(); if (time !== null) setSeconds(String(Math.floor(time))); }}>Use current time</Button></div> : <Input value={anchor} onChange={(event) => setAnchor(event.target.value)} placeholder="Script section or quoted words" />}
+          {kind === "video_timestamp" && !hasVideo ? <p className="text-xs text-muted-foreground">Play the video above to capture its current time, or enter seconds manually.</p> : null}
           <Textarea className="min-h-20" value={body} onChange={(event) => setBody(event.target.value)} placeholder="What needs attention?" />
           <Button className="w-full" size="sm" disabled={pending || !body.trim()} onClick={addNote}>{pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Send className="size-4" aria-hidden />}Add note</Button>
         </div>
@@ -200,7 +203,7 @@ function ReviewNotes({ adId, annotations }: { adId: string; annotations: Annotat
         {annotations.length ? <div className="space-y-2">{annotations.map((annotation) => (
           <div key={annotation.id} className={`rounded-md border p-3 ${annotation.resolved_at ? "border-border bg-muted opacity-70" : "border-warning/30 bg-warning/15/50"}`}>
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0"><p className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">{annotation.kind === "video_timestamp" ? <><Clock3 className="size-3.5" aria-hidden />{annotation.timestamp_seconds ?? 0}s</> : annotation.script_anchor || "Script note"}</p><p className="mt-1 text-sm text-muted-foreground">{annotation.body}</p></div>
+              <div className="min-w-0">{annotation.kind === "video_timestamp" ? <button type="button" className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2 py-1 text-xs font-semibold text-primary hover:border-ring/50 hover:bg-accent disabled:cursor-not-allowed disabled:text-muted-foreground" disabled={!hasVideo} title={hasVideo ? "Play video from this time" : "Video preview unavailable"} onClick={() => seekTo(annotation.timestamp_seconds ?? 0)}><Clock3 className="size-3.5" aria-hidden />{formatVideoTime(annotation.timestamp_seconds ?? 0)}</button> : <p className="text-xs font-semibold text-muted-foreground">{annotation.script_anchor || "Script note"}</p>}<p className="mt-1 text-sm text-muted-foreground">{annotation.body}</p></div>
               <Button size="icon" variant="ghost" className="size-7 shrink-0" title={annotation.resolved_at ? "Reopen note" : "Mark note resolved"} disabled={pending} onClick={() => toggleResolved(annotation.id)}>{annotation.resolved_at ? <RotateCcw className="size-3.5" aria-hidden /> : <CheckCircle2 className="size-3.5" aria-hidden />}</Button>
             </div>
           </div>

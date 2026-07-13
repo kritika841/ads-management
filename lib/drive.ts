@@ -42,6 +42,17 @@ export async function getDriveThumbnail(fileId: string) {
   };
 }
 
+export async function getDriveMedia(fileId: string, range?: string | null) {
+  const auth = createDriveAuth();
+  if (!auth) return null;
+  const accessToken = await auth.getAccessToken();
+  if (!accessToken) return null;
+  return fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, {
+    headers: { Authorization: `Bearer ${accessToken}`, ...(range ? { Range: range } : {}) },
+    cache: "no-store"
+  });
+}
+
 function createDriveAuth() {
   const serviceAccountJson = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON;
   if (!serviceAccountJson) {
