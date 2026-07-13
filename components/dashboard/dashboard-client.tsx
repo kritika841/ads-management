@@ -13,6 +13,7 @@ import { ProductionStageBadge } from "@/components/workflow/production-stage";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/field";
+import { useToast } from "@/components/ui/toast";
 import { platforms } from "@/lib/constants";
 import { canDeleteAd } from "@/lib/permissions";
 import { creatorEditableStages, isFinalMediaVisible, productionStageLabels, productionStages, workflowWaitingLabel } from "@/lib/production-workflow";
@@ -24,6 +25,7 @@ type ViewMode = "grid" | "table";
 
 export function DashboardClient({ profile, ads, campaigns, products, profiles, availableTags, editorWorkloads, initialQueue }: { profile: Profile; ads: AdWithRelations[]; campaigns: Campaign[]; products: Product[]; profiles: Profile[]; availableTags: string[]; editorWorkloads: Record<string, number>; initialQueue: QueueKey }) {
   const router = useRouter();
+  const { toast } = useToast();
   const queueOptions = useMemo(() => queuesForRole(profile.role), [profile.role]);
   const [queue, setQueue] = useState<QueueKey>(initialQueue);
   const [query, setQuery] = useState("");
@@ -43,7 +45,6 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
   const [previewAd, setPreviewAd] = useState<AdWithRelations | null>(null);
   const [cancelAd, setCancelAd] = useState<AdWithRelations | null>(null);
   const [cancelReason, setCancelReason] = useState("");
-  const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [actingAdId, setActingAdId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const searchRef = useRef<HTMLInputElement>(null);
@@ -135,21 +136,37 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
   }
 
   function decide(ad: AdWithRelations, decision: "approve" | "request_changes", note = "") {
-    setActionMessage(null); setActingAdId(ad.id);
+    if (decision === "approve") {
+      setActingAdId(ad.id);
+      toast({
+        title: "Approved",
+        description: `${ad.name} will be approved in 5 seconds.`,
+        tone: "success",
+        duration: 5_000,
+        action: { label: "Undo", onClick: () => setActingAdId(null) },
+        onExpire: () => saveDecision(ad, decision, note)
+      });
+      return;
+    }
+    setActingAdId(ad.id);
+    void saveDecision(ad, decision, note);
+  }
+
+  function saveDecision(ad: AdWithRelations, decision: "approve" | "request_changes", note = "") {
     startTransition(async () => {
       const response = await reviewAd(ad.id, decision, note);
-      if (!response.ok) setActionMessage({ tone: "error", text: response.message ?? "Unable to save review." });
-      else { setActionMessage({ tone: "success", text: decision === "approve" ? `${ad.name} was approved.` : `Changes requested for ${ad.name}.` }); setCancelAd(null); setCancelReason(""); router.refresh(); }
+      if (!response.ok) toast({ title: "Review not saved", description: response.message ?? "Unable to save review.", tone: "error" });
+      else { toast({ title: decision === "approve" ? `${ad.name} approved` : "Changes requested", description: decision === "approve" ? "The creative is now approved." : `${ad.name} was returned to the editor.`, tone: "success" }); setCancelAd(null); setCancelReason(""); router.refresh(); }
       setActingAdId(null);
     });
   }
 
   function assign(ad: AdWithRelations, editorId: string, deadline: string) {
-    setActionMessage(null); setActingAdId(ad.id);
+    setActingAdId(ad.id);
     startTransition(async () => {
       const response = await assignEditor(ad.id, editorId, deadline || null);
-      if (!response.ok) setActionMessage({ tone: "error", text: response.message ?? "Unable to assign editor." });
-      else { setActionMessage({ tone: "success", text: `${ad.name} assigned and moved to editing.` }); router.refresh(); }
+      if (!response.ok) toast({ title: "Assignment not saved", description: response.message ?? "Unable to assign editor.", tone: "error" });
+      else { toast({ title: "Editor assigned", description: `${ad.name} moved to editing.`, tone: "success" }); router.refresh(); }
       setActingAdId(null);
     });
   }
@@ -161,10 +178,8 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
 
     <section className="panel mt-4 p-3"><div className="flex flex-col gap-2 lg:flex-row"><div className="relative flex-1"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden /><Input ref={searchRef} className="pl-9" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search ads, scripts, people, products, or tags" /></div><Button variant={filtersOpen || filtersActive ? "primary" : "secondary"} onClick={() => setFiltersOpen((current) => !current)}><Filter className="size-4" aria-hidden />Filters{filtersActive ? <span className="size-1.5 rounded-full bg-current" /> : null}</Button><div className="flex rounded-md border border-border bg-muted p-1"><Button size="icon" variant={view === "grid" ? "secondary" : "ghost"} className="size-8" title="Grid view" onClick={() => setView("grid")}><Grid2X2 className="size-4" aria-hidden /></Button><Button size="icon" variant={view === "table" ? "secondary" : "ghost"} className="size-8" title="Table view" onClick={() => setView("table")}><Table2 className="size-4" aria-hidden /></Button></div></div>{filtersOpen ? <div className="mt-3 border-t border-border pt-3"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><FilterSelect label="Status" value={stage} onChange={setStage} options={productionStages.map((item) => ({ value: item, label: productionStageLabels[item] }))} />{profile.role === "admin" || profile.role === "manager" ? <><FilterSelect label="Editor" value={editor} onChange={setEditor} options={editors.map((item) => ({ value: item.id, label: item.name }))} /><FilterSelect label="Creator" value={creator} onChange={setCreator} options={creators.map((item) => ({ value: item.id, label: item.name }))} /></> : null}<FilterSelect label="Campaign" value={campaign} onChange={setCampaign} options={campaigns.map((item) => ({ value: item.id, label: item.name }))} /><FilterSelect label="Product" value={product} onChange={setProduct} options={products.map((item) => ({ value: item.id, label: item.name }))} /><FilterSelect label="Platform" value={platform} onChange={setPlatform} options={platforms.map((item) => ({ value: item, label: item }))} /><FilterSelect label="Tag" value={tag} onChange={setTag} options={availableTags.map((item) => ({ value: item, label: `#${item}` }))} /><FilterSelect label="Deadline" value={deadline} onChange={setDeadline} options={[{ value: "overdue", label: "Overdue" }, { value: "today", label: "Due today" }, { value: "soon", label: "Due in 3 days" }]} /><FilterSelect label="Sort" value={sort} onChange={setSort} options={[{ value: "deadline", label: "Deadline first" }, { value: "waiting", label: "Waiting longest" }, { value: "oldest", label: "Oldest created" }]} /></div>{filtersActive ? <div className="mt-3 flex justify-end"><Button size="sm" variant="ghost" onClick={clearFilters}><X className="size-3.5" aria-hidden />Clear filters</Button></div> : null}</div> : null}</section>
 
-    {actionMessage ? <div className={cn("mt-3 flex items-center justify-between rounded-md border px-3 py-2 text-sm", actionMessage.tone === "success" ? "border-success/30 bg-success/15 text-success" : "border-destructive/30 bg-destructive/10 text-destructive")} role={actionMessage.tone === "error" ? "alert" : "status"}><span>{actionMessage.text}</span><button title="Dismiss" onClick={() => setActionMessage(null)}><X className="size-4" aria-hidden /></button></div> : null}
-
     <div className="mt-4 flex items-center justify-between"><p className="text-sm text-muted-foreground"><span className="font-medium text-foreground">{filteredAds.length}</span> items</p></div>
-    {filteredAds.length ? view === "grid" ? <section className="mt-3 grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">{filteredAds.map((ad) => <WorkflowCard key={ad.id} ad={ad} profile={profile} editors={editors} editorWorkloads={editorWorkloads} pending={isPending && actingAdId === ad.id} onPreview={() => setPreviewAd(ad)} onEdit={() => openCreatorForm(ad)} onApprove={() => decide(ad, "approve")} onRequestChanges={() => setCancelAd(ad)} onAssignEditor={(editorId, deadline) => assign(ad, editorId, deadline)} />)}</section> : <WorkflowTable ads={filteredAds} profile={profile} pendingId={actingAdId} onApprove={(ad) => decide(ad, "approve")} onRequestChanges={setCancelAd} /> : <EmptyQueue canCreate={canCreate} onCreate={() => openCreatorForm()} />}
+    {filteredAds.length ? view === "grid" ? <section className="mt-3 grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">{filteredAds.map((ad) => <WorkflowCard key={ad.id} ad={ad} profile={profile} editors={editors} editorWorkloads={editorWorkloads} pending={actingAdId === ad.id} onPreview={() => setPreviewAd(ad)} onEdit={() => openCreatorForm(ad)} onApprove={() => decide(ad, "approve")} onRequestChanges={() => setCancelAd(ad)} onAssignEditor={(editorId, deadline) => assign(ad, editorId, deadline)} />)}</section> : <WorkflowTable ads={filteredAds} profile={profile} pendingId={actingAdId} onApprove={(ad) => decide(ad, "approve")} onRequestChanges={setCancelAd} /> : <EmptyQueue canCreate={canCreate} onCreate={() => openCreatorForm()} />}
 
     {formOpen ? <div className="fixed inset-0 z-50 overflow-y-auto bg-neutral-950/45 p-0 backdrop-blur-[2px] sm:p-6" role="dialog" aria-modal="true" aria-labelledby="creator-form-title"><section className="mx-auto min-h-full w-full bg-card shadow-float sm:min-h-0 sm:max-w-5xl sm:rounded-xl"><div className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-border bg-card px-5 sm:rounded-t-lg"><div><h2 id="creator-form-title" className="text-lg font-semibold text-foreground">{editingAd ? "Update creative" : "Add creative"}</h2><p className="text-xs text-muted-foreground">Set the current preparation status and save.</p></div><Button size="icon" variant="ghost" title="Close" onClick={() => { setFormOpen(false); setEditingAd(null); }}><X className="size-5" aria-hidden /></Button></div><div className="p-5"><CreatorItemForm profile={profile} creators={creators} editors={editors} campaigns={campaigns.filter((item) => item.active)} products={products.filter((item) => item.active)} initialAd={editingAd} availableTags={availableTags} editorWorkloads={editorWorkloads} onSaved={() => { setFormOpen(false); setEditingAd(null); router.refresh(); }} /></div></section></div> : null}
 
@@ -187,6 +202,7 @@ function WorkflowCard({ ad, profile, editors, editorWorkloads, pending, onPrevie
   const actionLabel = creatorEditable ? "Update" : profile.role === "editor" && ad.production_stage === "ready_for_edit" ? "Open assignment" : profile.role === "editor" && (ad.production_stage === "editing" || ad.production_stage === "changes_requested") ? "Submit video" : profile.role === "content_creator" && ad.production_stage === "creator_review" ? "Review edit" : "Open";
   return (
     <article className="group/card relative overflow-hidden rounded-xl border border-border bg-card shadow-soft transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-ring/40 hover:shadow-float dark:shadow-none dark:hover:border-ring/60">
+      {pending ? <div className="absolute inset-0 z-20 flex items-center justify-center bg-card/75 backdrop-blur-[1px]" role="status"><span className="inline-flex items-center gap-2 rounded-lg border border-border bg-popover px-3 py-2 text-sm font-medium text-foreground shadow-soft dark:shadow-none"><Loader2 className="size-4 animate-spin text-primary" aria-hidden />Saving...</span></div> : null}
       {canPreview ? (
         <button className="relative block aspect-video w-full overflow-hidden bg-neutral-950" onClick={onPreview} aria-label={`Preview ${ad.name}`}>
           {thumbnail ? <CardThumbnail src={thumbnail} name={ad.name} /> : <MediaPlaceholder label="Final video submitted" />}
