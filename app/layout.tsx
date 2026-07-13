@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ChunkLoadRecovery } from "@/components/chunk-load-recovery";
 import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
 
@@ -21,7 +22,10 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body><ToastProvider>{children}</ToastProvider></body>
+      <body>
+        <ChunkLoadRecovery />
+        <ToastProvider>{children}</ToastProvider>
+      </body>
     </html>
   );
 }
