@@ -5,6 +5,7 @@ import { ArrowUpRight, Video, X } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
 import { resolveAdThumbnailUrl } from "@/lib/drive-urls";
 import { cn } from "@/lib/utils";
 import type { AdWithRelations } from "@/lib/types";
@@ -23,8 +24,8 @@ export function AdPreviewModal({
   const thumbnailSrc = resolveAdThumbnailUrl(ad.thumbnail_url, ad.drive_file_id);
 
   return (
-    <div className="fixed inset-0 z-50 bg-neutral-950/50 p-0 backdrop-blur-[2px] sm:p-6" role="dialog" aria-modal="true" aria-labelledby="preview-title">
-      <div className="mx-auto flex h-full max-w-7xl flex-col overflow-hidden bg-card shadow-float sm:rounded-xl">
+    <Modal open labelledBy="preview-title" onClose={onClose} className="p-0 sm:p-6">
+      <div className="mx-auto flex h-full max-w-7xl flex-col overflow-hidden border border-border bg-card shadow-float sm:rounded-xl dark:shadow-none" onClick={(event) => event.stopPropagation()}>
         <header className="flex min-h-16 items-center justify-between gap-4 border-b border-border px-4 py-3 sm:px-5">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -76,6 +77,6 @@ export function AdPreviewModal({
           </aside>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

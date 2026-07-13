@@ -104,9 +104,18 @@ body {
   animation: dialog-backdrop-in 160ms ease-out;
 }
 
+dialog[open] {
+  animation: dialog-backdrop-in 160ms ease-out;
+}
+
 [role="dialog"] > section,
 [role="dialog"] > aside,
 [role="dialog"] > div:not([aria-hidden="true"]) {
+  animation: dialog-surface-in 180ms ease-out;
+}
+
+dialog[open] > section,
+dialog[open] > div {
   animation: dialog-surface-in 180ms ease-out;
 }
 
@@ -115,6 +124,12 @@ body {
   [role="dialog"] > section,
   [role="dialog"] > aside,
   [role="dialog"] > div:not([aria-hidden="true"]) {
+    animation: none;
+  }
+
+  dialog[open],
+  dialog[open] > section,
+  dialog[open] > div {
     animation: none;
   }
 }
