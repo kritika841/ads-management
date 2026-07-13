@@ -60,8 +60,8 @@ export function AdVersionPreview({
 
   return (
     <section className="panel overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-white p-3">
-        <div className="flex flex-wrap rounded-md bg-slate-100 p-1">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card p-3">
+        <div className="flex flex-wrap rounded-md bg-muted p-1">
           {items.map((item) => (
             <Button
               key={item.key}
@@ -79,7 +79,7 @@ export function AdVersionPreview({
             href={selected.driveUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+            className="inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
           >
             Drive
             <ExternalLink className="size-4" aria-hidden />
@@ -88,7 +88,7 @@ export function AdVersionPreview({
       </div>
 
       <div className="grid lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)]">
-        <div className="min-h-[360px] bg-slate-950">
+        <div className="min-h-[360px] bg-neutral-950">
           {selected?.previewUrl ? (
             <iframe
               key={`${selected.key}-${selected.previewUrl}`}
@@ -101,14 +101,14 @@ export function AdVersionPreview({
             // eslint-disable-next-line @next/next/no-img-element
             <img src={thumbnailSrc} alt="" className="h-full min-h-[360px] w-full object-contain" />
           ) : (
-            <div className="flex h-full min-h-[360px] flex-col items-center justify-center gap-2 text-sm text-slate-400"><Video className="size-7" aria-hidden />Preview unavailable</div>
+            <div className="flex h-full min-h-[360px] flex-col items-center justify-center gap-2 text-sm text-muted-foreground"><Video className="size-7" aria-hidden />Preview unavailable</div>
           )}
         </div>
         <aside className="border-t border-border p-5 lg:max-h-[640px] lg:overflow-y-auto lg:border-l lg:border-t-0 lg:p-6">
           <div className="flex items-center justify-between gap-3">
-            <div><p className="text-xs font-medium text-slate-400">Script</p><h2 className="section-heading mt-0.5">{selected?.label}</h2></div>
+            <div><p className="text-xs font-medium text-muted-foreground">Script</p><h2 className="section-heading mt-0.5">{selected?.label}</h2></div>
             {selected?.date ? (
-              <span className="text-xs text-slate-500">{formatDateTime(selected.date)}</span>
+              <span className="text-xs text-muted-foreground">{formatDateTime(selected.date)}</span>
             ) : null}
           </div>
           <div

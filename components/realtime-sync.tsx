@@ -120,20 +120,20 @@ export function RealtimeSync({ userId, role }: { userId: string; role: UserRole 
       <span
         className={cn(
           "hidden h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium sm:inline-flex",
-          state === "offline" ? "bg-rose-50 text-rose-700" : state === "updated" ? "bg-teal-50 text-teal-700" : "text-slate-500"
+          state === "offline" ? "bg-destructive/10 text-destructive" : state === "updated" ? "bg-accent text-accent-foreground" : "text-muted-foreground"
         )}
         title={state === "fallback" ? "Realtime unavailable; checking every five seconds" : "Dashboard updates automatically"}
       >
-        <Radio className={cn("size-3.5", state === "live" && "text-emerald-600")} aria-hidden />
+        <Radio className={cn("size-3.5", state === "live" && "text-success")} aria-hidden />
         {label}
       </span>
 
       {assignmentToastCount > 0 ? (
-        <section className="fixed right-4 top-20 z-50 w-[min(360px,calc(100vw-2rem))] rounded-lg border border-teal-200 bg-white p-4 shadow-float" role="status" aria-live="polite">
+        <section className="fixed right-4 top-20 z-50 w-[min(360px,calc(100vw-2rem))] rounded-lg border border-primary/30 bg-popover text-popover-foreground p-4 shadow-float" role="status" aria-live="polite">
           <div className="flex items-start gap-3">
-            <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-teal-50 text-teal-700"><Radio className="size-4" aria-hidden /></span>
-            <div className="min-w-0 flex-1"><p className="text-sm font-semibold text-slate-950">New editing assignment</p><p className="mt-1 text-sm text-slate-500">{assignmentToastCount === 1 ? "A new video is ready for you." : `${assignmentToastCount} new videos are ready for you.`}</p></div>
-            <button type="button" className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Dismiss" onClick={() => setAssignmentToastCount(0)}><X className="size-4" aria-hidden /></button>
+            <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground"><Radio className="size-4" aria-hidden /></span>
+            <div className="min-w-0 flex-1"><p className="text-sm font-semibold text-foreground">New editing assignment</p><p className="mt-1 text-sm text-muted-foreground">{assignmentToastCount === 1 ? "A new video is ready for you." : `${assignmentToastCount} new videos are ready for you.`}</p></div>
+            <button type="button" className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-muted-foreground" title="Dismiss" onClick={() => setAssignmentToastCount(0)}><X className="size-4" aria-hidden /></button>
           </div>
           <Button className="mt-3 w-full" size="sm" onClick={() => { setAssignmentToastCount(0); router.push("/library?queue=new_assignments"); }}>View assignment<ArrowRight className="size-4" aria-hidden /></Button>
         </section>

@@ -28,25 +28,25 @@ export function CommentThread({ adId, comments }: { adId: string; comments: Comm
 
   return (
     <section className="panel p-5">
-      <div className="flex items-center justify-between"><h2 className="section-heading">Discussion</h2><span className="text-xs text-slate-400">{comments.length}</span></div>
+      <div className="flex items-center justify-between"><h2 className="section-heading">Discussion</h2><span className="text-xs text-muted-foreground">{comments.length}</span></div>
       <div className="mt-4 space-y-4">
         {comments.map((comment) => (
           <div key={comment.id} className="flex gap-3">
             <Avatar name={comment.author?.name ?? "User"} src={comment.author?.avatar_url} className="size-8" />
-            <div className="min-w-0 flex-1 rounded-md bg-slate-50 px-3 py-2.5">
+            <div className="min-w-0 flex-1 rounded-md bg-muted px-3 py-2.5">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-medium text-slate-950">{comment.author?.name ?? "Unknown"}</span>
-                <span className="text-xs text-slate-500">{formatDateTime(comment.created_at)}</span>
+                <span className="text-sm font-medium text-foreground">{comment.author?.name ?? "Unknown"}</span>
+                <span className="text-xs text-muted-foreground">{formatDateTime(comment.created_at)}</span>
               </div>
-              <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{comment.body}</p>
+              <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{comment.body}</p>
             </div>
           </div>
         ))}
-        {!comments.length ? <p className="py-3 text-center text-sm text-slate-500">No comments yet.</p> : null}
+        {!comments.length ? <p className="py-3 text-center text-sm text-muted-foreground">No comments yet.</p> : null}
       </div>
       <div className="mt-4 space-y-2">
         <Textarea className="min-h-20" value={body} onChange={(event) => setBody(event.target.value)} placeholder="Write a comment or @mention a teammate" />
-        {message ? <p className="text-sm text-rose-600">{message}</p> : null}
+        {message ? <p className="text-sm text-destructive">{message}</p> : null}
         <Button className="w-full" disabled={isPending || !body.trim()} onClick={submit}>
           {isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Send className="size-4" aria-hidden />}
           Send comment

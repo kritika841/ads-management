@@ -79,8 +79,8 @@ export function SettingsClient({
   return (
     <main className="page-container">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-slate-950">Settings</h1>
-        <p className="mt-1 text-sm text-slate-500">Production workflow, reminders, and campaign setup.</p>
+        <h1 className="text-2xl font-semibold text-foreground">Settings</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Production workflow, reminders, and campaign setup.</p>
       </div>
       <div className="grid gap-5 xl:grid-cols-[minmax(300px,0.7fr)_minmax(0,1.3fr)]">
         <section className="panel p-5">
@@ -112,7 +112,7 @@ export function SettingsClient({
         </section>
 
         <section className="panel overflow-hidden">
-          <div className="border-b border-border p-5"><div className="flex items-center justify-between gap-3"><div><h2 className="section-heading">Campaigns</h2><p className="mt-1 text-xs text-slate-500">{campaigns.filter((item) => item.active).length} active of {campaigns.length}</p></div>{editingCampaign ? <Button size="sm" variant="ghost" onClick={resetCampaignForm}><RotateCcw className="size-3.5" aria-hidden />Cancel edit</Button> : null}</div>
+          <div className="border-b border-border p-5"><div className="flex items-center justify-between gap-3"><div><h2 className="section-heading">Campaigns</h2><p className="mt-1 text-xs text-muted-foreground">{campaigns.filter((item) => item.active).length} active of {campaigns.length}</p></div>{editingCampaign ? <Button size="sm" variant="ghost" onClick={resetCampaignForm}><RotateCcw className="size-3.5" aria-hidden />Cancel edit</Button> : null}</div>
           <div className="mt-5 grid gap-3 md:grid-cols-[minmax(180px,0.7fr)_minmax(240px,1fr)_auto] md:items-end">
             <Field label="Campaign name">
               <Input value={campaignName} onChange={(event) => setCampaignName(event.target.value)} />
@@ -127,18 +127,18 @@ export function SettingsClient({
           </div></div>
             <div className="divide-y divide-border">
               {campaigns.map((campaign) => (
-                <div key={campaign.id} className={`flex items-center justify-between gap-3 px-5 py-3 transition hover:bg-slate-50 ${!campaign.active ? "bg-slate-50/60" : ""}`}>
+                <div key={campaign.id} className={`flex items-center justify-between gap-3 px-5 py-3 transition hover:bg-muted ${!campaign.active ? "bg-muted/60" : ""}`}>
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-slate-950">{campaign.name}</p>
-                    <p className="mt-0.5 truncate text-xs text-slate-500">{campaign.description ?? "No description"}</p>
+                    <p className="text-sm font-medium text-foreground">{campaign.name}</p>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">{campaign.description ?? "No description"}</p>
                   </div>
-                  <div className="flex items-center gap-1"><span className={`mr-2 inline-flex items-center gap-1.5 text-xs font-medium ${campaign.active ? "text-emerald-700" : "text-slate-400"}`}><span className={`size-1.5 rounded-full ${campaign.active ? "bg-emerald-500" : "bg-slate-300"}`} />{campaign.active ? "Active" : "Inactive"}</span><Button size="icon" variant="ghost" className="size-9" title="Edit campaign" onClick={() => editCampaign(campaign)}><Pencil className="size-4" aria-hidden /></Button><Button size="icon" variant="ghost" className="size-9" title={campaign.active ? "Deactivate campaign" : "Activate campaign"} onClick={() => toggleCampaign(campaign)}><Power className="size-4" aria-hidden /></Button></div>
+                  <div className="flex items-center gap-1"><span className={`mr-2 inline-flex items-center gap-1.5 text-xs font-medium ${campaign.active ? "text-success" : "text-muted-foreground"}`}><span className={`size-1.5 rounded-full ${campaign.active ? "bg-success" : "bg-border"}`} />{campaign.active ? "Active" : "Inactive"}</span><Button size="icon" variant="ghost" className="size-9" title="Edit campaign" onClick={() => editCampaign(campaign)}><Pencil className="size-4" aria-hidden /></Button><Button size="icon" variant="ghost" className="size-9" title={campaign.active ? "Deactivate campaign" : "Activate campaign"} onClick={() => toggleCampaign(campaign)}><Power className="size-4" aria-hidden /></Button></div>
                 </div>
               ))}
             </div>
         </section>
       </div>
-      {message ? <p className="mt-4 rounded-md border border-border bg-white px-3 py-2 text-sm text-slate-700 shadow-soft">{message}</p> : null}
+      {message ? <p className="mt-4 rounded-md border border-border bg-card px-3 py-2 text-sm text-muted-foreground shadow-soft">{message}</p> : null}
     </main>
   );
 }

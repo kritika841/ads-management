@@ -5,6 +5,10 @@
 :root {
   --background: 210 24% 97%;
   --foreground: 222 47% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
   --muted: 210 18% 95%;
   --muted-foreground: 215 16% 47%;
   --accent: 167 54% 92%;
@@ -13,9 +17,38 @@
   --primary-foreground: 0 0% 100%;
   --destructive: 350 84% 56%;
   --destructive-foreground: 0 0% 100%;
+  --success: 154 70% 32%;
+  --success-foreground: 0 0% 100%;
+  --warning: 35 100% 30%;
+  --warning-foreground: 30 95% 12%;
   --border: 214 19% 89%;
   --input: 214 19% 86%;
   --ring: 173 80% 32%;
+}
+
+.dark {
+  --background: 222 32% 8%;
+  --foreground: 210 24% 96%;
+  --card: 222 27% 11%;
+  --card-foreground: 210 24% 96%;
+  --popover: 222 25% 13%;
+  --popover-foreground: 210 24% 96%;
+  --muted: 220 22% 16%;
+  --muted-foreground: 215 16% 69%;
+  --accent: 174 35% 18%;
+  --accent-foreground: 166 70% 84%;
+  --primary: 172 73% 43%;
+  --primary-foreground: 174 90% 8%;
+  --destructive: 350 72% 55%;
+  --destructive-foreground: 0 0% 100%;
+  --success: 154 64% 48%;
+  --success-foreground: 156 80% 8%;
+  --warning: 40 92% 58%;
+  --warning-foreground: 35 90% 9%;
+  --border: 220 20% 22%;
+  --input: 220 20% 26%;
+  --ring: 172 73% 43%;
+  color-scheme: dark;
 }
 
 * {
@@ -49,11 +82,11 @@ body {
   }
 
   .panel {
-    @apply rounded-lg border border-border bg-white shadow-soft;
+    @apply rounded-lg border border-border bg-card text-card-foreground shadow-soft;
   }
 
   .section-heading {
-    @apply text-[15px] font-semibold text-slate-950;
+    @apply text-[15px] font-semibold text-foreground;
   }
 }
 
@@ -65,7 +98,7 @@ textarea {
 }
 
 .prose-script {
-  color: #111827;
+  color: hsl(var(--foreground));
   line-height: 1.65;
 }
 
@@ -88,7 +121,7 @@ textarea {
 }
 
 .ProseMirror p.is-editor-empty:first-child::before {
-  color: #94a3b8;
+  color: hsl(var(--muted-foreground));
   content: attr(data-placeholder);
   float: left;
   height: 0;

@@ -80,15 +80,15 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
       <main className="page-container">
         <header className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <Link href="/library" className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-950">
+            <Link href="/library" className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">
               <ArrowLeft className="size-4" aria-hidden />
               Creative library
             </Link>
             <div className="mt-2 flex flex-wrap items-center gap-3">
-              <h1 className="text-2xl font-semibold text-slate-950">{ad.name}</h1>
+              <h1 className="text-2xl font-semibold text-foreground">{ad.name}</h1>
               <ProductionStageBadge stage={ad.production_stage} />
             </div>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-muted-foreground">
               {ad.campaign?.name ?? "No campaign"} · <span suppressHydrationWarning>{workflowWaitingLabel(ad.workflow_status_changed_at)}</span>
             </p>
           </div>
@@ -102,12 +102,12 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
           <div className="flex min-w-0 items-start gap-3">
             <span className="mt-1 size-2.5 shrink-0 rounded-full bg-primary" aria-hidden />
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-slate-950">{productionStageLabels[ad.production_stage]}</p>
-              <p className="mt-0.5 text-sm text-slate-500">{nextStepText(ad)}</p>
+              <p className="text-sm font-semibold text-foreground">{productionStageLabels[ad.production_stage]}</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">{nextStepText(ad)}</p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-slate-500">Owner: <strong className="font-medium text-slate-700">{currentOwner(ad)}</strong></span>
+            <span className="text-xs text-muted-foreground">Owner: <strong className="font-medium text-muted-foreground">{currentOwner(ad)}</strong></span>
             {canReassign ? <ReassignEditorButton ad={ad} editors={editors} workloads={editorWorkloads} /> : null}
           </div>
         </section>
@@ -120,7 +120,7 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
               <section className="panel overflow-hidden">
                 <div className="border-b border-border p-5">
                   <h2 className="section-heading">Prepare content</h2>
-                  <p className="mt-1 text-sm text-slate-500">Keep the script and production status together. Assigning an editor completes the handoff.</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Keep the script and production status together. Assigning an editor completes the handoff.</p>
                 </div>
                 <div className="p-5">
                   <CreatorItemForm
@@ -162,7 +162,7 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
                   Raw footage folder <ExternalLink className="size-4" aria-hidden />
                 </a>
               ) : null}
-              {ad.tags.length ? <div className="mt-4 flex flex-wrap gap-1.5 border-t border-border pt-4">{ad.tags.map((tag) => <span key={tag.id} className="rounded-md bg-teal-50 px-2 py-1 text-[11px] font-medium text-teal-700">#{tag.name}</span>)}</div> : null}
+              {ad.tags.length ? <div className="mt-4 flex flex-wrap gap-1.5 border-t border-border pt-4">{ad.tags.map((tag) => <span key={tag.id} className="rounded-md bg-accent px-2 py-1 text-[11px] font-medium text-accent-foreground">#{tag.name}</span>)}</div> : null}
             </section>
 
             {isReviewer ? <ReviewPanel ad={ad} profile={profile} reviews={reviews} annotations={annotations} /> : null}
@@ -175,11 +175,11 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
 }
 
 function PersonSummary({ label, profile, fallback }: { label: string; profile: Pick<Profile, "name" | "avatar_url"> | null; fallback: string }) {
-  return <div className="flex items-center gap-3">{profile ? <Avatar name={profile.name} src={profile.avatar_url} /> : <Avatar name={fallback} />}<div><p className="text-xs font-medium uppercase text-slate-500">{label}</p><p className="font-medium text-slate-950">{profile?.name ?? fallback}</p></div></div>;
+  return <div className="flex items-center gap-3">{profile ? <Avatar name={profile.name} src={profile.avatar_url} /> : <Avatar name={fallback} />}<div><p className="text-xs font-medium uppercase text-muted-foreground">{label}</p><p className="font-medium text-foreground">{profile?.name ?? fallback}</p></div></div>;
 }
 
 function DetailRow({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
-  return <div className="flex justify-between gap-3 py-0.5"><dt className="inline-flex items-center gap-1 text-slate-500">{icon}{label}</dt><dd className="text-right font-medium text-slate-800">{value}</dd></div>;
+  return <div className="flex justify-between gap-3 py-0.5"><dt className="inline-flex items-center gap-1 text-muted-foreground">{icon}{label}</dt><dd className="text-right font-medium text-foreground">{value}</dd></div>;
 }
 
 function currentOwner(ad: AdWithRelations) {

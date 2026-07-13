@@ -48,7 +48,7 @@ export function DeleteAdButton({
       <Button
         size={compact ? "icon" : "sm"}
         variant={compact ? "ghost" : "secondary"}
-        className={compact ? "size-8 text-rose-600 hover:bg-rose-50 hover:text-rose-700" : "text-rose-600 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"}
+        className={compact ? "size-8 text-destructive hover:bg-destructive/10 hover:text-destructive" : "text-destructive hover:border-destructive/30 hover:bg-destructive/10 hover:text-destructive"}
         title={`Delete ${adName}`}
         onClick={() => { setMessage(null); setOpen(true); }}
       >
@@ -57,18 +57,18 @@ export function DeleteAdButton({
       </Button>
 
       {open ? (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-labelledby={`delete-ad-${adId}`}>
-          <section className="w-full max-w-md rounded-lg bg-white shadow-float">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-neutral-950/45 p-4 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-labelledby={`delete-ad-${adId}`}>
+          <section className="w-full max-w-md rounded-lg bg-card shadow-float">
             <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
               <div>
-                <h2 id={`delete-ad-${adId}`} className="text-lg font-semibold text-slate-950">Delete ad permanently?</h2>
-                <p className="mt-1 text-sm text-slate-500">This will delete <span className="font-medium text-slate-700">{adName}</span>.</p>
+                <h2 id={`delete-ad-${adId}`} className="text-lg font-semibold text-foreground">Delete ad permanently?</h2>
+                <p className="mt-1 text-sm text-muted-foreground">This will delete <span className="font-medium text-muted-foreground">{adName}</span>.</p>
               </div>
               <Button size="icon" variant="ghost" className="size-9" title="Close" disabled={isPending} onClick={() => setOpen(false)}><X className="size-5" aria-hidden /></Button>
             </div>
             <div className="p-5">
-              <p className="text-sm leading-6 text-slate-600">Versions, feedback, comments, annotations, and activity associated with this ad will also be deleted. This cannot be undone.</p>
-              {message ? <p className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800" role="alert">{message}</p> : null}
+              <p className="text-sm leading-6 text-muted-foreground">Versions, feedback, comments, annotations, and activity associated with this ad will also be deleted. This cannot be undone.</p>
+              {message ? <p className="mt-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">{message}</p> : null}
             </div>
             <div className="flex flex-col-reverse gap-2 border-t border-border px-5 py-4 sm:flex-row sm:justify-end">
               <Button variant="secondary" disabled={isPending} onClick={() => setOpen(false)}>Keep ad</Button>

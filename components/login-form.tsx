@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Chrome, Eye, EyeOff, Loader2, LockKeyhole, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
@@ -12,6 +12,9 @@ export function LoginForm({ initialMessage = null }: { initialMessage?: string |
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState<string | null>(initialMessage);
   const [isPending, startTransition] = useTransition();
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => setHydrated(true), []);
 
   function handlePasswordSignIn() {
     setMessage(null);
@@ -64,6 +67,7 @@ export function LoginForm({ initialMessage = null }: { initialMessage?: string |
 
   return (
     <form
+      data-hydrated={hydrated}
       className="space-y-4"
       onSubmit={(event) => {
         event.preventDefault();
@@ -71,7 +75,7 @@ export function LoginForm({ initialMessage = null }: { initialMessage?: string |
       }}
     >
       <Field label="Email" htmlFor="login-email">
-        <div className="relative"><Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" aria-hidden /><Input
+        <div className="relative"><Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden /><Input
           id="login-email"
           className="pl-9"
           value={email}
@@ -82,7 +86,7 @@ export function LoginForm({ initialMessage = null }: { initialMessage?: string |
         /></div>
       </Field>
       <Field label="Password" htmlFor="login-password">
-        <div className="relative"><LockKeyhole className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" aria-hidden /><Input
+        <div className="relative"><LockKeyhole className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden /><Input
           id="login-password"
           className="px-9"
           value={password}
@@ -90,14 +94,14 @@ export function LoginForm({ initialMessage = null }: { initialMessage?: string |
           type={showPassword ? "text" : "password"}
           autoComplete="current-password"
           required
-        /><button type="button" className="absolute right-1 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={() => setShowPassword((value) => !value)} title={showPassword ? "Hide password" : "Show password"}>{showPassword ? <EyeOff className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />}</button></div>
+        /><button type="button" className="absolute right-1 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-muted-foreground" onClick={() => setShowPassword((value) => !value)} title={showPassword ? "Hide password" : "Show password"}>{showPassword ? <EyeOff className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />}</button></div>
       </Field>
-      {message ? <p role="alert" className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">{message}</p> : null}
+      {message ? <p role="alert" className="rounded-md border border-warning/30 bg-warning/15 px-3 py-2 text-sm text-warning">{message}</p> : null}
       <Button className="w-full" disabled={isPending} type="submit">
         {isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
         Sign in
       </Button>
-      <div className="flex items-center gap-3"><span className="h-px flex-1 bg-border" /><span className="text-[11px] font-medium text-slate-400">OR</span><span className="h-px flex-1 bg-border" /></div>
+      <div className="flex items-center gap-3"><span className="h-px flex-1 bg-border" /><span className="text-[11px] font-medium text-muted-foreground">OR</span><span className="h-px flex-1 bg-border" /></div>
       <Button className="w-full" variant="secondary" disabled={isPending} onClick={handleGoogleSignIn} type="button">
         <Chrome className="size-4" aria-hidden />
         Sign in with Google

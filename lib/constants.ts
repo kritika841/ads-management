@@ -28,12 +28,12 @@ export const statusLabels: Record<AdStatus, string> = {
 };
 
 export const statusStyles: Record<AdStatus, string> = {
-  draft: "bg-slate-100 text-slate-700 ring-slate-200",
-  pending_review: "bg-amber-100 text-amber-800 ring-amber-200",
-  changes_requested: "bg-orange-100 text-orange-800 ring-orange-200",
-  approved: "bg-emerald-100 text-emerald-800 ring-emerald-200",
-  rejected: "bg-rose-100 text-rose-800 ring-rose-200",
-  published: "bg-sky-100 text-sky-800 ring-sky-200"
+  draft: "bg-muted text-muted-foreground ring-border",
+  pending_review: "bg-warning/15 text-warning ring-warning/30",
+  changes_requested: "bg-warning/15 text-warning ring-warning/30",
+  approved: "bg-success/15 text-success ring-success/30",
+  rejected: "bg-destructive/10 text-destructive ring-destructive/30",
+  published: "bg-accent text-accent-foreground ring-primary/25"
 };
 
 export const reviewerRoles: UserRole[] = ["admin", "manager"];

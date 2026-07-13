@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { NotificationBell } from "@/components/notification-bell";
 import { RealtimeSync } from "@/components/realtime-sync";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 type NavItem = { href: string; label: string; icon: LucideIcon };
@@ -58,7 +59,7 @@ export function AppShell({
 
   return (
     <div className="min-h-screen bg-background">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[248px] border-r border-border bg-white lg:flex lg:flex-col">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[248px] border-r border-border bg-card text-card-foreground lg:flex lg:flex-col">
         <SidebarContent
           profile={profile}
           pathname={pathname}
@@ -71,11 +72,11 @@ export function AppShell({
         <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Navigation">
           <button
             type="button"
-            className="absolute inset-0 bg-slate-950/35 backdrop-blur-[2px]"
+            className="absolute inset-0 bg-neutral-950/35 backdrop-blur-[2px]"
             aria-label="Dismiss navigation"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="relative flex h-full w-[min(288px,86vw)] flex-col border-r border-border bg-white shadow-2xl">
+          <aside className="relative flex h-full w-[min(288px,86vw)] flex-col border-r border-border bg-card text-card-foreground shadow-2xl">
             <Button
               size="icon"
               variant="ghost"
@@ -97,7 +98,7 @@ export function AppShell({
       ) : null}
 
       <div className="lg:pl-[248px]">
-        <header className="sticky top-0 z-30 h-16 border-b border-border/90 bg-white/95 backdrop-blur">
+        <header className="sticky top-0 z-30 h-16 border-b border-border/90 bg-card/95 text-card-foreground backdrop-blur">
           <div className="flex h-full items-center justify-between gap-4 px-4 lg:px-7">
             <div className="flex min-w-0 items-center gap-3">
               <Button
@@ -110,21 +111,22 @@ export function AppShell({
                 <Menu className="size-5" aria-hidden />
               </Button>
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-slate-950">{pageTitle}</p>
-                <p className="hidden text-xs text-slate-500 sm:block">{roleLabel(profile.role)} workspace</p>
+                <p className="truncate text-sm font-semibold text-foreground">{pageTitle}</p>
+                <p className="hidden text-xs text-muted-foreground sm:block">{roleLabel(profile.role)} workspace</p>
               </div>
             </div>
 
             <div className="flex items-center gap-1.5">
+              <ThemeToggle />
               <RealtimeSync userId={profile.id} role={profile.role} />
               <NotificationBell notifications={notifications}>
                 <Bell className="size-[18px]" aria-hidden />
               </NotificationBell>
-              <div className="ml-1 flex items-center gap-2 rounded-md border border-border bg-white py-1 pl-1 pr-2">
+              <div className="ml-1 flex items-center gap-2 rounded-md border border-border bg-card py-1 pl-1 pr-2">
                 <Avatar name={profile.name} src={profile.avatar_url} className="size-8" />
                 <div className="hidden min-w-0 leading-tight sm:block">
-                  <div className="max-w-40 truncate text-sm font-medium text-slate-950">{profile.name}</div>
-                  <div className="max-w-40 truncate text-xs text-slate-500">{profile.email}</div>
+                  <div className="max-w-40 truncate text-sm font-medium text-foreground">{profile.name}</div>
+                  <div className="max-w-40 truncate text-xs text-muted-foreground">{profile.email}</div>
                 </div>
               </div>
             </div>
@@ -153,12 +155,12 @@ function SidebarContent({
     <>
       <div className="flex h-20 items-center border-b border-border px-5">
         <Link href="/dashboard" className="flex items-center gap-3" onClick={onNavigate}>
-          <span className="flex size-10 items-center justify-center rounded-md bg-slate-950 text-sm font-bold text-white shadow-sm">
+          <span className="flex size-10 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground shadow-sm">
             AF
           </span>
           <span className="min-w-0">
-            <span className="block text-[17px] font-semibold leading-tight text-slate-950">AdFlow</span>
-            <span className="block text-xs text-slate-500">Creative operations</span>
+            <span className="block text-[17px] font-semibold leading-tight text-foreground">AdFlow</span>
+            <span className="block text-xs text-muted-foreground">Creative operations</span>
           </span>
         </Link>
       </div>
@@ -173,11 +175,11 @@ function SidebarContent({
       </div>
 
       <div className="border-t border-border p-3">
-        <div className="flex items-center gap-2.5 rounded-md bg-slate-50 p-2">
+        <div className="flex items-center gap-2.5 rounded-md bg-muted p-2">
           <Avatar name={profile.name} src={profile.avatar_url} className="size-9" />
           <div className="min-w-0 flex-1 leading-tight">
-            <p className="truncate text-sm font-medium text-slate-950">{profile.name}</p>
-            <p className="truncate text-xs text-slate-500">{roleLabel(profile.role)}</p>
+            <p className="truncate text-sm font-medium text-foreground">{profile.name}</p>
+            <p className="truncate text-xs text-muted-foreground">{roleLabel(profile.role)}</p>
           </div>
           <form action="/auth/signout" method="post">
             <Button variant="ghost" size="icon" className="size-9" title="Sign out" type="submit">
@@ -203,7 +205,7 @@ function NavGroup({
 }) {
   return (
     <nav aria-label={label}>
-      <p className="px-3 text-[11px] font-semibold uppercase text-slate-400">{label}</p>
+      <p className="px-3 text-[11px] font-semibold uppercase text-muted-foreground">{label}</p>
       <div className="mt-2 space-y-1">
         {items.map((item) => {
           const active = isActivePath(pathname, item.href);
@@ -216,11 +218,11 @@ function NavGroup({
               className={cn(
                 "group flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium transition",
                 active
-                  ? "bg-slate-950 text-white shadow-sm"
-                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+                  ? "bg-accent text-accent-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
             >
-              <item.icon className={cn("size-[18px]", active ? "text-teal-300" : "text-slate-400")} aria-hidden />
+              <item.icon className={cn("size-[18px]", active ? "text-primary" : "text-muted-foreground")} aria-hidden />
               {item.label}
             </Link>
           );

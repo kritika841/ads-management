@@ -3,15 +3,15 @@ import type { ProductionStage } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const stageStyles: Record<ProductionStage, string> = {
-  script_writing: "border-slate-200 bg-slate-100 text-slate-700",
-  ready_to_shoot: "border-sky-200 bg-sky-50 text-sky-800",
-  shoot_complete: "border-cyan-200 bg-cyan-50 text-cyan-800",
-  ready_for_edit: "border-teal-200 bg-teal-50 text-teal-800",
-  editing: "border-blue-200 bg-blue-50 text-blue-800",
-  changes_requested: "border-orange-200 bg-orange-50 text-orange-800",
-  creator_review: "border-amber-200 bg-amber-50 text-amber-800",
-  final_review: "border-indigo-200 bg-indigo-50 text-indigo-800",
-  approved: "border-emerald-200 bg-emerald-50 text-emerald-800"
+  script_writing: "border-border bg-muted text-muted-foreground",
+  ready_to_shoot: "border-primary/25 bg-accent text-accent-foreground",
+  shoot_complete: "border-primary/30 bg-primary/10 text-primary",
+  ready_for_edit: "border-primary/30 bg-primary/10 text-primary",
+  editing: "border-primary/35 bg-primary/15 text-primary",
+  changes_requested: "border-warning/30 bg-warning/15 text-warning",
+  creator_review: "border-warning/30 bg-warning/15 text-warning",
+  final_review: "border-primary/30 bg-accent text-accent-foreground",
+  approved: "border-success/30 bg-success/15 text-success"
 };
 
 export function ProductionStageBadge({ stage, className }: { stage: ProductionStage; className?: string }) {

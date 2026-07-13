@@ -17,13 +17,13 @@ export default async function AuditPage() {
     <AppShell profile={profile} notifications={notifications}>
       <main className="page-container">
         <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-slate-950">Audit Log</h1>
-          <p className="mt-1 text-sm text-slate-500">Latest administrative and workflow events.</p>
+          <h1 className="text-2xl font-semibold text-foreground">Audit Log</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Latest administrative and workflow events.</p>
         </div>
         <section className="panel overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[780px] text-left text-sm">
-              <thead className="border-b border-border bg-slate-50/80 text-xs uppercase text-slate-500">
+              <thead className="border-b border-border bg-muted/80 text-xs uppercase text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3">Action</th>
                   <th className="px-4 py-3">Actor</th>
@@ -33,13 +33,13 @@ export default async function AuditPage() {
               </thead>
               <tbody className="divide-y divide-border">
                 {logs.map((log) => (
-                  <tr key={log.id} className="transition hover:bg-slate-50/80">
-                    <td className="px-4 py-3 font-medium capitalize text-slate-950">{log.action.replaceAll("_", " ")}</td>
-                    <td className="px-4 py-3 text-slate-600">{log.actor?.name ?? "System"}</td>
-                    <td className="px-4 py-3 text-slate-600">
+                  <tr key={log.id} className="transition hover:bg-muted/80">
+                    <td className="px-4 py-3 font-medium capitalize text-foreground">{log.action.replaceAll("_", " ")}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{log.actor?.name ?? "System"}</td>
+                    <td className="px-4 py-3 text-muted-foreground">
                       {log.target_type} {log.target_id ? `#${log.target_id.slice(0, 8)}` : ""}
                     </td>
-                    <td className="px-4 py-3 text-slate-500">{formatDateTime(log.created_at)}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{formatDateTime(log.created_at)}</td>
                   </tr>
                 ))}
               </tbody>

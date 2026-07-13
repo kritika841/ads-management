@@ -29,12 +29,12 @@ export function RichTextEditor({
   });
 
   return (
-    <div className="overflow-hidden rounded-md border border-input bg-white transition focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15">
-      <div className="flex items-center gap-1 border-b border-border bg-slate-50/80 p-2">
+    <div className="overflow-hidden rounded-md border border-input bg-card transition focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15">
+      <div className="flex items-center gap-1 border-b border-border bg-muted/80 p-2">
         <Button
           size="icon"
           variant="ghost"
-          className={cn("size-8", editor?.isActive("bold") && "bg-slate-100 text-slate-950")}
+          className={cn("size-8", editor?.isActive("bold") && "bg-muted text-foreground")}
           onClick={() => editor?.chain().focus().toggleBold().run()}
           title="Bold"
         >
@@ -43,7 +43,7 @@ export function RichTextEditor({
         <Button
           size="icon"
           variant="ghost"
-          className={cn("size-8", editor?.isActive("italic") && "bg-slate-100 text-slate-950")}
+          className={cn("size-8", editor?.isActive("italic") && "bg-muted text-foreground")}
           onClick={() => editor?.chain().focus().toggleItalic().run()}
           title="Italic"
         >
@@ -52,7 +52,7 @@ export function RichTextEditor({
         <Button
           size="icon"
           variant="ghost"
-          className={cn("size-8", editor?.isActive("bulletList") && "bg-slate-100 text-slate-950")}
+          className={cn("size-8", editor?.isActive("bulletList") && "bg-muted text-foreground")}
           onClick={() => editor?.chain().focus().toggleBulletList().run()}
           title="Bulleted list"
         >
@@ -61,7 +61,7 @@ export function RichTextEditor({
         <Button
           size="icon"
           variant="ghost"
-          className={cn("size-8", editor?.isActive("orderedList") && "bg-slate-100 text-slate-950")}
+          className={cn("size-8", editor?.isActive("orderedList") && "bg-muted text-foreground")}
           onClick={() => editor?.chain().focus().toggleOrderedList().run()}
           title="Numbered list"
         >

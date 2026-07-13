@@ -28,18 +28,18 @@ export default async function LoginPage({
       : null;
 
   return (
-    <main className="grid min-h-screen bg-white lg:grid-cols-[minmax(360px,0.8fr)_minmax(520px,1.2fr)]">
-      <section className="relative hidden overflow-hidden bg-slate-950 p-10 text-white lg:flex lg:flex-col lg:justify-between xl:p-14">
-        <div className="flex items-center gap-3"><span className="flex size-11 items-center justify-center rounded-md bg-white text-sm font-bold text-slate-950">AF</span><span><span className="block text-xl font-semibold">AdFlow</span><span className="block text-xs text-slate-400">Creative operations</span></span></div>
-        <div className="max-w-md"><p className="text-sm font-medium text-teal-300">Internal workspace</p><h1 className="mt-3 text-4xl font-semibold leading-tight">Creative work,<br />kept moving.</h1><p className="mt-4 max-w-sm text-sm leading-6 text-slate-400">One place for submissions, feedback, versions, and approvals.</p></div>
-        <p className="text-xs text-slate-500">Restricted to approved team members</p>
+    <main className="grid min-h-screen bg-card lg:grid-cols-[minmax(360px,0.8fr)_minmax(520px,1.2fr)]">
+      <section className="relative hidden overflow-hidden bg-neutral-950 p-10 text-white lg:flex lg:flex-col lg:justify-between xl:p-14">
+        <div className="flex items-center gap-3"><span className="flex size-11 items-center justify-center rounded-md bg-card text-sm font-bold text-foreground">AF</span><span><span className="block text-xl font-semibold">AdFlow</span><span className="block text-xs text-muted-foreground">Creative operations</span></span></div>
+        <div className="max-w-md"><p className="text-sm font-medium text-primary">Internal workspace</p><h1 className="mt-3 text-4xl font-semibold leading-tight">Creative work,<br />kept moving.</h1><p className="mt-4 max-w-sm text-sm leading-6 text-muted-foreground">One place for submissions, feedback, versions, and approvals.</p></div>
+        <p className="text-xs text-muted-foreground">Restricted to approved team members</p>
       </section>
 
-      <section className="flex min-h-screen items-center justify-center bg-slate-50 px-5 py-10 sm:px-8">
+      <section className="flex min-h-screen items-center justify-center bg-muted px-5 py-10 sm:px-8">
         <div className="w-full max-w-md">
-          <div className="mb-8 flex items-center gap-3 lg:hidden"><span className="flex size-10 items-center justify-center rounded-md bg-slate-950 text-sm font-bold text-white">AF</span><span><span className="block text-lg font-semibold text-slate-950">AdFlow</span><span className="block text-xs text-slate-500">Creative operations</span></span></div>
+          <div className="mb-8 flex items-center gap-3 lg:hidden"><span className="flex size-10 items-center justify-center rounded-md bg-neutral-950 text-sm font-bold text-white">AF</span><span><span className="block text-lg font-semibold text-foreground">AdFlow</span><span className="block text-xs text-muted-foreground">Creative operations</span></span></div>
           <div className="panel p-5 sm:p-7">
-            <div className="mb-6"><h2 className="text-2xl font-semibold text-slate-950">Welcome back</h2><p className="mt-1.5 text-sm text-slate-500">Sign in with your approved team account.</p></div>
+            <div className="mb-6"><h2 className="text-2xl font-semibold text-foreground">Welcome back</h2><p className="mt-1.5 text-sm text-muted-foreground">Sign in with your approved team account.</p></div>
             <LoginForm initialMessage={initialMessage} />
           </div>
         </div>
