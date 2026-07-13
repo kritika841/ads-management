@@ -244,7 +244,7 @@ function WorkflowCard({ ad, profile, editors, editorWorkloads, pending, playing,
     <article className="group/card relative overflow-hidden rounded-xl border border-border bg-card shadow-soft transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-ring/40 hover:shadow-float dark:shadow-none dark:hover:border-ring/60">
       {pending ? <div className="absolute inset-0 z-20 flex items-center justify-center bg-card/75 backdrop-blur-[1px]" role="status"><span className="inline-flex items-center gap-2 rounded-lg border border-border bg-popover px-3 py-2 text-sm font-medium text-foreground shadow-soft dark:shadow-none"><Loader2 className="size-4 animate-spin text-primary" aria-hidden />Saving...</span></div> : null}
       {canPreview ? (
-        playing ? <div className="relative aspect-video w-full overflow-hidden bg-neutral-950"><video src={`/api/ads/${ad.id}/media?fileId=${encodeURIComponent(ad.drive_file_id!)}`} className="size-full object-contain" controls autoPlay playsInline preload="metadata" onError={onPlaybackError} /><button type="button" className="absolute right-3 top-3 inline-flex size-8 items-center justify-center rounded-full border border-white/20 bg-black/65 text-white backdrop-blur-sm transition hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white" aria-label={`Stop playing ${ad.name}`} onClick={onStopPlaying}><X className="size-4" aria-hidden /></button></div> :
+        playing ? <InlineCardVideo ad={ad} poster={thumbnail} onClose={onStopPlaying} onError={onPlaybackError} /> :
         <button className="relative block aspect-video w-full overflow-hidden bg-neutral-950" onClick={onPlay} aria-label={`Play ${ad.name}`}>
           {thumbnail ? <CardThumbnail src={thumbnail} name={ad.name} /> : <MediaPlaceholder label="Final video submitted" />}
           <span className="absolute left-3 top-3 max-w-[75%]"><ProductionStageBadge stage={ad.production_stage} /></span>
@@ -291,6 +291,11 @@ function CardThumbnail({ src, name }: { src: string; name: string }) {
   const [failed, setFailed] = useState(false);
   if (failed) return <MediaPlaceholder label="Thumbnail unavailable" />;
   return <Image src={src} alt={`${name} thumbnail`} fill sizes="(min-width: 1536px) 32vw, (min-width: 640px) 50vw, 100vw" className="object-cover" unoptimized onError={() => setFailed(true)} />;
+}
+
+function InlineCardVideo({ ad, poster, onClose, onError }: { ad: AdWithRelations; poster: string | null; onClose: () => void; onError: () => void }) {
+  const [buffering, setBuffering] = useState(true);
+  return <div className="relative aspect-video w-full overflow-hidden bg-neutral-950"><video src={`/api/ads/${ad.id}/media?fileId=${encodeURIComponent(ad.drive_file_id!)}`} poster={poster ?? undefined} className="size-full object-contain" controls autoPlay playsInline preload="auto" onCanPlay={() => setBuffering(false)} onPlaying={() => setBuffering(false)} onWaiting={() => setBuffering(true)} onError={onError} />{buffering ? <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/25" role="status"><span className="inline-flex items-center gap-2 rounded-lg bg-black/70 px-3 py-2 text-xs font-medium text-white backdrop-blur-sm"><Loader2 className="size-4 animate-spin" aria-hidden />Loading video...</span></div> : null}<button type="button" className="absolute right-3 top-3 inline-flex size-8 items-center justify-center rounded-full border border-white/20 bg-black/65 text-white backdrop-blur-sm transition hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white" aria-label={`Stop playing ${ad.name}`} onClick={onClose}><X className="size-4" aria-hidden /></button></div>;
 }
 
 function MediaPlaceholder({ label }: { label: string }) {

@@ -1,5 +1,8 @@
 import { google } from "googleapis";
 import { existsSync, readFileSync } from "node:fs";
+
+type DriveAuth = InstanceType<typeof google.auth.GoogleAuth>;
+let cachedDriveAuth: DriveAuth | null | undefined;
 export {
   googleDriveThumbnailUrl,
   normalizeGoogleDriveImageUrl,
@@ -54,9 +57,12 @@ export async function getDriveMedia(fileId: string, range?: string | null) {
 }
 
 function createDriveAuth() {
+  if (cachedDriveAuth !== undefined) return cachedDriveAuth;
+
   const serviceAccountJson = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON;
   if (!serviceAccountJson) {
-    return null;
+    cachedDriveAuth = null;
+    return cachedDriveAuth;
   }
 
   const credentialsSource = serviceAccountJson.trim();
@@ -65,8 +71,9 @@ function createDriveAuth() {
       ? credentialsSource
       : readFileSync(credentialsSource, "utf8")
   );
-  return new google.auth.GoogleAuth({
+  cachedDriveAuth = new google.auth.GoogleAuth({
     credentials,
     scopes: ["https://www.googleapis.com/auth/drive.readonly"]
   });
+  return cachedDriveAuth;
 }

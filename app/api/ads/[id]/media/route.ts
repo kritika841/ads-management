@@ -9,14 +9,20 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (!fileId) return new Response("File not found", { status: 404 });
 
   const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return new Response("Unauthorized", { status: 401 });
+  const { data: ad } = await supabase.from("ads").select("drive_file_id").eq("id", id).maybeSingle();
+  if (!ad) return new Response("File not found", { status: 404 });
 
-  const [{ data: ad }, { data: versions }] = await Promise.all([
-    supabase.from("ads").select("drive_file_id").eq("id", id).maybeSingle(),
-    supabase.from("ad_versions").select("drive_file_id").eq("ad_id", id)
-  ]);
-  const allowed = ad?.drive_file_id === fileId || versions?.some((version) => version.drive_file_id === fileId);
+  let allowed = ad.drive_file_id === fileId;
+  if (!allowed) {
+    const { data: version } = await supabase
+      .from("ad_versions")
+      .select("id")
+      .eq("ad_id", id)
+      .eq("drive_file_id", fileId)
+      .limit(1)
+      .maybeSingle();
+    allowed = Boolean(version);
+  }
   if (!allowed) return new Response("File not found", { status: 404 });
 
   try {
