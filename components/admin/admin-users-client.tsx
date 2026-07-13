@@ -127,7 +127,7 @@ export function AdminUsersClient({ profiles, ads, currentProfileId }: { profiles
 
       {modalOpen ? (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-neutral-950/45 p-0 backdrop-blur-[2px] sm:p-6" role="dialog" aria-modal="true" aria-labelledby="user-modal-title">
-          <section className="mx-auto min-h-full w-full bg-card shadow-float sm:min-h-0 sm:max-w-xl sm:rounded-lg">
+          <section className="mx-auto min-h-full w-full bg-card shadow-float sm:min-h-0 sm:max-w-xl sm:rounded-xl">
             <div className="flex h-16 items-center justify-between border-b border-border px-5"><div><h2 id="user-modal-title" className="text-lg font-semibold text-foreground">{editing ? "Edit user" : "Add approved user"}</h2><p className="text-xs text-muted-foreground">{editing ? "Update access and profile details" : "Create login credentials manually"}</p></div><Button size="icon" variant="ghost" title="Close" onClick={close}><X className="size-5" aria-hidden /></Button></div>
             <div className="space-y-4 p-5">
               <div className="grid gap-4 sm:grid-cols-2"><Field label="Name"><Input value={name} onChange={(event) => setName(event.target.value)} autoFocus /></Field><Field label="Role"><Select value={role} onChange={(event) => setRole(event.target.value as UserRole)}>{userRoles.map((item) => <option key={item} value={item}>{roleLabel(item)}</option>)}</Select></Field></div>

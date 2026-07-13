@@ -24,7 +24,7 @@ export function AdPreviewModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-neutral-950/50 p-0 backdrop-blur-[2px] sm:p-6" role="dialog" aria-modal="true" aria-labelledby="preview-title">
-      <div className="mx-auto flex h-full max-w-7xl flex-col overflow-hidden bg-card shadow-float sm:rounded-lg">
+      <div className="mx-auto flex h-full max-w-7xl flex-col overflow-hidden bg-card shadow-float sm:rounded-xl">
         <header className="flex min-h-16 items-center justify-between gap-4 border-b border-border px-4 py-3 sm:px-5">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -45,7 +45,7 @@ export function AdPreviewModal({
               href={`/ads/${ad.id}`}
               aria-label="Open full review"
               className={cn(
-                "inline-flex size-9 items-center justify-center gap-2 rounded-md bg-neutral-950 text-sm font-medium text-white transition hover:bg-neutral-800 sm:w-auto sm:px-3"
+                "inline-flex size-9 items-center justify-center gap-2 rounded-lg bg-primary text-sm font-medium text-primary-foreground transition-colors duration-150 hover:bg-primary/90 sm:w-auto sm:px-3"
               )}
             >
               <span className="hidden sm:inline">Open review</span>

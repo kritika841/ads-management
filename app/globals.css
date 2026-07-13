@@ -82,11 +82,40 @@ body {
   }
 
   .panel {
-    @apply rounded-lg border border-border bg-card text-card-foreground shadow-soft;
+    @apply rounded-xl border border-border bg-card text-card-foreground shadow-soft dark:shadow-none;
   }
 
   .section-heading {
     @apply text-[15px] font-semibold text-foreground;
+  }
+}
+
+@keyframes dialog-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes dialog-surface-in {
+  from { opacity: 0; transform: translateY(4px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+[role="dialog"] {
+  animation: dialog-backdrop-in 160ms ease-out;
+}
+
+[role="dialog"] > section,
+[role="dialog"] > aside,
+[role="dialog"] > div:not([aria-hidden="true"]) {
+  animation: dialog-surface-in 180ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [role="dialog"],
+  [role="dialog"] > section,
+  [role="dialog"] > aside,
+  [role="dialog"] > div:not([aria-hidden="true"]) {
+    animation: none;
   }
 }
 

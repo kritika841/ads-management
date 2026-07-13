@@ -145,7 +145,7 @@ export function ProductsClient({ products }: { products: Product[] }) {
 
       {modalOpen ? (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-neutral-950/45 p-0 backdrop-blur-[2px] sm:p-6" role="dialog" aria-modal="true" aria-labelledby="product-modal-title">
-          <section className="mx-auto min-h-full w-full bg-card shadow-float sm:min-h-0 sm:max-w-lg sm:rounded-lg">
+          <section className="mx-auto min-h-full w-full bg-card shadow-float sm:min-h-0 sm:max-w-lg sm:rounded-xl">
             <div className="flex h-16 items-center justify-between border-b border-border px-5">
               <div>
                 <h2 id="product-modal-title" className="text-lg font-semibold text-foreground">{editing ? "Edit product" : "Add product"}</h2>

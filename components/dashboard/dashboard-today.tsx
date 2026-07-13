@@ -23,7 +23,7 @@ export function DashboardToday({ model, onSelectQueue }: { model: DashboardSumma
             key={tile.key}
             type="button"
             className={cn(
-              "group flex min-h-24 items-center justify-between gap-4 rounded-lg border bg-card px-4 py-3 text-left shadow-soft transition hover:-translate-y-0.5 hover:border-border hover:shadow-md",
+              "group flex min-h-24 items-center justify-between gap-4 rounded-xl border bg-card px-4 py-3 text-left shadow-soft transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-ring/40 hover:shadow-float dark:shadow-none",
               tile.tone === "urgent" ? "border-destructive/30" : tile.tone === "attention" ? "border-warning/30" : "border-border"
             )}
             onClick={() => tile.queue ? onSelectQueue(tile.queue) : document.getElementById("priority-work")?.scrollIntoView({ behavior: "smooth", block: "start" })}

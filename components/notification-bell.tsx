@@ -44,7 +44,7 @@ export function NotificationBell({
         ) : null}
       </Button>
       {open ? (
-        <div className="absolute right-0 top-12 z-50 w-[min(23rem,calc(100vw-1.5rem))] overflow-hidden rounded-lg border border-border bg-card shadow-float">
+        <div className="absolute right-0 top-12 z-50 w-[min(23rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-border bg-card shadow-float dark:shadow-none">
           <div className="flex h-12 items-center justify-between border-b border-border px-3">
             <div>
               <p className="text-sm font-semibold text-foreground">Notifications</p>

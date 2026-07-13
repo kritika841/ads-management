@@ -58,7 +58,7 @@ export function DeleteAdButton({
 
       {open ? (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-neutral-950/45 p-4 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-labelledby={`delete-ad-${adId}`}>
-          <section className="w-full max-w-md rounded-lg bg-card shadow-float">
+          <section className="w-full max-w-md rounded-xl border border-border bg-card shadow-float dark:shadow-none">
             <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
               <div>
                 <h2 id={`delete-ad-${adId}`} className="text-lg font-semibold text-foreground">Delete ad permanently?</h2>

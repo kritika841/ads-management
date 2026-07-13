@@ -122,7 +122,7 @@ export function AppShell({
               <NotificationBell notifications={notifications}>
                 <Bell className="size-[18px]" aria-hidden />
               </NotificationBell>
-              <div className="ml-1 flex items-center gap-2 rounded-md border border-border bg-card py-1 pl-1 pr-2">
+              <div className="ml-1 flex items-center gap-2 rounded-lg border border-border bg-card py-1 pl-1 pr-2">
                 <Avatar name={profile.name} src={profile.avatar_url} className="size-8" />
                 <div className="hidden min-w-0 leading-tight sm:block">
                   <div className="max-w-40 truncate text-sm font-medium text-foreground">{profile.name}</div>
@@ -155,7 +155,7 @@ function SidebarContent({
     <>
       <div className="flex h-20 items-center border-b border-border px-5">
         <Link href="/dashboard" className="flex items-center gap-3" onClick={onNavigate}>
-          <span className="flex size-10 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground shadow-sm">
+          <span className="flex size-10 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground shadow-sm dark:shadow-none">
             AF
           </span>
           <span className="min-w-0">
@@ -175,7 +175,7 @@ function SidebarContent({
       </div>
 
       <div className="border-t border-border p-3">
-        <div className="flex items-center gap-2.5 rounded-md bg-muted p-2">
+        <div className="flex items-center gap-2.5 rounded-lg bg-muted p-2">
           <Avatar name={profile.name} src={profile.avatar_url} className="size-9" />
           <div className="min-w-0 flex-1 leading-tight">
             <p className="truncate text-sm font-medium text-foreground">{profile.name}</p>
@@ -216,9 +216,9 @@ function NavGroup({
               onClick={onNavigate}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "group flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium transition",
+                "group relative flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors duration-150 before:absolute before:bottom-2 before:left-0 before:top-2 before:w-0.5 before:rounded-full before:bg-primary before:opacity-0 before:transition-opacity",
                 active
-                  ? "bg-accent text-accent-foreground shadow-sm"
+                  ? "bg-accent/80 text-accent-foreground before:opacity-100"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
             >

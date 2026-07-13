@@ -29,7 +29,7 @@ export function RichTextEditor({
   });
 
   return (
-    <div className="overflow-hidden rounded-md border border-input bg-card transition focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15">
+    <div className="overflow-hidden rounded-lg border border-input bg-card transition-[border-color,box-shadow] duration-150 focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
       <div className="flex items-center gap-1 border-b border-border bg-muted/80 p-2">
         <Button
           size="icon"

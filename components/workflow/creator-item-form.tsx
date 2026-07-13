@@ -109,7 +109,7 @@ export function CreatorItemForm({
       <Field label="Script / copy" hint="Required for every status."><RichTextEditor value={scriptHtml} onChange={(html, text) => { setScriptHtml(html); setScriptText(text); }} /></Field>
 
       {requiresRawFootage ? (
-        <section className="rounded-md border border-primary/30 bg-accent/60 p-4">
+        <section className="rounded-xl border border-primary/30 bg-accent/60 p-4">
           <h3 className="text-sm font-semibold text-foreground">{isHandoff ? "Editor handoff" : "Raw footage"}</h3>
           <p className="mt-1 text-sm text-muted-foreground">{isHandoff ? "Assigning an editor gives them private access to this script and raw footage. You can also leave it unassigned and assign one later." : "Add the raw footage folder link now that the shoot is complete."}</p>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -122,7 +122,7 @@ export function CreatorItemForm({
 
       <Field label="Notes"><Textarea className="min-h-20" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Production context or instructions" /></Field>
 
-      <Field label="Platforms"><div className="grid grid-cols-2 gap-2 lg:grid-cols-4">{platforms.map((platform) => { const selected = selectedPlatforms.includes(platform); return <button key={platform} type="button" aria-pressed={selected} className={`flex h-10 items-center justify-between rounded-md border px-3 text-sm ${selected ? "border-primary bg-accent text-primary" : "border-border bg-card text-muted-foreground"}`} onClick={() => setSelectedPlatforms((current) => selected ? current.filter((item) => item !== platform) : [...current, platform])}><span>{platform}</span>{selected ? <Check className="size-4" aria-hidden /> : null}</button>; })}</div></Field>
+      <Field label="Platforms"><div className="grid grid-cols-2 gap-2 lg:grid-cols-4">{platforms.map((platform) => { const selected = selectedPlatforms.includes(platform); return <button key={platform} type="button" aria-pressed={selected} className={`flex h-10 items-center justify-between rounded-lg border px-3 text-sm transition-colors duration-150 ${selected ? "border-primary bg-accent text-primary" : "border-border bg-card text-muted-foreground hover:border-ring/50 hover:bg-muted"}`} onClick={() => setSelectedPlatforms((current) => selected ? current.filter((item) => item !== platform) : [...current, platform])}><span>{platform}</span>{selected ? <Check className="size-4" aria-hidden /> : null}</button>; })}</div></Field>
 
       <Field label="Tags"><div className="flex flex-wrap gap-2">{tagOptions.map((tag) => <button key={tag} type="button" className={`rounded-full border px-3 py-1.5 text-xs ${selectedTags.includes(tag) ? "border-primary bg-accent text-primary" : "border-border text-muted-foreground"}`} onClick={() => setSelectedTags((current) => current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag])}>#{tag}</button>)}</div><div className="mt-2 flex gap-2"><div className="relative flex-1"><Tags className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden /><Input className="pl-9" value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addTag(); } }} placeholder="Add tag" /></div><Button variant="secondary" disabled={!tagDraft.trim()} onClick={addTag}><Plus className="size-4" aria-hidden />Add</Button></div></Field>
 

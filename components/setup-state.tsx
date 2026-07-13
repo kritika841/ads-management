@@ -3,7 +3,7 @@ import { AlertTriangle } from "lucide-react";
 export function SetupState() {
   return (
     <main className="flex min-h-screen items-center justify-center px-6">
-      <section className="w-full max-w-xl rounded-lg border border-warning/30 bg-card p-6 shadow-soft">
+      <section className="w-full max-w-xl rounded-xl border border-warning/30 bg-card p-6 shadow-soft dark:shadow-none">
         <div className="flex items-start gap-3">
           <div className="rounded-md bg-warning/15 p-2 text-warning">
             <AlertTriangle className="size-5" aria-hidden />
