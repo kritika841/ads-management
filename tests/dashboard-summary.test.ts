@@ -97,7 +97,7 @@ describe("role dashboard summary", () => {
 });
 
 function profile(id: string, name: string, role: Profile["role"]): Profile {
-  return { id, name, email: `${id}@example.com`, role, avatar_url: null, active: true, created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-01T00:00:00.000Z" };
+  return { id, name, email: `${id}@example.com`, role, avatar_url: null, active: true, deleted_at: null, created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-01T00:00:00.000Z" };
 }
 
 function ad(id: string, productionStage: ProductionStage, overrides: Partial<AdWithRelations> = {}): AdWithRelations {

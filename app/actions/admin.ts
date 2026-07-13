@@ -196,12 +196,13 @@ export async function deleteUser(userId: string) {
     if ((count ?? 0) <= 1) return { ok: false, message: "Add another active admin before deleting this account." };
   }
 
-  const { error: profileError } = await admin.from("profiles").update({ active: false }).eq("id", parsedId.data);
+  const deletedAt = new Date().toISOString();
+  const { error: profileError } = await admin.from("profiles").update({ active: false, deleted_at: deletedAt }).eq("id", parsedId.data);
   if (profileError) return { ok: false, message: profileError.message };
 
   const { error: authError } = await admin.auth.admin.deleteUser(parsedId.data, true);
   if (authError) {
-    await admin.from("profiles").update({ active: target.active }).eq("id", parsedId.data);
+    await admin.from("profiles").update({ active: target.active, deleted_at: null }).eq("id", parsedId.data);
     return { ok: false, message: authError.message };
   }
 
@@ -209,7 +210,8 @@ export async function deleteUser(userId: string) {
     name: target.name,
     email: target.email,
     role: target.role,
-    historical_attribution_preserved: true
+    historical_attribution_preserved: true,
+    deleted_at: deletedAt
   });
   revalidatePath("/admin/users");
   revalidatePath("/library");

@@ -66,6 +66,7 @@ export async function getProfiles() {
   const { data, error } = await supabase
     .from("profiles")
     .select("*")
+    .is("deleted_at", null)
     .order("name", { ascending: true });
 
   if (error) {

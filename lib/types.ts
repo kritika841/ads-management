@@ -36,6 +36,7 @@ export type Profile = {
   role: UserRole;
   avatar_url: string | null;
   active: boolean;
+  deleted_at: string | null;
   created_at: string;
   updated_at: string;
 };
