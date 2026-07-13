@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, CalendarClock, CircleHelp, Gauge, ListChecks } from "lucide-react";
+import { AlertTriangle, ArrowRight, CalendarClock, Gauge, ListChecks } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
+import { InfoTip } from "@/components/ui/info-tip";
 import { ProductionStageBadge } from "@/components/workflow/production-stage";
 import type { DashboardSummaryModel } from "@/lib/dashboard-summary";
 import type { QueueKey } from "@/lib/work-queues";
@@ -19,24 +20,23 @@ export function DashboardToday({ model, onSelectQueue }: { model: DashboardSumma
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {model.tiles.map((tile) => (
-          <button
+          <article
             key={tile.key}
-            type="button"
             className={cn(
-              "group flex min-h-24 items-center justify-between gap-4 rounded-xl border bg-card px-4 py-3 text-left shadow-soft transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-ring/40 hover:shadow-float dark:shadow-none",
+              "group relative flex min-h-24 items-center justify-between gap-4 rounded-xl border bg-card px-4 py-3 text-left shadow-soft transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-ring/40 hover:shadow-float dark:shadow-none",
               tile.tone === "urgent" ? "border-destructive/30" : tile.tone === "attention" ? "border-warning/30" : "border-border"
             )}
-            onClick={() => tile.queue ? onSelectQueue(tile.queue) : document.getElementById("priority-work")?.scrollIntoView({ behavior: "smooth", block: "start" })}
           >
-            <div className="min-w-0">
+            <button type="button" className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring" aria-label={`${tile.label}: ${tile.count}`} onClick={() => tile.queue ? onSelectQueue(tile.queue) : document.getElementById("priority-work")?.scrollIntoView({ behavior: "smooth", block: "start" })} />
+            <div className="pointer-events-none min-w-0">
               <div className="flex items-center gap-1.5">
                 <p className="text-sm font-medium text-muted-foreground">{tile.label}</p>
-                <span className="inline-flex size-5 items-center justify-center rounded text-muted-foreground" title={tile.help} aria-label={tile.help}><CircleHelp className="size-3.5" aria-hidden /></span>
+                <InfoTip text={tile.help} className="pointer-events-auto z-10" />
               </div>
               <p className={cn("mt-1 text-3xl font-semibold", tile.tone === "urgent" && tile.count ? "text-destructive" : "text-foreground")}>{tile.count}</p>
             </div>
             <ArrowRight className="size-4 shrink-0 text-border transition group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden />
-          </button>
+          </article>
         ))}
       </div>
 
