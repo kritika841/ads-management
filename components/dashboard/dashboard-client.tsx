@@ -23,6 +23,8 @@ import type { AdStatus, AdWithRelations, Campaign, Product, Profile } from "@/li
 import { cn, dateOnlyDaysFromToday, formatDateOnly } from "@/lib/utils";
 import { matchesQueue, queueForRole, queuesForRole, type QueueKey } from "@/lib/work-queues";
 
+const gridPageSize = 18;
+
 export function DashboardClient({ profile, ads, campaigns, products, profiles, availableTags, editorWorkloads, initialQueue }: { profile: Profile; ads: AdWithRelations[]; campaigns: Campaign[]; products: Product[]; profiles: Profile[]; availableTags: string[]; editorWorkloads: Record<string, number>; initialQueue: QueueKey }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -47,8 +49,10 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
   const [cancelAd, setCancelAd] = useState<AdWithRelations | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [actingAdId, setActingAdId] = useState<string | null>(null);
+  const [visibleGridCount, setVisibleGridCount] = useState(gridPageSize);
   const [isPending, startTransition] = useTransition();
   const searchRef = useRef<HTMLInputElement>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
   const editors = profiles.filter((item) => item.role === "editor");
   const creators = profiles.filter((item) => item.role === "content_creator");
   const canCreate = profile.role === "content_creator" || profile.role === "admin" || profile.role === "manager";
@@ -107,6 +111,30 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
   }, [ads, campaign, creator, deadline, editor, platform, product, query, queue, sort, stage, tag]);
 
   const filtersActive = [stage, editor, creator, campaign, product, platform, tag, deadline, sort].some((value) => value !== "all");
+  const gridFilterKey = [queue, query, stage, editor, creator, campaign, product, platform, tag, deadline, sort].join("|");
+  const visibleGridAds = filteredAds.slice(0, visibleGridCount);
+  const hasMoreGridAds = view === "grid" && visibleGridCount < filteredAds.length;
+
+  useEffect(() => {
+    setVisibleGridCount(gridPageSize);
+  }, [gridFilterKey]);
+
+  useEffect(() => {
+    if (!hasMoreGridAds) return;
+    const target = loadMoreRef.current;
+    if (!target) return;
+    if (!("IntersectionObserver" in window)) {
+      setVisibleGridCount(filteredAds.length);
+      return;
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      setVisibleGridCount((current) => Math.min(current + gridPageSize, filteredAds.length));
+    }, { rootMargin: "500px 0px" });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [filteredAds.length, hasMoreGridAds]);
 
   const activeFilters = useMemo(() => {
     const labelFor = (items: { id: string; name: string }[], value: string) => items.find((item) => item.id === value)?.name ?? value;
@@ -188,8 +216,8 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
       {filtersOpen ? <div className="mt-3 border-t border-border pt-3"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><FilterSelect label="Status" value={stage} onChange={setStage} options={productionStages.map((item) => ({ value: item, label: productionStageLabels[item] }))} />{profile.role === "admin" || profile.role === "manager" ? <><FilterSelect label="Editor" value={editor} onChange={setEditor} options={editors.map((item) => ({ value: item.id, label: item.name }))} /><FilterSelect label="Creator" value={creator} onChange={setCreator} options={creators.map((item) => ({ value: item.id, label: item.name }))} /></> : null}<FilterSelect label="Campaign" value={campaign} onChange={setCampaign} options={campaigns.map((item) => ({ value: item.id, label: item.name }))} /><FilterSelect label="Product" value={product} onChange={setProduct} options={products.map((item) => ({ value: item.id, label: item.name }))} /><FilterSelect label="Platform" value={platform} onChange={setPlatform} options={platforms.map((item) => ({ value: item, label: item }))} /><FilterSelect label="Tag" value={tag} onChange={setTag} options={availableTags.map((item) => ({ value: item, label: `#${item}` }))} /><FilterSelect label="Deadline" value={deadline} onChange={setDeadline} options={[{ value: "overdue", label: "Overdue" }, { value: "today", label: "Due today" }, { value: "soon", label: "Due in 3 days" }]} /><FilterSelect label="Sort" value={sort} onChange={setSort} options={[{ value: "deadline", label: "Deadline first" }, { value: "waiting", label: "Waiting longest" }, { value: "oldest", label: "Oldest created" }]} /></div></div> : null}
     </section>
 
-    <div className="mt-4 flex items-center justify-between"><p className="text-sm text-muted-foreground"><span className="font-medium text-foreground">{filteredAds.length}</span> items</p></div>
-    {filteredAds.length ? view === "grid" ? <section className="mt-3 grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">{filteredAds.map((ad) => <WorkflowCard key={ad.id} ad={ad} profile={profile} editors={editors} editorWorkloads={editorWorkloads} pending={actingAdId === ad.id} onPreview={() => setPreviewAd(ad)} onEdit={() => openCreatorForm(ad)} onApprove={() => decide(ad, "approve")} onRequestChanges={() => setCancelAd(ad)} onAssignEditor={(editorId, deadline) => assign(ad, editorId, deadline)} />)}</section> : <WorkflowTable ads={filteredAds} profile={profile} pendingId={actingAdId} onApprove={(ad) => decide(ad, "approve")} onRequestChanges={setCancelAd} /> : <EmptyQueue canCreate={canCreate} onCreate={() => openCreatorForm()} />}
+    <div className="mt-4 flex items-center justify-between"><p className="text-sm text-muted-foreground"><span className="font-medium text-foreground">{filteredAds.length}</span> items{view === "grid" && filteredAds.length > gridPageSize ? <span> · showing {visibleGridAds.length}</span> : null}</p></div>
+    {filteredAds.length ? view === "grid" ? <><section className="mt-3 grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">{visibleGridAds.map((ad) => <WorkflowCard key={ad.id} ad={ad} profile={profile} editors={editors} editorWorkloads={editorWorkloads} pending={actingAdId === ad.id} onPreview={() => setPreviewAd(ad)} onEdit={() => openCreatorForm(ad)} onApprove={() => decide(ad, "approve")} onRequestChanges={() => setCancelAd(ad)} onAssignEditor={(editorId, deadline) => assign(ad, editorId, deadline)} />)}</section>{hasMoreGridAds ? <div ref={loadMoreRef} className="flex h-20 items-center justify-center" role="status" aria-label="Loading more creatives"><Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden /><span className="sr-only">Loading more creatives</span></div> : null}</> : <WorkflowTable ads={filteredAds} profile={profile} pendingId={actingAdId} onApprove={(ad) => decide(ad, "approve")} onRequestChanges={setCancelAd} /> : <EmptyQueue canCreate={canCreate} onCreate={() => openCreatorForm()} />}
 
     {formOpen ? <Modal open labelledBy="creator-form-title" onClose={() => { setFormOpen(false); setEditingAd(null); }} className="p-0 sm:p-6"><section className="mx-auto min-h-full w-full bg-card shadow-float sm:min-h-0 sm:max-w-5xl sm:rounded-xl"><div className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-border bg-card px-5 sm:rounded-t-lg"><div><h2 id="creator-form-title" className="text-lg font-semibold text-foreground">{editingAd ? "Update creative" : "Add creative"}</h2><p className="text-xs text-muted-foreground">Set the current preparation status and save.</p></div><Button size="icon" variant="ghost" title="Close" onClick={() => { setFormOpen(false); setEditingAd(null); }}><X className="size-5" aria-hidden /></Button></div><div className="p-5"><CreatorItemForm profile={profile} creators={creators} editors={editors} campaigns={campaigns.filter((item) => item.active)} products={products.filter((item) => item.active)} initialAd={editingAd} availableTags={availableTags} editorWorkloads={editorWorkloads} onSaved={() => { setFormOpen(false); setEditingAd(null); router.refresh(); }} /></div></section></Modal> : null}
 
