@@ -2,8 +2,8 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy, Loader2, Pencil, Power, RefreshCw, Search, Trash2, UserPlus, Users, X } from "lucide-react";
-import { deactivateUser, deleteUser, saveUser } from "@/app/actions/admin";
+import { Check, Copy, Loader2, Pencil, Power, PowerOff, RefreshCw, Search, Trash2, UserPlus, Users, X } from "lucide-react";
+import { activateUser, deactivateUser, deleteUser, saveUser } from "@/app/actions/admin";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
@@ -79,6 +79,19 @@ export function AdminUsersClient({ profiles, ads, currentProfileId }: { profiles
     });
   }
 
+  function activate(profile: Profile) {
+    setMessage(null);
+    startTransition(async () => {
+      const response = await activateUser(profile.id);
+      if (!response.ok) {
+        toast({ title: "User not activated", description: response.message ?? "Action failed.", tone: "error" });
+        return;
+      }
+      toast({ title: "User activated", description: `${profile.name} can access AdFlow again.`, tone: "success" });
+      router.refresh();
+    });
+  }
+
   function removeUser() {
     if (!deleting) return;
     const profile = deleting;
@@ -137,7 +150,7 @@ export function AdminUsersClient({ profiles, ads, currentProfileId }: { profiles
                     <td className="px-4 py-3 text-muted-foreground">{userStats?.approved ?? 0}</td>
                     <td className="px-4 py-3"><span className="font-medium text-foreground">{userStats?.approvalRate ?? 0}%</span></td>
                     <td className="px-4 py-3 text-muted-foreground">{formatDurationHours(userStats?.avgApproval ?? null)}</td>
-                    <td className="px-4 py-3"><div className="flex justify-end gap-1"><Button size="icon" variant="ghost" className="size-9" title="Edit user" onClick={() => open(profile)}><Pencil className="size-4" aria-hidden /></Button><Button size="icon" variant="ghost" className="size-9" title={profile.id === currentProfileId ? "You cannot deactivate yourself" : "Deactivate user"} disabled={!profile.active || profile.id === currentProfileId || isPending} onClick={() => deactivate(profile)}><Power className="size-4" aria-hidden /></Button><Button size="icon" variant="ghost" className="size-9 text-destructive hover:bg-destructive/10 hover:text-destructive" title={profile.id === currentProfileId ? "You cannot delete yourself" : "Delete user"} disabled={profile.id === currentProfileId || isPending} onClick={() => setDeleting(profile)}><Trash2 className="size-4" aria-hidden /></Button></div></td>
+                    <td className="px-4 py-3"><div className="flex justify-end gap-1"><Button size="icon" variant="ghost" className="size-9" title="Edit user" onClick={() => open(profile)}><Pencil className="size-4" aria-hidden /></Button>{profile.active ? <Button size="icon" variant="ghost" className="size-9" title={profile.id === currentProfileId ? "You cannot deactivate yourself" : "Deactivate user"} disabled={profile.id === currentProfileId || isPending} onClick={() => deactivate(profile)}><PowerOff className="size-4" aria-hidden /></Button> : <Button size="icon" variant="ghost" className="size-9 text-success hover:bg-success/10 hover:text-success" title="Activate user" disabled={isPending} onClick={() => activate(profile)}><Power className="size-4" aria-hidden /></Button>}<Button size="icon" variant="ghost" className="size-9 text-destructive hover:bg-destructive/10 hover:text-destructive" title={profile.id === currentProfileId ? "You cannot delete yourself" : "Delete user"} disabled={profile.id === currentProfileId || isPending} onClick={() => setDeleting(profile)}><Trash2 className="size-4" aria-hidden /></Button></div></td>
                   </tr>
                 );
               })}

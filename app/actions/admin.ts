@@ -172,6 +172,31 @@ export async function deactivateUser(userId: string) {
   return { ok: true };
 }
 
+export async function activateUser(userId: string) {
+  const adminProfile = await requireRole(["admin"]);
+  const parsedId = z.string().uuid().safeParse(userId);
+  if (!parsedId.success) return { ok: false, message: "Invalid user id." };
+
+  const admin = createSupabaseAdminClient();
+  const { data: target, error: targetError } = await admin
+    .from("profiles")
+    .select("id,name,active,deleted_at")
+    .eq("id", parsedId.data)
+    .maybeSingle();
+  if (targetError || !target) return { ok: false, message: targetError?.message ?? "User not found." };
+  if (target.deleted_at) return { ok: false, message: "Deleted users cannot be reactivated." };
+  if (target.active) return { ok: true };
+
+  const { error } = await admin.from("profiles").update({ active: true }).eq("id", parsedId.data);
+  if (error) return { ok: false, message: error.message };
+
+  await audit(adminProfile.id, "activated_user", "profile", parsedId.data, { name: target.name });
+  revalidatePath("/admin/users");
+  revalidatePath("/library");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
 export async function deleteUser(userId: string) {
   const adminProfile = await requireRole(["admin"]);
   const parsedId = z.string().uuid().safeParse(userId);
