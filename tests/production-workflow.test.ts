@@ -7,6 +7,7 @@ import {
   legacyStatusForProductionStage,
   nextProductionStage,
   productionActionError,
+  workflowStageAgeLabel,
   workflowWaitingLabel
 } from "@/lib/production-workflow";
 import type { Ad } from "@/lib/types";
@@ -24,6 +25,12 @@ describe("production workflow", () => {
     expect(nextProductionStage("mark_shoot_complete")).toBe("shoot_complete");
     expect(nextProductionStage("share_raw_footage")).toBe("ready_for_edit");
     expect(nextProductionStage("start_editing")).toBe("editing");
+  });
+
+  it("explains elapsed workflow time without calling approved work waiting", () => {
+    const now = new Date("2026-07-10T12:00:00.000Z").getTime();
+    expect(workflowStageAgeLabel("approved", "2026-07-08T12:00:00.000Z", now)).toBe("Approved 2d ago");
+    expect(workflowStageAgeLabel("editing", "2026-07-10T04:00:00.000Z", now)).toBe("In this status for 8h");
   });
 
   it("requires the assigned creator and a script", () => {

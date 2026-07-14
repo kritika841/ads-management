@@ -103,6 +103,16 @@ export function workflowWaitingLabel(changedAt: string, now = Date.now()) {
   return `Waiting ${days}d`;
 }
 
+export function workflowStageAgeLabel(stage: ProductionStage, changedAt: string, now = Date.now()) {
+  const age = workflowWaitingLabel(changedAt, now)
+    .replace("Just updated", "just now")
+    .replace("Waiting ", "");
+
+  if (stage === "approved") return age === "just now" ? "Approved just now" : `Approved ${age} ago`;
+  if (stage === "changes_requested") return age === "just now" ? "Changes requested just now" : `Changes requested ${age} ago`;
+  return age === "just now" ? "Entered status just now" : `In this status for ${age}`;
+}
+
 export function isFinalMediaVisible(stage: ProductionStage) {
   return !["script_writing", "ready_to_shoot", "shoot_complete", "ready_for_edit"].includes(stage);
 }
