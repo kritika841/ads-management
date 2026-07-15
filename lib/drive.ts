@@ -45,6 +45,19 @@ export async function getDriveThumbnail(fileId: string) {
   };
 }
 
+/** List the immediate children of a Drive folder. Returns [] if not a folder or on error. */
+export async function getDriveFolderContents(folderId: string) {
+  const auth = createDriveAuth();
+  if (!auth) return [];
+  const drive = google.drive({ version: "v3", auth });
+  const res = await drive.files.list({
+    q: `'${folderId}' in parents and trashed = false`,
+    fields: "files(id,name,mimeType,size)",
+    pageSize: 100,
+  });
+  return res.data.files ?? [];
+}
+
 export async function getDriveMedia(fileId: string, range?: string | null) {
   const auth = createDriveAuth();
   if (!auth) return null;
