@@ -12,7 +12,6 @@ import {
   Menu,
   Package,
   Settings,
-  ShieldCheck,
   Users,
   X
 } from "lucide-react";
@@ -50,8 +49,7 @@ export function AppShell({
       ? [
           { href: "/admin/users", label: "People", icon: Users },
           { href: "/admin/products", label: "Products", icon: Package },
-          { href: "/admin/settings", label: "Settings", icon: Settings },
-          { href: "/admin/audit", label: "Audit log", icon: ShieldCheck }
+          { href: "/admin/settings", label: "Settings", icon: Settings }
         ]
       : [];
   const pageTitle = [...workspaceLinks, ...adminLinks].find((item) => isActivePath(pathname, item.href))?.label ??

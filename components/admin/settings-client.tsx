@@ -6,14 +6,17 @@ import { saveCampaign, updateSettings } from "@/app/actions/admin";
 import { runServerAction } from "@/lib/client-action";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
-import type { AppSettings, Campaign } from "@/lib/types";
+import type { AppSettings, AuditLog, Campaign } from "@/lib/types";
+import { formatDateTime } from "@/lib/utils";
 
 export function SettingsClient({
   settings,
-  campaigns
+  campaigns,
+  auditLogs = []
 }: {
   settings: AppSettings;
   campaigns: Campaign[];
+  auditLogs?: AuditLog[];
 }) {
   const [deadlineReminderDays, setDeadlineReminderDays] = useState(settings.deadline_reminder_days);
   const [maxConcurrentEdits, setMaxConcurrentEdits] = useState(settings.max_concurrent_edits);
@@ -140,6 +143,37 @@ export function SettingsClient({
         </section>
       </div>
       {message ? <p className="mt-4 rounded-md border border-border bg-card px-3 py-2 text-sm text-muted-foreground shadow-soft">{message}</p> : null}
+
+      <section className="panel mt-5 overflow-hidden">
+        <div className="border-b border-border p-5">
+          <h2 className="section-heading">Audit log</h2>
+          <p className="mt-1 text-xs text-muted-foreground">Latest 100 administrative and workflow events.</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[680px] text-left text-sm">
+            <thead className="border-b border-border bg-muted/80 text-xs uppercase text-muted-foreground">
+              <tr>
+                <th className="px-4 py-3">Action</th>
+                <th className="px-4 py-3">Actor</th>
+                <th className="px-4 py-3">Target</th>
+                <th className="px-4 py-3">Time</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {auditLogs.length === 0 ? (
+                <tr><td colSpan={4} className="px-4 py-6 text-center text-muted-foreground">No audit events yet.</td></tr>
+              ) : auditLogs.map((log) => (
+                <tr key={log.id} className="transition hover:bg-muted/80">
+                  <td className="px-4 py-3 font-medium capitalize text-foreground">{log.action.replaceAll("_", " ")}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{log.actor?.name ?? "System"}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{log.target_type}{log.target_id ? ` #${log.target_id.slice(0, 8)}` : ""}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{formatDateTime(log.created_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </main>
   );
 }
