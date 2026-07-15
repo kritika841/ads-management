@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CheckCircle2, Loader2, Pencil, Plus, Power, RotateCcw } from "lucide-react";
-import { saveCampaign, updateSettings } from "@/app/actions/admin";
+import { CheckCircle2, Loader2, Pencil, Plus, Power, RotateCcw, Trash2 } from "lucide-react";
+import { deleteCampaign, saveCampaign, updateSettings } from "@/app/actions/admin";
 import { runServerAction } from "@/lib/client-action";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
@@ -80,6 +80,15 @@ export function SettingsClient({
     });
   }
 
+  function removeCampaign(campaign: Campaign) {
+    if (!confirm(`Delete "${campaign.name}"? This cannot be undone.`)) return;
+    setMessage(null);
+    startTransition(async () => {
+      const response = await runServerAction(() => deleteCampaign(campaign.id));
+      setMessage(response.ok ? `${campaign.name} deleted.` : response.message ?? "Unable to delete campaign.");
+    });
+  }
+
   return (
     <main className="page-container">
       <div className="mb-6">
@@ -136,7 +145,7 @@ export function SettingsClient({
                     <p className="text-sm font-medium text-foreground">{campaign.name}</p>
                     <p className="mt-0.5 truncate text-xs text-muted-foreground">{campaign.description ?? "No description"}</p>
                   </div>
-                  <div className="flex items-center gap-1"><span className={`mr-2 inline-flex items-center gap-1.5 text-xs font-medium ${campaign.active ? "text-success" : "text-muted-foreground"}`}><span className={`size-1.5 rounded-full ${campaign.active ? "bg-success" : "bg-border"}`} />{campaign.active ? "Active" : "Inactive"}</span><Button size="icon" variant="ghost" className="size-9" title="Edit campaign" onClick={() => editCampaign(campaign)}><Pencil className="size-4" aria-hidden /></Button><Button size="icon" variant="ghost" className="size-9" title={campaign.active ? "Deactivate campaign" : "Activate campaign"} onClick={() => toggleCampaign(campaign)}><Power className="size-4" aria-hidden /></Button></div>
+                  <div className="flex items-center gap-1"><span className={`mr-2 inline-flex items-center gap-1.5 text-xs font-medium ${campaign.active ? "text-success" : "text-muted-foreground"}`}><span className={`size-1.5 rounded-full ${campaign.active ? "bg-success" : "bg-border"}`} />{campaign.active ? "Active" : "Inactive"}</span><Button size="icon" variant="ghost" className="size-9" title="Edit campaign" onClick={() => editCampaign(campaign)}><Pencil className="size-4" aria-hidden /></Button><Button size="icon" variant="ghost" className="size-9" title={campaign.active ? "Deactivate campaign" : "Activate campaign"} onClick={() => toggleCampaign(campaign)}><Power className="size-4" aria-hidden /></Button><Button size="icon" variant="ghost" className="size-9 text-destructive hover:text-destructive" title="Delete campaign" onClick={() => removeCampaign(campaign)}><Trash2 className="size-4" aria-hidden /></Button></div>
                 </div>
               ))}
             </div>

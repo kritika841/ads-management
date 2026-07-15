@@ -46,30 +46,50 @@ export async function GET(request: NextRequest) {
           const children = await getDriveFolderContents(ad.drive_file_id);
           for (const child of children) {
             if (!child.id || child.mimeType === FOLDER_MIME) continue;
+            const safeName = (child.name ?? child.id).replace(/[^a-zA-Z0-9._\- ]/g, "_");
             try {
               const res = await getDriveMedia(child.id);
               if (res?.ok) {
-                const safeName = (child.name ?? child.id).replace(/[^a-zA-Z0-9._\- ]/g, "_");
                 files[`${folder}/${safeName}`] = new Uint8Array(await res.arrayBuffer());
+              } else {
+                const pub = await fetch(`https://drive.usercontent.google.com/download?id=${encodeURIComponent(child.id)}&export=download`);
+                if (pub.ok) files[`${folder}/${safeName}`] = new Uint8Array(await pub.arrayBuffer());
               }
             } catch {
-              // skip unreachable child
+              try {
+                const pub = await fetch(`https://drive.usercontent.google.com/download?id=${encodeURIComponent(child.id)}&export=download`);
+                if (pub.ok) files[`${folder}/${safeName}`] = new Uint8Array(await pub.arrayBuffer());
+              } catch { /* skip */ }
             }
           }
         } else if (meta) {
           // Single file — use Drive filename so the extension is correct
+          const safeName = (meta.name ?? ad.name).replace(/[^a-zA-Z0-9._\- ]/g, "_");
           try {
             const res = await getDriveMedia(ad.drive_file_id);
             if (res?.ok) {
-              const safeName = (meta.name ?? ad.name).replace(/[^a-zA-Z0-9._\- ]/g, "_");
               files[`${folder}/${safeName}`] = new Uint8Array(await res.arrayBuffer());
+            } else {
+              // Fallback: public Drive download URL
+              const pub = await fetch(`https://drive.usercontent.google.com/download?id=${encodeURIComponent(ad.drive_file_id)}&export=download`);
+              if (pub.ok) files[`${folder}/${safeName}`] = new Uint8Array(await pub.arrayBuffer());
             }
           } catch {
-            // skip
+            // Try public URL on any error
+            try {
+              const pub = await fetch(`https://drive.usercontent.google.com/download?id=${encodeURIComponent(ad.drive_file_id)}&export=download`);
+              if (pub.ok) files[`${folder}/${safeName}`] = new Uint8Array(await pub.arrayBuffer());
+            } catch { /* skip */ }
           }
         }
       } catch {
-        // Drive unavailable for this ad — include only script if present
+        // Drive metadata unavailable — try public URL directly
+        try {
+          const ext = ".mp4";
+          const safeName = `${ad.name.replace(/[^a-zA-Z0-9._\- ]/g, "_")}${ext}`;
+          const pub = await fetch(`https://drive.usercontent.google.com/download?id=${encodeURIComponent(ad.drive_file_id!)}&export=download`);
+          if (pub.ok) files[`${folder}/${safeName}`] = new Uint8Array(await pub.arrayBuffer());
+        } catch { /* skip */ }
       }
     }
   }

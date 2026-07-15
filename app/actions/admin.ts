@@ -317,6 +317,52 @@ export async function saveProduct(payload: {
   return { ok: true };
 }
 
+export async function deleteCampaign(id: string) {
+  const adminProfile = await requireRole(["admin"]);
+  const parsedId = z.string().uuid().safeParse(id);
+  if (!parsedId.success) return { ok: false, message: "Invalid campaign id." };
+
+  const admin = createSupabaseAdminClient();
+  const { data: campaign, error: fetchError } = await admin
+    .from("campaigns")
+    .select("id,name")
+    .eq("id", parsedId.data)
+    .maybeSingle();
+  if (fetchError || !campaign) return { ok: false, message: fetchError?.message ?? "Campaign not found." };
+
+  const { error } = await admin.from("campaigns").delete().eq("id", parsedId.data);
+  if (error) return { ok: false, message: error.message };
+
+  await audit(adminProfile.id, "deleted_campaign", "campaign", parsedId.data, { name: campaign.name });
+  revalidatePath("/admin/settings");
+  revalidatePath("/dashboard");
+  revalidatePath("/library");
+  return { ok: true };
+}
+
+export async function deleteProduct(id: string) {
+  const adminProfile = await requireRole(["admin"]);
+  const parsedId = z.string().uuid().safeParse(id);
+  if (!parsedId.success) return { ok: false, message: "Invalid product id." };
+
+  const admin = createSupabaseAdminClient();
+  const { data: product, error: fetchError } = await admin
+    .from("products")
+    .select("id,name")
+    .eq("id", parsedId.data)
+    .maybeSingle();
+  if (fetchError || !product) return { ok: false, message: fetchError?.message ?? "Product not found." };
+
+  const { error } = await admin.from("products").delete().eq("id", parsedId.data);
+  if (error) return { ok: false, message: error.code === "23503" ? "Cannot delete a product that has creatives linked to it." : error.message };
+
+  await audit(adminProfile.id, "deleted_product", "product", parsedId.data, { name: product.name });
+  revalidatePath("/admin/products");
+  revalidatePath("/dashboard");
+  revalidatePath("/library");
+  return { ok: true };
+}
+
 export async function updateSettings(payload: {
   twoStepApproval: boolean;
   deadlineReminderDays: number;

@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { Loader2, Package, PackagePlus, Pencil, Power, Search, X } from "lucide-react";
-import { saveProduct } from "@/app/actions/admin";
+import { Loader2, Package, PackagePlus, Pencil, Power, Search, Trash2, X } from "lucide-react";
+import { deleteProduct, saveProduct } from "@/app/actions/admin";
 import { runServerAction } from "@/lib/client-action";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
@@ -71,6 +71,15 @@ export function ProductsClient({ products }: { products: Product[] }) {
     });
   }
 
+  function remove(product: Product) {
+    if (!confirm(`Delete "${product.name}"? This cannot be undone.`)) return;
+    setMessage(null);
+    startTransition(async () => {
+      const response = await runServerAction(() => deleteProduct(product.id));
+      if (!response.ok) setMessage(response.message ?? "Unable to delete product.");
+    });
+  }
+
   return (
     <main className="page-container">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -130,6 +139,9 @@ export function ProductsClient({ products }: { products: Product[] }) {
                   </Button>
                   <Button size="icon" variant="ghost" className="size-9" title={product.active ? "Deactivate product" : "Activate product"} onClick={() => toggleActive(product)}>
                     <Power className="size-4" aria-hidden />
+                  </Button>
+                  <Button size="icon" variant="ghost" className="size-9 text-destructive hover:text-destructive" title="Delete product" onClick={() => remove(product)}>
+                    <Trash2 className="size-4" aria-hidden />
                   </Button>
                 </div>
               </div>

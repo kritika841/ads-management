@@ -26,16 +26,25 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (cached) return cachedPrefixResponse(cached);
 
     const media = await getDriveMedia(fileId, range);
-    if (!media?.ok || !media.body) return new Response("Video unavailable", { status: media?.status ?? 502 });
-    const headers = new Headers();
-    for (const name of ["content-type", "content-length", "content-range", "accept-ranges"]) {
-      const value = media.headers.get(name);
-      if (value) headers.set(name, value);
+    if (media?.ok && media.body) {
+      const headers = new Headers();
+      for (const name of ["content-type", "content-length", "content-range", "accept-ranges"]) {
+        const value = media.headers.get(name);
+        if (value) headers.set(name, value);
+      }
+      headers.set("Cache-Control", "private, max-age=300");
+      return new Response(media.body, { status: media.status, headers });
     }
-    headers.set("Cache-Control", "private, max-age=300");
-    return new Response(media.body, { status: media.status, headers });
+    // Service account unavailable — redirect to public Drive download URL (works for shared files)
+    return Response.redirect(
+      `https://drive.usercontent.google.com/download?id=${encodeURIComponent(fileId)}&export=download`,
+      302
+    );
   } catch {
-    return new Response("Video unavailable", { status: 502 });
+    return Response.redirect(
+      `https://drive.usercontent.google.com/download?id=${encodeURIComponent(fileId)}&export=download`,
+      302
+    );
   }
 }
 
