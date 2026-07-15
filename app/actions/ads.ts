@@ -728,6 +728,7 @@ function notificationTitle(decision: "approve" | "request_changes", status: stri
 }
 
 export async function getNextAdName(creatorId: string): Promise<string> {
+  await requireProfile();
   const admin = createSupabaseAdminClient();
   const { data: profile } = await admin
     .from("profiles")

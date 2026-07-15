@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   const authorization = request.headers.get("authorization");
   const suppliedSecret = authorization?.startsWith("Bearer ")
     ? authorization.slice("Bearer ".length)
-    : request.nextUrl.searchParams.get("secret");
+    : null;
   if (suppliedSecret !== configuredSecret) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
