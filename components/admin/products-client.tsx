@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { Loader2, Package, PackagePlus, Pencil, Power, Search, X } from "lucide-react";
 import { saveProduct } from "@/app/actions/admin";
+import { runServerAction } from "@/lib/client-action";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import type { Product } from "@/lib/types";
@@ -44,13 +45,13 @@ export function ProductsClient({ products }: { products: Product[] }) {
   function persist() {
     setMessage(null);
     startTransition(async () => {
-      const response = await saveProduct({
+      const response = await runServerAction(() => saveProduct({
         id: editing?.id,
         name,
         sku,
         imageUrl,
         active: editing?.active ?? true
-      });
+      }));
       if (response.ok) close();
       else setMessage(response.message ?? "Unable to save product.");
     });
@@ -59,13 +60,13 @@ export function ProductsClient({ products }: { products: Product[] }) {
   function toggleActive(product: Product) {
     setMessage(null);
     startTransition(async () => {
-      const response = await saveProduct({
+      const response = await runServerAction(() => saveProduct({
         id: product.id,
         name: product.name,
         sku: product.sku ?? undefined,
         imageUrl: product.image_url ?? undefined,
         active: !product.active
-      });
+      }));
       if (!response.ok) setMessage(response.message ?? "Unable to update product.");
     });
   }

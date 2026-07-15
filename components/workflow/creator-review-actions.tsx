@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Loader2, Send } from "lucide-react";
 import { creatorReviewAd } from "@/app/actions/ads";
+import { runServerAction } from "@/lib/client-action";
 import { Button } from "@/components/ui/button";
 import { Field, Textarea } from "@/components/ui/field";
 import { useToast } from "@/components/ui/toast";
@@ -26,7 +27,7 @@ export function CreatorReviewActions({ adId }: { adId: string }) {
 
   function saveDecision(decision: "approve" | "request_changes") {
     startTransition(async () => {
-      const response = await creatorReviewAd(adId, decision, note);
+      const response = await runServerAction(() => creatorReviewAd(adId, decision, note));
       setApprovalQueued(false);
       toast({ title: response.ok ? (decision === "approve" ? "Sent for final approval" : "Changes requested") : "Review not saved", description: response.ok ? (decision === "approve" ? "A manager or admin can now give final approval." : "The creative was returned to the editor.") : response.message ?? "Unable to save review.", tone: response.ok ? "success" : "error" });
       if (response.ok) { setNote(""); router.refresh(); }

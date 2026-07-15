@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, ExternalLink, Loader2, Play, Send, X } from "lucide-react";
 import { startEditing, submitEditedVideo } from "@/app/actions/ads";
+import { runServerAction } from "@/lib/client-action";
 import { RequestedChanges } from "@/components/review/requested-changes";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
@@ -25,7 +26,7 @@ export function EditorWorkspace({ ad, feedback, inProgressCount, maxConcurrentEd
   function begin() {
     setMessage(null);
     startTransition(async () => {
-      const response = await startEditing(ad.id);
+      const response = await runServerAction(() => startEditing(ad.id));
       setMessage(response.ok ? "Editing started." : response.message ?? "Unable to start editing.");
       if (response.ok) router.refresh();
     });
@@ -34,7 +35,7 @@ export function EditorWorkspace({ ad, feedback, inProgressCount, maxConcurrentEd
   function submit() {
     setMessage(null);
     startTransition(async () => {
-      const response = await submitEditedVideo({ adId: ad.id, driveUrl, editorNotes, changesConfirmed: confirmed });
+      const response = await runServerAction(() => submitEditedVideo({ adId: ad.id, driveUrl, editorNotes, changesConfirmed: confirmed }));
       if (!response.ok) {
         setMessage(response.message ?? "Unable to submit the edited video.");
         return;

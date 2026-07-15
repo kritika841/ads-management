@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Link2, Loader2, Plus, Tags } from "lucide-react";
-import { saveCreatorItem } from "@/app/actions/ads";
+import { getNextAdName, saveCreatorItem } from "@/app/actions/ads";
+import { runServerAction } from "@/lib/client-action";
 import { RichTextEditor } from "@/components/dashboard/rich-text-editor";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
@@ -40,6 +41,7 @@ export function CreatorItemForm({
     ? initialAd.production_stage as CreatorControlledStage
     : creatorSelectableStages[0];
   const [name, setName] = useState(initialAd?.name ?? "");
+  const [nameLoading, setNameLoading] = useState(!initialAd);
   const [campaignId, setCampaignId] = useState(initialAd?.campaign_id ?? campaigns[0]?.id ?? "");
   const [productId, setProductId] = useState(initialAd?.product_id ?? "");
   const [creatorId, setCreatorId] = useState(defaultCreatorId);
@@ -55,6 +57,15 @@ export function CreatorItemForm({
   const [notes, setNotes] = useState(initialAd?.notes ?? "");
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  useEffect(() => {
+    if (initialAd || !creatorId) return;
+    setNameLoading(true);
+    getNextAdName(creatorId)
+      .then((next) => setName(next))
+      .catch(() => {/* keep empty */})
+      .finally(() => setNameLoading(false));
+  }, [creatorId, initialAd]);
+
   const isHandoff = stage === "ready_for_edit";
   const requiresRawFootage = creatorControlledStages.indexOf(stage) >= creatorControlledStages.indexOf("shoot_complete");
   const canChooseCreator = profile.role === "admin" || profile.role === "manager";
@@ -71,7 +82,7 @@ export function CreatorItemForm({
   function save() {
     setMessage(null);
     startTransition(async () => {
-      const response = await saveCreatorItem({
+      const response = await runServerAction(() => saveCreatorItem({
         id: initialAd?.id,
         name,
         campaignId,
@@ -86,7 +97,7 @@ export function CreatorItemForm({
         tags: selectedTags,
         deadline,
         notes
-      });
+      }));
       if (!response.ok || !response.adId) {
         setMessage(response.message ?? "Unable to save creator work.");
         return;
@@ -99,7 +110,7 @@ export function CreatorItemForm({
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2">
-        <Field label="Ad name" hint="Required."><Input value={name} onChange={(event) => setName(event.target.value)} autoFocus required /></Field>
+        <Field label="Ad name" hint={initialAd ? undefined : "Auto-generated unique ID — read only."}><div className="relative"><Input value={name} readOnly={!initialAd} className={`font-mono tracking-widest ${!initialAd ? "bg-muted cursor-default" : ""}`} aria-busy={nameLoading} />{nameLoading ? <Loader2 className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" aria-hidden /> : null}</div></Field>
         <Field label="Campaign"><Select value={campaignId} onChange={(event) => setCampaignId(event.target.value)}>{campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}</Select></Field>
         <Field label="Product"><Select value={productId} onChange={(event) => setProductId(event.target.value)}><option value="">Choose product</option>{products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</Select></Field>
         {canChooseCreator ? <Field label="Content creator"><Select value={creatorId} onChange={(event) => setCreatorId(event.target.value)}>{activeCreators.map((creator) => <option key={creator.id} value={creator.id}>{creator.name}</option>)}</Select></Field> : null}

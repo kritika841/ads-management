@@ -726,3 +726,30 @@ function notificationTitle(decision: "approve" | "request_changes", status: stri
   }
   return "Changes requested";
 }
+
+export async function getNextAdName(creatorId: string): Promise<string> {
+  const admin = createSupabaseAdminClient();
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("name")
+    .eq("id", creatorId)
+    .maybeSingle();
+
+  const rawName = profile?.name ?? "";
+  const prefix = rawName.replace(/[^a-zA-Z]/g, "").slice(0, 3).toUpperCase();
+  if (!prefix) return "AD0001";
+
+  // Find all ads whose name matches PREFIX#### pattern for this user
+  const { data: existing } = await admin
+    .from("ads")
+    .select("name")
+    .ilike("name", `${prefix}%`);
+
+  const max = (existing ?? []).reduce((acc, { name }) => {
+    const suffix = name.slice(prefix.length);
+    const num = parseInt(suffix, 10);
+    return !isNaN(num) && String(num).padStart(4, "0") === suffix ? Math.max(acc, num) : acc;
+  }, 0);
+
+  return `${prefix}${String(max + 1).padStart(4, "0")}`;
+}

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, RefreshCw, X } from "lucide-react";
 import { reassignEditor } from "@/app/actions/ads";
+import { runServerAction } from "@/lib/client-action";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import type { AdWithRelations, Profile } from "@/lib/types";
@@ -21,7 +22,7 @@ export function ReassignEditorButton({ ad, editors, workloads }: { ad: AdWithRel
   function submit() {
     setMessage(null);
     startTransition(async () => {
-      const response = await reassignEditor({ adId: ad.id, editorId, deadline, reason });
+      const response = await runServerAction(() => reassignEditor({ adId: ad.id, editorId, deadline, reason }));
       if (!response.ok) { setMessage(response.message ?? "Unable to reassign editor."); return; }
       setOpen(false); router.refresh();
     });

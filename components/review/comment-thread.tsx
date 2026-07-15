@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Loader2, Send } from "lucide-react";
 import { addComment } from "@/app/actions/ads";
+import { runServerAction } from "@/lib/client-action";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/field";
@@ -17,7 +18,7 @@ export function CommentThread({ adId, comments }: { adId: string; comments: Comm
   function submit() {
     setMessage(null);
     startTransition(async () => {
-      const response = await addComment(adId, body);
+      const response = await runServerAction(() => addComment(adId, body));
       if (!response.ok) {
         setMessage(response.message ?? "Unable to comment.");
         return;

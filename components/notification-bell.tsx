@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { CheckCheck, Inbox } from "lucide-react";
 import { markAllNotificationsRead, markNotificationRead } from "@/app/actions/notifications";
+import { runServerMutation } from "@/lib/client-action";
 import type { Notification } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 
@@ -25,12 +26,12 @@ export function NotificationBell({
 
   function markOneRead(id: string) {
     setLocallyRead((current) => new Set(current).add(id));
-    startTransition(() => markNotificationRead(id));
+    startTransition(async () => { await runServerMutation(() => markNotificationRead(id)); });
   }
 
   function markAllRead() {
     setLocallyRead(new Set(notifications.map((notification) => notification.id)));
-    startTransition(() => markAllNotificationsRead());
+    startTransition(async () => { await runServerMutation(() => markAllNotificationsRead()); });
   }
 
   return (

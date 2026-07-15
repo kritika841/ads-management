@@ -17,6 +17,7 @@ export function LoginForm({ initialMessage = null }: { initialMessage?: string |
   useEffect(() => setHydrated(true), []);
 
   function handlePasswordSignIn() {
+    setShowPassword(false);
     setMessage(null);
     startTransition(async () => {
       try {
@@ -94,7 +95,7 @@ export function LoginForm({ initialMessage = null }: { initialMessage?: string |
           type={showPassword ? "text" : "password"}
           autoComplete="current-password"
           required
-        /><button type="button" className="absolute right-1 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-muted-foreground" onClick={() => setShowPassword((value) => !value)} title={showPassword ? "Hide password" : "Show password"}>{showPassword ? <EyeOff className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />}</button></div>
+        /><button type="button" className="absolute right-1 top-1/2 flex size-8 -translate-y-1/2 select-none items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-muted-foreground" onPointerDown={(e) => { e.preventDefault(); setShowPassword(true); }} onPointerUp={() => setShowPassword(false)} onPointerLeave={() => setShowPassword(false)} title="Hold to reveal" aria-label="Hold to reveal password">{showPassword ? <EyeOff className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />}</button></div>
       </Field>
       {message ? <p role="alert" className="rounded-md border border-warning/30 bg-warning/15 px-3 py-2 text-sm text-warning">{message}</p> : null}
       <Button className="w-full" disabled={isPending} type="submit">

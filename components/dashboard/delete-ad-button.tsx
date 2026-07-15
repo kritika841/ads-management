@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Trash2, X } from "lucide-react";
 import { deleteAd } from "@/app/actions/ads";
+import { runServerAction } from "@/lib/client-action";
 import { Button } from "@/components/ui/button";
 
 export function DeleteAdButton({
@@ -26,7 +27,7 @@ export function DeleteAdButton({
     setMessage(null);
     startTransition(async () => {
       try {
-        const response = await deleteAd(adId);
+        const response = await runServerAction(() => deleteAd(adId));
         if (!response.ok) {
           setMessage(response.message ?? "Unable to delete this ad.");
           return;

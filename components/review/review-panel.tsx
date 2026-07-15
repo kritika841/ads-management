@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, CheckCircle2, CircleCheck, Clock3, Loader2, MessageSquareText, RotateCcw, Send, XCircle } from "lucide-react";
 import { addAnnotation, resolveAnnotation, reviewAd } from "@/app/actions/ads";
+import { runServerAction } from "@/lib/client-action";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { useToast } from "@/components/ui/toast";
@@ -55,7 +56,7 @@ export function ReviewPanel({
 
   function saveDecision(decision: "approve" | "request_changes") {
     startTransition(async () => {
-      const response = await reviewAd(ad.id, decision, note);
+      const response = await runServerAction(() => reviewAd(ad.id, decision, note));
       setApprovalQueued(false);
       toast({ title: response.ok ? (decision === "approve" ? "Creative approved" : "Changes requested") : "Review not saved", description: response.ok ? (decision === "approve" ? "Final approval is complete." : "The creative was returned to the editor.") : response.message ?? "Unable to review.", tone: response.ok ? "success" : "error" });
       if (response.ok) {
@@ -158,13 +159,13 @@ function ReviewNotes({ adId, annotations }: { adId: string; annotations: Annotat
   function addNote() {
     setMessage(null);
     startTransition(async () => {
-      const result = await addAnnotation({
+      const result = await runServerAction(() => addAnnotation({
         adId,
         kind,
         body,
         timestampSeconds: kind === "video_timestamp" && seconds !== "" ? Number(seconds) : null,
         scriptAnchor: kind === "script_inline" ? anchor : null
-      });
+      }));
       if (!result.ok) return setMessage(result.message ?? "Unable to add review note.");
       setBody("");
       setSeconds("");
@@ -176,7 +177,7 @@ function ReviewNotes({ adId, annotations }: { adId: string; annotations: Annotat
   function toggleResolved(id: string) {
     setMessage(null);
     startTransition(async () => {
-      const result = await resolveAnnotation(id);
+      const result = await runServerAction(() => resolveAnnotation(id));
       if (!result.ok) return setMessage(result.message ?? "Unable to update review note.");
       router.refresh();
     });

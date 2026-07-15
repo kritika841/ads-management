@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { CheckCircle2, Loader2, Pencil, Plus, Power, RotateCcw } from "lucide-react";
 import { saveCampaign, updateSettings } from "@/app/actions/admin";
+import { runServerAction } from "@/lib/client-action";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import type { AppSettings, Campaign } from "@/lib/types";
@@ -25,11 +26,11 @@ export function SettingsClient({
   function persistSettings() {
     setMessage(null);
     startTransition(async () => {
-      const response = await updateSettings({
+      const response = await runServerAction(() => updateSettings({
         twoStepApproval: false,
         deadlineReminderDays,
         maxConcurrentEdits
-      });
+      }));
       setMessage(response.ok ? "Settings saved." : response.message ?? "Unable to save settings.");
     });
   }
@@ -37,12 +38,12 @@ export function SettingsClient({
   function persistCampaign() {
     setMessage(null);
     startTransition(async () => {
-      const response = await saveCampaign({
+      const response = await runServerAction(() => saveCampaign({
         id: editingCampaign?.id,
         name: campaignName,
         description: campaignDescription,
         active: editingCampaign?.active ?? true
-      });
+      }));
       setMessage(response.ok ? (editingCampaign ? "Campaign updated." : "Campaign created.") : response.message ?? "Unable to save campaign.");
       if (response.ok) {
         resetCampaignForm();
@@ -66,12 +67,12 @@ export function SettingsClient({
   function toggleCampaign(campaign: Campaign) {
     setMessage(null);
     startTransition(async () => {
-      const response = await saveCampaign({
+      const response = await runServerAction(() => saveCampaign({
         id: campaign.id,
         name: campaign.name,
         description: campaign.description ?? undefined,
         active: !campaign.active
-      });
+      }));
       setMessage(response.ok ? `${campaign.name} ${campaign.active ? "deactivated" : "activated"}.` : response.message ?? "Unable to update campaign.");
     });
   }

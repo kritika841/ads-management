@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Copy, Loader2, Pencil, Power, PowerOff, RefreshCw, Search, Trash2, UserPlus, Users, X } from "lucide-react";
 import { activateUser, deactivateUser, deleteUser, saveUser } from "@/app/actions/admin";
+import { runServerAction } from "@/lib/client-action";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
@@ -64,7 +65,7 @@ export function AdminUsersClient({ profiles, ads, currentProfileId }: { profiles
   function persist() {
     setMessage(null);
     startTransition(async () => {
-      const response = await saveUser({ id: editing?.id, name, email, role, avatarUrl, password: newPassword });
+      const response = await runServerAction(() => saveUser({ id: editing?.id, name, email, role, avatarUrl, password: newPassword }));
       if (response.ok) close();
       else setMessage(response.message ?? "Unable to save user.");
     });
@@ -73,7 +74,7 @@ export function AdminUsersClient({ profiles, ads, currentProfileId }: { profiles
   function deactivate(profile: Profile) {
     setMessage(null);
     startTransition(async () => {
-      const response = await deactivateUser(profile.id);
+      const response = await runServerAction(() => deactivateUser(profile.id));
       setMessage(response.ok ? `${profile.name} was deactivated.` : response.message ?? "Action failed.");
       if (response.ok) router.refresh();
     });
@@ -82,7 +83,7 @@ export function AdminUsersClient({ profiles, ads, currentProfileId }: { profiles
   function activate(profile: Profile) {
     setMessage(null);
     startTransition(async () => {
-      const response = await activateUser(profile.id);
+      const response = await runServerAction(() => activateUser(profile.id));
       if (!response.ok) {
         toast({ title: "User not activated", description: response.message ?? "Action failed.", tone: "error" });
         return;
@@ -96,7 +97,7 @@ export function AdminUsersClient({ profiles, ads, currentProfileId }: { profiles
     if (!deleting) return;
     const profile = deleting;
     startTransition(async () => {
-      const response = await deleteUser(profile.id);
+      const response = await runServerAction(() => deleteUser(profile.id));
       if (!response.ok) {
         toast({ title: "User not deleted", description: response.message ?? "Action failed.", tone: "error" });
         return;
