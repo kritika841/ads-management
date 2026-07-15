@@ -5,6 +5,12 @@ const CHUNK_FAILURE_PATTERNS = [
   /importing a module script failed/i
 ];
 
+const STALE_ACTION_PATTERNS = [
+  /unrecognizedactionerror/i,
+  /server action .* was not found on the server/i,
+  /failed to find server action/i
+];
+
 function errorText(value: unknown): string {
   if (typeof value === "string") return value;
   if (!value || typeof value !== "object") return "";
@@ -18,6 +24,11 @@ function errorText(value: unknown): string {
 export function isChunkLoadFailure(value: unknown) {
   const text = errorText(value);
   return CHUNK_FAILURE_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+export function isStaleApplicationFailure(value: unknown) {
+  const text = errorText(value);
+  return isChunkLoadFailure(value) || STALE_ACTION_PATTERNS.some((pattern) => pattern.test(text));
 }
 
 export function isNextChunkUrl(value: unknown) {

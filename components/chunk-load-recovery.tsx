@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { isChunkLoadFailure, isNextChunkUrl } from "@/lib/chunk-load";
+import { isNextChunkUrl, isStaleApplicationFailure } from "@/lib/chunk-load";
 
 const RELOAD_GUARD = "adflow:chunk-reload";
 
@@ -16,7 +16,7 @@ export function ChunkLoadRecovery() {
     };
 
     const handleError = (event: Event) => {
-      if (event instanceof ErrorEvent && isChunkLoadFailure(event.error ?? event.message)) {
+      if (event instanceof ErrorEvent && isStaleApplicationFailure(event.error ?? event.message)) {
         recover();
         return;
       }
@@ -26,7 +26,7 @@ export function ChunkLoadRecovery() {
     };
 
     const handleRejection = (event: PromiseRejectionEvent) => {
-      if (isChunkLoadFailure(event.reason)) recover();
+      if (isStaleApplicationFailure(event.reason)) recover();
     };
 
     window.addEventListener("error", handleError, true);

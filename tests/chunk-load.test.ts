@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isChunkLoadFailure, isNextChunkUrl } from "@/lib/chunk-load";
+import { isChunkLoadFailure, isNextChunkUrl, isStaleApplicationFailure } from "@/lib/chunk-load";
 
 describe("chunk load recovery", () => {
   it.each([
@@ -13,6 +13,18 @@ describe("chunk load recovery", () => {
 
   it("does not reload for ordinary application errors", () => {
     expect(isChunkLoadFailure(new Error("Invalid login credentials"))).toBe(false);
+  });
+
+  it.each([
+    { name: "UnrecognizedActionError", message: "The action is from an older build." },
+    'Server Action "407aa23449c3be479f8650e455766e979b793fa8f2" was not found on the server.',
+    "Failed to find Server Action"
+  ])("recognizes stale Server Action failures", (failure) => {
+    expect(isStaleApplicationFailure(failure)).toBe(true);
+  });
+
+  it("does not treat normal action validation errors as stale", () => {
+    expect(isStaleApplicationFailure(new Error("Deadline is required."))).toBe(false);
   });
 
   it("recognizes only Next.js static chunk URLs", () => {
