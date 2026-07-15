@@ -1,13 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { zipSync, strToU8 } from "fflate";
-import { requireProfile } from "@/lib/auth";
+import { getCurrentProfile } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getDriveMedia, getDriveMetadata, getDriveFolderContents } from "@/lib/drive";
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 
 export async function GET(request: NextRequest) {
-  const profile = await requireProfile();
+  const profile = await getCurrentProfile();
+  if (!profile) return new NextResponse("Unauthorized", { status: 401 });
 
   const raw = request.nextUrl.searchParams.get("ids") ?? "";
   const ids = raw.split(",").map((s) => s.trim()).filter(Boolean);
@@ -37,34 +38,38 @@ export async function GET(request: NextRequest) {
     }
 
     if (ad.drive_file_id) {
-      const meta = await getDriveMetadata(ad.drive_file_id);
+      try {
+        const meta = await getDriveMetadata(ad.drive_file_id);
 
-      if (meta?.mimeType === FOLDER_MIME) {
-        // It's a Drive folder — download every file inside it
-        const children = await getDriveFolderContents(ad.drive_file_id);
-        for (const child of children) {
-          if (!child.id || child.mimeType === FOLDER_MIME) continue; // skip sub-folders & no-id
+        if (meta?.mimeType === FOLDER_MIME) {
+          // Drive folder — download every file inside it
+          const children = await getDriveFolderContents(ad.drive_file_id);
+          for (const child of children) {
+            if (!child.id || child.mimeType === FOLDER_MIME) continue;
+            try {
+              const res = await getDriveMedia(child.id);
+              if (res?.ok) {
+                const safeName = (child.name ?? child.id).replace(/[^a-zA-Z0-9._\- ]/g, "_");
+                files[`${folder}/${safeName}`] = new Uint8Array(await res.arrayBuffer());
+              }
+            } catch {
+              // skip unreachable child
+            }
+          }
+        } else if (meta) {
+          // Single file — use Drive filename so the extension is correct
           try {
-            const res = await getDriveMedia(child.id);
+            const res = await getDriveMedia(ad.drive_file_id);
             if (res?.ok) {
-              const safeName = (child.name ?? child.id).replace(/[^a-zA-Z0-9._\- ]/g, "_");
+              const safeName = (meta.name ?? ad.name).replace(/[^a-zA-Z0-9._\- ]/g, "_");
               files[`${folder}/${safeName}`] = new Uint8Array(await res.arrayBuffer());
             }
           } catch {
-            // skip unreachable child
+            // skip
           }
         }
-      } else if (meta) {
-        // Single file (video, image, etc.) — use the Drive filename to get the right extension
-        try {
-          const res = await getDriveMedia(ad.drive_file_id);
-          if (res?.ok) {
-            const safeName = (meta.name ?? ad.name).replace(/[^a-zA-Z0-9._\- ]/g, "_");
-            files[`${folder}/${safeName}`] = new Uint8Array(await res.arrayBuffer());
-          }
-        } catch {
-          // skip
-        }
+      } catch {
+        // Drive unavailable for this ad — include only script if present
       }
     }
   }

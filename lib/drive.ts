@@ -78,15 +78,19 @@ function createDriveAuth() {
     return cachedDriveAuth;
   }
 
-  const credentialsSource = serviceAccountJson.trim();
-  const credentials = JSON.parse(
-    credentialsSource.startsWith("{") || !existsSync(credentialsSource)
-      ? credentialsSource
-      : readFileSync(credentialsSource, "utf8")
-  );
-  cachedDriveAuth = new google.auth.GoogleAuth({
-    credentials,
-    scopes: ["https://www.googleapis.com/auth/drive.readonly"]
-  });
+  try {
+    const credentialsSource = serviceAccountJson.trim();
+    const credentials = JSON.parse(
+      credentialsSource.startsWith("{") || !existsSync(credentialsSource)
+        ? credentialsSource
+        : readFileSync(credentialsSource, "utf8")
+    );
+    cachedDriveAuth = new google.auth.GoogleAuth({
+      credentials,
+      scopes: ["https://www.googleapis.com/auth/drive.readonly"]
+    });
+  } catch {
+    cachedDriveAuth = null;
+  }
   return cachedDriveAuth;
 }
