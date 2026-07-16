@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ExternalLink, Video } from "lucide-react";
+import { Download, ExternalLink, Loader2, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
 import { useVideoTimestamp } from "@/components/review/video-timestamp-context";
 import { resolveAdThumbnailUrl } from "@/lib/drive-urls";
 import type { AdVersion, AdWithRelations } from "@/lib/types";
@@ -55,11 +56,38 @@ export function AdVersionPreview({
 
   const [selectedKey, setSelectedKey] = useState(items[0]?.key ?? "current");
   const [failedMedia, setFailedMedia] = useState<Set<string>>(() => new Set());
+  const [downloading, setDownloading] = useState(false);
   const { registerVideo } = useVideoTimestamp();
+  const { toast } = useToast();
   const selected = items.find((item) => item.key === selectedKey) ?? items[0];
   const thumbnailSrc = selected?.key === "current" && ad.drive_file_id
     ? `/api/ads/${ad.id}/thumbnail?v=${encodeURIComponent(ad.drive_file_id)}`
     : resolveAdThumbnailUrl(selected?.thumbnailUrl, selected?.driveFileId);
+
+  async function downloadSelected() {
+    if (!selected?.driveFileId || downloading) return;
+    setDownloading(true);
+    try {
+      const res = await fetch(`/api/ads/${ad.id}/download?fileId=${encodeURIComponent(selected.driveFileId)}`);
+      if (!res.ok) { toast({ title: "Download failed", description: `Could not download ${ad.name}. Try again.`, tone: "error" }); return; }
+      const blob = await res.blob();
+      const disposition = res.headers.get("content-disposition") ?? "";
+      const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? `${ad.name}.mp4`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({ title: `${ad.name} downloaded`, tone: "success" });
+    } catch {
+      toast({ title: "Download failed", description: "Network error — please try again.", tone: "error" });
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   return (
     <section className="panel overflow-hidden">
@@ -77,17 +105,30 @@ export function AdVersionPreview({
             </Button>
           ))}
         </div>
-        {selected?.driveUrl ? (
-          <a
-            href={selected.driveUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
-          >
-            Drive
-            <ExternalLink className="size-4" aria-hidden />
-          </a>
-        ) : null}
+        <div className="flex items-center gap-1">
+          {selected?.driveFileId ? (
+            <button
+              type="button"
+              disabled={downloading}
+              onClick={downloadSelected}
+              className="inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-50"
+            >
+              Download
+              {downloading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Download className="size-4" aria-hidden />}
+            </button>
+          ) : null}
+          {selected?.driveUrl ? (
+            <a
+              href={selected.driveUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            >
+              Drive
+              <ExternalLink className="size-4" aria-hidden />
+            </a>
+          ) : null}
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)]">

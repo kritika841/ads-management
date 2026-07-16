@@ -1,25 +1,27 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
-import { Loader2, Send } from "lucide-react";
-import { addComment } from "@/app/actions/ads";
+import { AlertTriangle, Loader2, Send } from "lucide-react";
+import { addComment, grantAdAccess } from "@/app/actions/ads";
 import { runServerAction } from "@/lib/client-action";
-import { profileMentionHandles } from "@/lib/mentions";
+import { extractMentions, profileMentionHandles } from "@/lib/mentions";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/field";
 import type { Comment, Profile } from "@/lib/types";
 import { cn, formatDateTime } from "@/lib/utils";
 
-type MentionableUser = Pick<Profile, "id" | "name" | "email" | "avatar_url">;
+type MentionableUser = Pick<Profile, "id" | "name" | "email" | "avatar_url"> & { hasAccess: boolean };
 
-export function CommentThread({ adId, comments, mentionableUsers = [] }: { adId: string; comments: Comment[]; mentionableUsers?: MentionableUser[] }) {
+export function CommentThread({ adId, comments, mentionableUsers = [], canGrantAccess = false }: { adId: string; comments: Comment[]; mentionableUsers?: MentionableUser[]; canGrantAccess?: boolean }) {
   const [body, setBody] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionStart, setMentionStart] = useState<number | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [grantedIds, setGrantedIds] = useState<Set<string>>(new Set());
+  const [grantingId, setGrantingId] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const suggestions = useMemo(() => {
@@ -29,6 +31,15 @@ export function CommentThread({ adId, comments, mentionableUsers = [] }: { adId:
       .filter((user) => user.name.toLowerCase().includes(query) || user.email.toLowerCase().includes(query))
       .slice(0, 6);
   }, [mentionQuery, mentionableUsers]);
+
+  const noAccessMentioned = useMemo(() => {
+    if (!canGrantAccess) return [];
+    const mentions = extractMentions(body);
+    if (!mentions.length) return [];
+    return mentionableUsers.filter(
+      (user) => !user.hasAccess && !grantedIds.has(user.id) && profileMentionHandles(user).some((handle) => mentions.includes(handle))
+    );
+  }, [body, mentionableUsers, canGrantAccess, grantedIds]);
 
   function handleChange(event: React.ChangeEvent<HTMLTextAreaElement>) {
     const value = event.target.value;
@@ -82,6 +93,21 @@ export function CommentThread({ adId, comments, mentionableUsers = [] }: { adId:
       setMentionQuery(null);
       setMentionStart(null);
     }
+  }
+
+  function grantAccess(user: MentionableUser) {
+    setGrantingId(user.id);
+    setMessage(null);
+    startTransition(async () => {
+      const response = await runServerAction(() => grantAdAccess(adId, user.id));
+      if (!response.ok) {
+        setMessage(response.message ?? "Could not grant access.");
+        setGrantingId(null);
+        return;
+      }
+      setGrantedIds((prev) => new Set(prev).add(user.id));
+      setGrantingId(null);
+    });
   }
 
   function submit() {
@@ -146,6 +172,18 @@ export function CommentThread({ adId, comments, mentionableUsers = [] }: { adId:
             ))}
           </div>
         ) : null}
+        {noAccessMentioned.map((user) => (
+          <div key={user.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm">
+            <span className="flex min-w-0 items-center gap-2 text-warning-foreground">
+              <AlertTriangle className="size-4 shrink-0" aria-hidden />
+              <span className="min-w-0"><strong className="font-medium">{user.name}</strong> doesn&apos;t have access to this creative.</span>
+            </span>
+            <Button size="sm" variant="secondary" disabled={grantingId === user.id} onClick={() => grantAccess(user)}>
+              {grantingId === user.id ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : null}
+              Grant access
+            </Button>
+          </div>
+        ))}
         {message ? <p className="text-sm text-destructive">{message}</p> : null}
         <Button className="w-full" disabled={isPending || !body.trim()} onClick={submit}>
           {isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Send className="size-4" aria-hidden />}

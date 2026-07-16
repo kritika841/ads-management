@@ -226,14 +226,18 @@ export async function getAdDetail(adId: string) {
         .from("activity_logs")
         .select("*, actor:profiles!activity_logs_actor_id_fkey(id,name,avatar_url,role)")
         .eq("ad_id", adId)
-        .order("created_at", { ascending: false })
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("ad_collaborators")
+        .select("profile_id")
+        .eq("ad_id", adId)
     ]);
   const detailError = detailResults.find((result) => result.error)?.error;
   if (detailError) {
     throw detailError;
   }
 
-  const [versionsResult, commentsResult, annotationsResult, reviewsResult, activityResult] = detailResults;
+  const [versionsResult, commentsResult, annotationsResult, reviewsResult, activityResult, collaboratorsResult] = detailResults;
 
   return {
     ad: normalizeAds([ad])[0],
@@ -244,7 +248,8 @@ export async function getAdDetail(adId: string) {
     comments: (commentsResult.data ?? []) as Comment[],
     annotations: (annotationsResult.data ?? []) as Annotation[],
     reviews: (reviewsResult.data ?? []) as ReviewAction[],
-    activity: (activityResult.data ?? []) as ActivityLog[]
+    activity: (activityResult.data ?? []) as ActivityLog[],
+    collaboratorIds: ((collaboratorsResult.data ?? []) as { profile_id: string }[]).map((row) => row.profile_id)
   };
 }
 

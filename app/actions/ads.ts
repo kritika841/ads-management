@@ -2,8 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireProfile } from "@/lib/auth";
+import { canReview, requireProfile } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { hasAdAccess } from "@/lib/ad-access";
 import { canDeleteAd } from "@/lib/permissions";
 import {
   activeEditorStages,
@@ -484,11 +485,15 @@ export async function addComment(adId: string, body: string) {
   }
 
   const admin = createSupabaseAdminClient();
-  const { data: ad } = await admin.from("ads").select("id,creator_id,editor_id").eq("id", parsed.data.adId).maybeSingle();
+  const [{ data: ad }, { data: collaborators }] = await Promise.all([
+    admin.from("ads").select("id,creator_id,editor_id").eq("id", parsed.data.adId).maybeSingle(),
+    admin.from("ad_collaborators").select("profile_id").eq("ad_id", parsed.data.adId)
+  ]);
   if (!ad) {
     return { ok: false, message: "Ad not found." };
   }
-  if (!canAccessAd(profile, ad)) {
+  const collaboratorIds = (collaborators ?? []).map((row) => row.profile_id);
+  if (!hasAdAccess(profile, ad, collaboratorIds)) {
     return { ok: false, message: "You do not have access to this ad." };
   }
 
@@ -523,6 +528,48 @@ export async function addComment(adId: string, body: string) {
   }
 
   await logActivity(parsed.data.adId, profile.id, "commented", { mentions });
+  revalidatePath(`/ads/${parsed.data.adId}`);
+
+  return { ok: true };
+}
+
+export async function grantAdAccess(adId: string, profileId: string) {
+  const profile = await requireProfile();
+  if (!canReview(profile.role)) {
+    return { ok: false, message: "Only admins and managers can grant access to a creative." };
+  }
+
+  const parsed = z.object({ adId: z.string().uuid(), profileId: z.string().uuid() }).safeParse({ adId, profileId });
+  if (!parsed.success) {
+    return { ok: false, message: "Invalid request." };
+  }
+
+  const admin = createSupabaseAdminClient();
+  const { data: ad } = await admin.from("ads").select("id,name").eq("id", parsed.data.adId).maybeSingle();
+  if (!ad) {
+    return { ok: false, message: "Ad not found." };
+  }
+
+  const { data: recipient } = await admin.from("profiles").select("id,name,email").eq("id", parsed.data.profileId).maybeSingle();
+  if (!recipient) {
+    return { ok: false, message: "User not found." };
+  }
+
+  const { error } = await admin
+    .from("ad_collaborators")
+    .upsert({ ad_id: parsed.data.adId, profile_id: parsed.data.profileId, granted_by: profile.id }, { onConflict: "ad_id,profile_id" });
+  if (error) {
+    return { ok: false, message: error.message };
+  }
+
+  await createNotification(admin, {
+    recipient: recipient as Profile,
+    adId: parsed.data.adId,
+    title: "You've been given access",
+    body: `${profile.name} granted you access to ${ad.name}.`
+  });
+
+  await logActivity(parsed.data.adId, profile.id, "granted_access", { profile_id: parsed.data.profileId });
   revalidatePath(`/ads/${parsed.data.adId}`);
 
   return { ok: true };
@@ -696,12 +743,6 @@ async function logActivity(adId: string, actorId: string, action: string, metada
     action,
     metadata: normalizedMetadata
   });
-}
-
-function canAccessAd(profile: Profile, ad: Pick<Ad, "creator_id" | "editor_id">) {
-  if (profile.role === "admin" || profile.role === "manager") return true;
-  if (profile.role === "content_creator") return ad.creator_id === profile.id;
-  return ad.editor_id === profile.id;
 }
 
 function revalidateAdPaths(adId: string) {

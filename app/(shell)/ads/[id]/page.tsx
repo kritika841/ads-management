@@ -14,6 +14,7 @@ import { CreatorReviewActions } from "@/components/workflow/creator-review-actio
 import { EditorWorkspace } from "@/components/workflow/editor-workspace";
 import { ProductionStageBadge } from "@/components/workflow/production-stage";
 import { ReassignEditorButton } from "@/components/workflow/reassign-editor-button";
+import { hasAdAccess } from "@/lib/ad-access";
 import { requireProfile } from "@/lib/auth";
 import { getAdDetail, getAppSettings, getCampaigns, getEditorInProgressCount, getEditorWorkloads, getProducts, getProfiles, getTags } from "@/lib/data";
 import { canDeleteAd } from "@/lib/permissions";
@@ -37,10 +38,13 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
 
   if (!detail) notFound();
 
-  const { ad, versions, comments, annotations, reviews, activity } = detail;
+  const { ad, versions, comments, annotations, reviews, activity, collaboratorIds } = detail;
   const editors = profiles.filter((item) => item.role === "editor");
   const creators = profiles.filter((item) => item.role === "content_creator");
   const isReviewer = profile.role === "admin" || profile.role === "manager";
+  const mentionableUsers = profiles
+    .filter((item) => item.active && item.id !== profile.id)
+    .map((item) => ({ ...item, hasAccess: hasAdAccess(item, ad, collaboratorIds) }));
   const isCreator = profile.role === "content_creator" && ad.creator_id === profile.id;
   const isAssignedEditor = profile.role === "editor" && ad.editor_id === profile.id;
   const creatorCanEdit = (isCreator || isReviewer) && creatorEditableStages.includes(ad.production_stage as (typeof creatorEditableStages)[number]);
@@ -162,7 +166,7 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
             </section>
 
             {isReviewer ? <ReviewPanel ad={ad} profile={profile} reviews={reviews} annotations={annotations} /> : null}
-            <CommentThread adId={ad.id} comments={comments} mentionableUsers={profiles.filter((item) => item.active && item.id !== profile.id)} />
+            <CommentThread adId={ad.id} comments={comments} mentionableUsers={mentionableUsers} canGrantAccess={isReviewer} />
           </aside>
         </div>
         </VideoTimestampProvider>
