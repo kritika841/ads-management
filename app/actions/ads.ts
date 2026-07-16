@@ -505,12 +505,9 @@ export async function addComment(adId: string, body: string) {
     return { ok: false, message: error.message };
   }
 
-  const participantIds = [ad.creator_id, ad.editor_id].filter((id): id is string => Boolean(id));
-  const mentionScope = participantIds.length
-    ? `id.in.(${participantIds.join(",")}),role.in.(admin,manager)`
-    : "role.in.(admin,manager)";
+  // Anyone tagged is notified — the comment composer only offers active users to @mention.
   const { data: mentionCandidates } = mentions.length
-    ? await admin.from("profiles").select("*").eq("active", true).or(mentionScope)
+    ? await admin.from("profiles").select("*").eq("active", true)
     : { data: [] };
   const mentionedProfiles = (mentionCandidates ?? []).filter((candidate) =>
     profileMentionHandles(candidate).some((handle) => mentions.includes(handle))

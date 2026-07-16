@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient, hasSupabaseEnv } from "@/lib/supabase/server";
 import type { Profile, UserRole } from "@/lib/types";
@@ -15,7 +16,9 @@ export async function getSessionUser() {
   return user;
 }
 
-export async function getCurrentProfile() {
+// Memoized per-request: the shared shell layout and the page it wraps both
+// need the current profile, and this avoids querying it twice for one request.
+export const getCurrentProfile = cache(async () => {
   const user = await getSessionUser();
   if (!user) {
     return null;
@@ -33,7 +36,7 @@ export async function getCurrentProfile() {
   }
 
   return data as Profile | null;
-}
+});
 
 export async function requireProfile() {
   const profile = await getCurrentProfile();
