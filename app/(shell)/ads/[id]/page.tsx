@@ -1,14 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, CalendarClock, ExternalLink } from "lucide-react";
-import { AppShell } from "@/components/app-shell";
 import { DeleteAdButton } from "@/components/dashboard/delete-ad-button";
 import { AdVersionPreview } from "@/components/review/ad-version-preview";
 import { CommentThread } from "@/components/review/comment-thread";
 import { ReviewPanel } from "@/components/review/review-panel";
 import { VideoTimestampProvider } from "@/components/review/video-timestamp-context";
 import { VersionHistory } from "@/components/review/version-history";
-import { SetupState } from "@/components/setup-state";
 import { Avatar } from "@/components/ui/avatar";
 import { ActivityDrawer } from "@/components/workflow/activity-drawer";
 import { CreatorItemForm } from "@/components/workflow/creator-item-form";
@@ -17,25 +15,21 @@ import { EditorWorkspace } from "@/components/workflow/editor-workspace";
 import { ProductionStageBadge } from "@/components/workflow/production-stage";
 import { ReassignEditorButton } from "@/components/workflow/reassign-editor-button";
 import { requireProfile } from "@/lib/auth";
-import { getAdDetail, getAppSettings, getCampaigns, getEditorInProgressCount, getEditorWorkloads, getNotifications, getProducts, getProfiles, getTags } from "@/lib/data";
+import { getAdDetail, getAppSettings, getCampaigns, getEditorInProgressCount, getEditorWorkloads, getProducts, getProfiles, getTags } from "@/lib/data";
 import { canDeleteAd } from "@/lib/permissions";
 import { creatorEditableStages, isFinalMediaVisible, productionStageLabels, workflowWaitingLabel } from "@/lib/production-workflow";
 import type { ResubmissionFeedbackItem } from "@/lib/resubmission";
-import { hasSupabaseEnv } from "@/lib/supabase/server";
 import type { AdWithRelations, Profile } from "@/lib/types";
 import { formatDateOnly } from "@/lib/utils";
 
 export default async function AdDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  if (!hasSupabaseEnv()) return <SetupState />;
-
   const [{ id }, profile] = await Promise.all([params, requireProfile()]);
-  const [detail, campaigns, products, profiles, tags, notifications, editorWorkloads, editorInProgressCount, settings] = await Promise.all([
+  const [detail, campaigns, products, profiles, tags, editorWorkloads, editorInProgressCount, settings] = await Promise.all([
     getAdDetail(id),
     getCampaigns(),
     getProducts(),
     getProfiles(),
     getTags(),
-    getNotifications(profile.id),
     getEditorWorkloads(),
     profile.role === "editor" ? getEditorInProgressCount(profile.id) : Promise.resolve(0),
     getAppSettings()
@@ -77,7 +71,7 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
   ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   return (
-    <AppShell profile={profile} notifications={notifications}>
+    <>
       <main className="page-container">
         <header className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -168,12 +162,12 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
             </section>
 
             {isReviewer ? <ReviewPanel ad={ad} profile={profile} reviews={reviews} annotations={annotations} /> : null}
-            <CommentThread adId={ad.id} comments={comments} />
+            <CommentThread adId={ad.id} comments={comments} mentionableUsers={profiles.filter((item) => item.active && item.id !== profile.id)} />
           </aside>
         </div>
         </VideoTimestampProvider>
       </main>
-    </AppShell>
+    </>
   );
 }
 
