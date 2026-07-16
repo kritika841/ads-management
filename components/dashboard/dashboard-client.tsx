@@ -4,8 +4,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ArrowDown, ArrowRight, ArrowUp, CalendarClock, Check, ChevronsUpDown, Download, Eye, Filter, Grid2X2, ListFilter, Loader2, Play, Plus, Search, Square, SquareCheck, Table2, UserCheck, Video, X } from "lucide-react";
-import { assignEditor, reviewAd } from "@/app/actions/ads";
+import { ArrowDown, ArrowRight, ArrowUp, CalendarClock, Check, ChevronsUpDown, Download, Eye, Filter, Grid2X2, ListFilter, Loader2, Play, Plus, Search, Square, SquareCheck, Table2, Tags, UserCheck, Video, X } from "lucide-react";
+import { assignEditor, bulkAddTags, reviewAd } from "@/app/actions/ads";
 import { AdPreviewModal } from "@/components/dashboard/ad-preview-modal";
 import { DeleteAdButton } from "@/components/dashboard/delete-ad-button";
 import { CreatorItemForm } from "@/components/workflow/creator-item-form";
@@ -55,6 +55,8 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
+  const [bulkTagModalOpen, setBulkTagModalOpen] = useState(false);
+  const [isBulkTagging, setIsBulkTagging] = useState(false);
   const [isPending, startTransition] = useTransition();
   const searchRef = useRef<HTMLInputElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -286,6 +288,22 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
     }
   }
 
+  async function submitBulkTags(tags: string[]) {
+    setIsBulkTagging(true);
+    try {
+      const response = await runServerAction(() => bulkAddTags(Array.from(selectedIds), tags));
+      if (!response.ok) {
+        toast({ title: "Could not add tags", description: response.message ?? "Try again.", tone: "error" });
+        return;
+      }
+      toast({ title: `Tags added to ${response.count} creative${response.count === 1 ? "" : "s"}`, tone: "success" });
+      setBulkTagModalOpen(false);
+      router.refresh();
+    } finally {
+      setIsBulkTagging(false);
+    }
+  }
+
   return <main className="page-container">
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><h1 className="text-2xl font-semibold text-foreground">Creative library</h1><p className="mt-1 text-sm text-muted-foreground">Your work, organized by what needs attention next.</p></div>{canCreate ? <Button onClick={() => openCreatorForm()}><Plus className="size-4" aria-hidden />Add creative</Button> : null}</div>
 
@@ -305,6 +323,10 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
             <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
             <Button size="sm" variant="secondary" onClick={selectAll}>Select all {filteredAds.length}</Button>
             <Button size="sm" variant="secondary" onClick={clearSelection}>Clear</Button>
+            <Button size="sm" variant="secondary" onClick={() => setBulkTagModalOpen(true)}>
+              <Tags className="size-3.5" aria-hidden />
+              Add tags
+            </Button>
             <Button size="sm" disabled={isDownloading} onClick={downloadZip}>
               {isDownloading ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Download className="size-3.5" aria-hidden />}
               Download ZIP
@@ -324,7 +346,63 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
 
     {cancelAd ? <Modal open labelledBy="changes-title" onClose={() => setCancelAd(null)} className="flex items-center justify-center p-4"><section className="w-full max-w-lg rounded-xl border border-border bg-card shadow-float dark:shadow-none"><div className="flex items-start justify-between border-b border-border px-5 py-4"><div><h2 id="changes-title" className="text-lg font-semibold text-foreground">Request changes</h2><p className="mt-1 text-sm text-muted-foreground">Tell the assigned editor exactly what must change.</p></div><Button size="icon" variant="ghost" className="size-9" title="Close" onClick={() => setCancelAd(null)}><X className="size-5" aria-hidden /></Button></div><div className="p-5"><Textarea className="min-h-32" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} placeholder="Required changes" /></div><div className="flex justify-end gap-2 border-t border-border px-5 py-4"><Button variant="secondary" onClick={() => setCancelAd(null)}>Keep in review</Button><Button variant="danger" disabled={isPending || !cancelReason.trim()} onClick={() => decide(cancelAd, "request_changes", cancelReason.trim())}>{isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <X className="size-4" aria-hidden />}Send changes</Button></div></section></Modal> : null}
     <AdPreviewModal ad={previewAd} onClose={() => setPreviewAd(null)} />
+    {bulkTagModalOpen ? <BulkTagModal count={selectedIds.size} availableTags={availableTags} pending={isBulkTagging} onClose={() => setBulkTagModalOpen(false)} onSubmit={submitBulkTags} /> : null}
   </main>;
+}
+
+function BulkTagModal({ count, availableTags, pending, onClose, onSubmit }: { count: number; availableTags: string[]; pending: boolean; onClose: () => void; onSubmit: (tags: string[]) => void }) {
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [tagDraft, setTagDraft] = useState("");
+  const tagOptions = useMemo(() => Array.from(new Set([...availableTags, ...selectedTags])).filter(Boolean).sort(), [availableTags, selectedTags]);
+
+  function addTag() {
+    const tags = tagDraft.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean);
+    if (!tags.length) return;
+    setSelectedTags((current) => Array.from(new Set([...current, ...tags])));
+    setTagDraft("");
+  }
+
+  return (
+    <Modal open labelledBy="bulk-tag-title" onClose={onClose} className="flex items-center justify-center p-4">
+      <section className="w-full max-w-lg rounded-xl border border-border bg-card shadow-float dark:shadow-none">
+        <div className="flex items-start justify-between border-b border-border px-5 py-4">
+          <div>
+            <h2 id="bulk-tag-title" className="text-lg font-semibold text-foreground">Add tags to {count} creative{count === 1 ? "" : "s"}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">These tags are added alongside each creative&apos;s existing tags.</p>
+          </div>
+          <Button size="icon" variant="ghost" className="size-9" title="Close" onClick={onClose}><X className="size-5" aria-hidden /></Button>
+        </div>
+        <div className="p-5">
+          <div className="flex flex-wrap gap-2">
+            {tagOptions.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                className={cn("rounded-full border px-3 py-1.5 text-xs", selectedTags.includes(tag) ? "border-primary bg-accent text-primary" : "border-border text-muted-foreground")}
+                onClick={() => setSelectedTags((current) => current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag])}
+              >
+                #{tag}
+              </button>
+            ))}
+          </div>
+          <div className="mt-3 flex gap-2">
+            <div className="relative flex-1">
+              <Tags className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+              <Input className="pl-9" value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addTag(); } }} placeholder="Add tag" />
+            </div>
+            <Button variant="secondary" disabled={!tagDraft.trim()} onClick={addTag}><Plus className="size-4" aria-hidden />Add</Button>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button disabled={pending || !selectedTags.length} onClick={() => onSubmit(selectedTags)}>
+            {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Tags className="size-4" aria-hidden />}
+            Add tags
+          </Button>
+        </div>
+      </section>
+    </Modal>
+  );
 }
 
 function WorkflowCard({ ad, mediaToken, profile, editors, editorWorkloads, pending, playing, selected, downloading, onToggleSelect, onPlay, onStopPlaying, onPlaybackError, onPreview, onDownload, onEdit, onApprove, onRequestChanges, onAssignEditor }: { ad: AdWithRelations; mediaToken?: string; profile: Profile; editors: Profile[]; editorWorkloads: Record<string, number>; pending: boolean; playing: boolean; selected: boolean; downloading: boolean; onToggleSelect: () => void; onPlay: () => void; onStopPlaying: () => void; onPlaybackError: () => void; onPreview: () => void; onDownload: () => void; onEdit: () => void; onApprove: () => void; onRequestChanges: () => void; onAssignEditor: (editorId: string, deadline: string) => void }) {

@@ -26,7 +26,8 @@ export async function resolveAdMedia(driveFileId: string, fallbackName: string):
     }
 
     if (meta) {
-      const safeName = (meta.name ?? fallbackName).replace(/[^a-zA-Z0-9._\- ]/g, "_");
+      const extension = extensionFrom(meta.name, meta.mimeType);
+      const safeName = `${fallbackName.replace(/[^a-zA-Z0-9._\- ]/g, "_")}.${extension}`;
       const bytes = await fetchFileBytes(driveFileId);
       if (!bytes) return null;
       return { kind: "file", name: safeName, contentType: meta.mimeType ?? "application/octet-stream", bytes };
@@ -40,6 +41,16 @@ export async function resolveAdMedia(driveFileId: string, fallbackName: string):
   const bytes = await fetchPublicFallback(driveFileId);
   if (!bytes) return null;
   return { kind: "file", name: `${fallbackName.replace(/[^a-zA-Z0-9._\- ]/g, "_")}.mp4`, contentType: "video/mp4", bytes };
+}
+
+/** Downloaded videos should be named after the creative, not the raw Drive filename —
+ *  keep only the real file extension (from the Drive name, falling back to mime type). */
+function extensionFrom(name: string | null | undefined, contentType: string | null | undefined) {
+  const fromName = name?.match(/\.([a-zA-Z0-9]+)$/)?.[1];
+  if (fromName) return fromName.toLowerCase();
+  const fromType = contentType?.split("/")[1];
+  if (fromType) return fromType.toLowerCase();
+  return "mp4";
 }
 
 async function fetchFileBytes(fileId: string): Promise<Uint8Array | null> {

@@ -474,6 +474,48 @@ export async function deleteAd(adId: string) {
   return { ok: true };
 }
 
+export async function bulkAddTags(adIds: string[], tags: string[]) {
+  const profile = await requireProfile();
+  const parsed = z
+    .object({
+      adIds: z.array(z.string().uuid()).min(1, "Select at least one creative.").max(50, "Select at most 50 creatives at a time."),
+      tags: z.array(z.string().trim().min(1)).min(1, "Add at least one tag.").max(20)
+    })
+    .safeParse({ adIds, tags });
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid request." };
+  }
+
+  const admin = createSupabaseAdminClient();
+  let query = admin.from("ads").select("id").in("id", parsed.data.adIds);
+  if (profile.role === "editor") query = query.eq("editor_id", profile.id);
+  else if (profile.role === "content_creator") query = query.eq("creator_id", profile.id);
+
+  const { data: allowedAds, error } = await query;
+  if (error) {
+    return { ok: false, message: error.message };
+  }
+  const allowedIds = (allowedAds ?? []).map((row) => row.id);
+  if (!allowedIds.length) {
+    return { ok: false, message: "You do not have access to the selected creatives." };
+  }
+
+  const normalizedTags = Array.from(new Set(parsed.data.tags.map((tag) => tag.trim().toLowerCase()).filter(Boolean)));
+  const { error: rpcError } = await admin.rpc("add_ad_tags_bulk", { p_ad_ids: allowedIds, p_tags: normalizedTags });
+  if (rpcError) {
+    return { ok: false, message: rpcError.message };
+  }
+
+  for (const adId of allowedIds) {
+    await logActivity(adId, profile.id, "bulk_tagged", { tags: normalizedTags });
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/library");
+
+  return { ok: true, count: allowedIds.length };
+}
+
 export async function addComment(adId: string, body: string) {
   const profile = await requireProfile();
   const parsed = z.object({ adId: z.string().uuid(), body: z.string().trim().min(1).max(4000) }).safeParse({
