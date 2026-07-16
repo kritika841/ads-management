@@ -79,7 +79,7 @@ function createDriveAuth() {
   }
 
   try {
-    const credentialsSource = serviceAccountJson.trim();
+    const credentialsSource = serviceAccountJson.trim().replace(/^"(.*)"$/, "$1");
     const credentials = JSON.parse(
       credentialsSource.startsWith("{") || !existsSync(credentialsSource)
         ? credentialsSource
@@ -89,7 +89,12 @@ function createDriveAuth() {
       credentials,
       scopes: ["https://www.googleapis.com/auth/drive.readonly"]
     });
-  } catch {
+  } catch (err) {
+    console.error(
+      "GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON is set but could not be parsed as JSON or read as a file path. " +
+        "It must contain the full service account key JSON (or a path that exists on this machine).",
+      err
+    );
     cachedDriveAuth = null;
   }
   return cachedDriveAuth;
