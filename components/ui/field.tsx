@@ -50,7 +50,7 @@ export function Field({
   hint,
   htmlFor
 }: {
-  label: string;
+  label: React.ReactNode;
   children: React.ReactNode;
   hint?: string;
   htmlFor?: string;

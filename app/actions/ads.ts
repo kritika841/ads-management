@@ -66,16 +66,39 @@ export async function saveCreatorItem(payload: z.input<typeof creatorItemSchema>
   }
 
   const admin = createSupabaseAdminClient();
-  const { data: creator, error: creatorError } = await admin
-    .from("profiles")
-    .select("id")
-    .eq("id", data.creatorId)
-    .eq("role", "content_creator")
-    .eq("active", true)
-    .maybeSingle();
+
+  // Managers may assign themselves as the creator. In that case we skip the
+  // content_creator role check and just verify their own active profile.
+  const isManagerSelf = profile.role === "manager" && data.creatorId === profile.id;
+
+  let creator: { id: string } | null = null;
+  let creatorError: { message: string } | null = null;
+
+  if (isManagerSelf) {
+    const { data: managerProfile, error: managerError } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("id", profile.id)
+      .eq("active", true)
+      .maybeSingle();
+    creator = managerProfile ?? null;
+    creatorError = managerError ?? null;
+  } else {
+    const { data: creatorData, error: creatorErr } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("id", data.creatorId)
+      .eq("role", "content_creator")
+      .eq("active", true)
+      .maybeSingle();
+    creator = creatorData ?? null;
+    creatorError = creatorErr ?? null;
+  }
+
   if (creatorError || !creator) {
     return { ok: false, message: creatorError?.message ?? "Choose an active content creator." };
   }
+
 
   const { data: product, error: productError } = await admin
     .from("products")

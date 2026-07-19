@@ -35,8 +35,12 @@ export function CreatorItemForm({
 }) {
   const router = useRouter();
   const activeCreators = creators.filter((item) => item.active && item.role === "content_creator");
+  // Managers can assign themselves as the creator — prepend them to the dropdown
+  const creatorsForDropdown = profile.role === "manager"
+    ? [profile, ...activeCreators]
+    : activeCreators;
   const activeEditors = editors.filter((item) => item.active && item.role === "editor");
-  const defaultCreatorId = initialAd?.creator_id ?? (profile.role === "content_creator" ? profile.id : activeCreators[0]?.id ?? "");
+  const defaultCreatorId = initialAd?.creator_id ?? (profile.role === "content_creator" || profile.role === "manager" ? profile.id : activeCreators[0]?.id ?? "");
   const initialStage = initialAd && creatorSelectableStages.includes(initialAd.production_stage as (typeof creatorSelectableStages)[number])
     ? initialAd.production_stage as CreatorControlledStage
     : creatorSelectableStages[0];
@@ -113,7 +117,7 @@ export function CreatorItemForm({
         <Field label="Ad name" hint={initialAd ? undefined : "Auto-generated unique ID — read only."}><div className="relative"><Input value={name} readOnly={!initialAd} className={`font-mono tracking-widest ${!initialAd ? "bg-muted cursor-default" : ""}`} aria-busy={nameLoading} />{nameLoading ? <Loader2 className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" aria-hidden /> : null}</div></Field>
         <Field label="Campaign"><Select value={campaignId} onChange={(event) => setCampaignId(event.target.value)}>{campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}</Select></Field>
         <Field label="Product"><Select value={productId} onChange={(event) => setProductId(event.target.value)}><option value="">Choose product</option>{products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</Select></Field>
-        {canChooseCreator ? <Field label="Content creator"><Select value={creatorId} onChange={(event) => setCreatorId(event.target.value)}>{activeCreators.map((creator) => <option key={creator.id} value={creator.id}>{creator.name}</option>)}</Select></Field> : null}
+        {canChooseCreator ? <Field label="Content creator"><Select value={creatorId} onChange={(event) => setCreatorId(event.target.value)}>{creatorsForDropdown.map((creator) => <option key={creator.id} value={creator.id}>{creator.name}{creator.id === profile.id && profile.role === "manager" ? " (you)" : ""}</option>)}</Select></Field> : null}
         <Field label="Current status"><Select value={stage} onChange={(event) => setStage(event.target.value as CreatorControlledStage)}>{creatorSelectableStages.map((item) => <option key={item} value={item}>{creatorStatusOptionLabels[item]}</option>)}</Select></Field>
       </div>
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import Link from "next/link";
 import { Chrome, Eye, EyeOff, Loader2, LockKeyhole, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
@@ -86,7 +87,14 @@ export function LoginForm({ initialMessage = null }: { initialMessage?: string |
           required
         /></div>
       </Field>
-      <Field label="Password" htmlFor="login-password">
+      <Field label={
+        <span className="flex items-center justify-between">
+          <span>Password</span>
+          <Link href="/reset-password" className="text-xs font-medium text-muted-foreground hover:text-foreground" tabIndex={-1}>
+            Forgot password?
+          </Link>
+        </span>
+      } htmlFor="login-password">
         <div className="relative"><LockKeyhole className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden /><Input
           id="login-password"
           className="px-9"
