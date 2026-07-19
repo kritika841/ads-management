@@ -46,7 +46,7 @@ export default function ResetPasswordPage() {
         <div className="max-w-md">
           <p className="text-sm font-medium text-primary">Account recovery</p>
           <h1 className="mt-3 text-4xl font-semibold leading-tight">Forgot your<br />password?</h1>
-          <p className="mt-4 max-w-sm text-sm leading-6 text-muted-foreground">Enter your team email and we'll send you a secure link to reset your password.</p>
+          <p className="mt-4 max-w-sm text-sm leading-6 text-muted-foreground">Enter your team email and we&apos;ll send you a secure link to reset your password.</p>
         </div>
         <p className="text-xs text-muted-foreground">Restricted to approved team members</p>
       </section>
