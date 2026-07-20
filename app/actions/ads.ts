@@ -12,7 +12,8 @@ import {
   creatorEditableStages,
   inProgressEditingStages
 } from "@/lib/production-workflow";
-import { parseGoogleDriveUrl, getDriveMetadata } from "@/lib/drive";
+import { getDriveMetadata } from "@/lib/drive";
+import { parseGoogleDriveVideoFileUrl } from "@/lib/drive-urls";
 import { extractMentions, profileMentionHandles } from "@/lib/mentions";
 import { createNotification } from "@/lib/notifications";
 import { sanitizeScriptHtml } from "@/lib/sanitize";
@@ -246,8 +247,11 @@ export async function submitEditedVideo(payload: z.input<typeof editorSubmission
     return { ok: false, message: "Confirm that all requested changes were completed before resubmitting." };
   }
 
-  const drivePreview = parseGoogleDriveUrl(data.driveUrl);
-  if (!drivePreview) return { ok: false, message: "Use a valid Google Drive video or share URL." };
+  const driveVideoResult = parseGoogleDriveVideoFileUrl(data.driveUrl);
+  if (driveVideoResult.error || !driveVideoResult.result) {
+    return { ok: false, message: driveVideoResult.error ?? "Use a valid Google Drive single video file URL." };
+  }
+  const drivePreview = driveVideoResult.result;
   const metadata = await getDriveMetadata(drivePreview.fileId).catch(() => null);
   const update = {
     drive_url: data.driveUrl,
@@ -272,6 +276,107 @@ export async function submitEditedVideo(payload: z.input<typeof editorSubmission
   });
   if (submissionError) return { ok: false, message: submissionError.message };
   await notifySubmissionReviewers({ ...ad, ...update } as Ad, profile);
+  revalidateAdPaths(ad.id);
+  return { ok: true };
+}
+
+const reviewerFinalClipSchema = z.object({
+  adId: z.string().uuid(),
+  driveUrl: z.string().trim().min(1, "Paste the final Drive video URL."),
+  rawFootageUrl: z.string().trim().optional().or(z.literal("")),
+  scriptHtml: z.string().optional().nullable(),
+  scriptText: z.string().trim().optional().nullable(),
+  reviewerNotes: z.string().trim().max(4000).optional().nullable()
+});
+
+/**
+ * Allows an admin or manager to directly upload the final edited clip for any ad,
+ * bypassing the normal editor-assignment flow entirely.
+ * Requires: a valid single Google Drive video file link (no folders, no other sites).
+ */
+export async function submitFinalClipByReviewer(payload: z.input<typeof reviewerFinalClipSchema>) {
+  const profile = await requireProfile();
+  if (profile.role !== "admin" && profile.role !== "manager") {
+    return { ok: false, message: "Only admins and managers can upload the final clip directly." };
+  }
+
+  const parsed = reviewerFinalClipSchema.safeParse(payload);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid payload." };
+  }
+  const data = parsed.data;
+
+  // Strict: must be a single Google Drive video file — no folders, no other sites
+  const driveVideoResult = parseGoogleDriveVideoFileUrl(data.driveUrl);
+  if (driveVideoResult.error || !driveVideoResult.result) {
+    return { ok: false, message: driveVideoResult.error ?? "Use a valid Google Drive single video file URL." };
+  }
+  const drivePreview = driveVideoResult.result;
+
+  const admin = createSupabaseAdminClient();
+  const { data: row, error } = await admin.from("ads").select("*").eq("id", data.adId).maybeSingle();
+  if (error || !row) return { ok: false, message: error?.message ?? "Ad not found." };
+  const ad = row as Ad;
+
+  // Do not allow overwriting already-approved ads unless user is admin
+  if (ad.production_stage === "approved" && profile.role !== "admin") {
+    return { ok: false, message: "This ad is already approved. Only an admin can re-upload the final clip." };
+  }
+
+  const metadata = await getDriveMetadata(drivePreview.fileId).catch(() => null);
+
+  const rawFootageUrl =
+    data.rawFootageUrl?.trim() ||
+    ad.raw_footage_url ||
+    null;
+
+  // Validate raw footage URL if provided (must be a Google Drive link)
+  if (data.rawFootageUrl?.trim()) {
+    const rawUrlError = validateGoogleDriveUrl(data.rawFootageUrl, "raw footage folder");
+    if (rawUrlError) return { ok: false, message: rawUrlError };
+  }
+
+  const now = new Date().toISOString();
+  const update = {
+    drive_url: data.driveUrl,
+    drive_file_id: drivePreview.fileId,
+    preview_url: drivePreview.previewUrl,
+    thumbnail_url: drivePreview.thumbnailUrl || metadata?.thumbnailLink || ad.thumbnail_url,
+    raw_footage_url: rawFootageUrl,
+    script_html: data.scriptHtml != null ? (sanitizeScriptHtml(data.scriptHtml) || ad.script_html) : ad.script_html,
+    script_text: data.scriptText?.trim() || ad.script_text,
+    editor_notes: data.reviewerNotes || null,
+    production_stage: "approved" as const,
+    status: "approved" as const,
+    approval_stage: "complete" as const,
+    submitted_at: ad.submitted_at ?? now,
+    final_approved_at: now,
+    // Preserve existing timestamps where set
+    script_ready_at: ad.script_ready_at ?? now,
+    shoot_completed_at: ad.shoot_completed_at ?? now,
+    raw_footage_shared_at: rawFootageUrl ? (ad.raw_footage_shared_at ?? now) : ad.raw_footage_shared_at,
+    editing_started_at: ad.editing_started_at ?? now,
+    creator_reviewed_at: ad.creator_reviewed_at ?? now
+  };
+
+  const { error: updateError } = await admin.from("ads").update(update).eq("id", ad.id);
+  if (updateError) return { ok: false, message: updateError.message };
+
+  await logActivity(ad.id, profile.id, "reviewer_uploaded_final_clip", {
+    drive_file_id: drivePreview.fileId,
+    bypassed_editor: !ad.editor_id
+  });
+
+  // Notify creator and editor (if any)
+  const notifyIds = [ad.creator_id, ad.editor_id].filter((id): id is string => Boolean(id));
+  await notifyUserIds(
+    admin,
+    notifyIds,
+    ad.id,
+    "Final clip uploaded",
+    `${profile.name} uploaded the final approved clip for ${ad.name}.`
+  );
+
   revalidateAdPaths(ad.id);
   return { ok: true };
 }

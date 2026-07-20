@@ -12,6 +12,7 @@ import { ActivityDrawer } from "@/components/workflow/activity-drawer";
 import { CreatorItemForm } from "@/components/workflow/creator-item-form";
 import { CreatorReviewActions } from "@/components/workflow/creator-review-actions";
 import { EditorWorkspace } from "@/components/workflow/editor-workspace";
+import { ManagerFinalUpload } from "@/components/workflow/manager-final-upload";
 import { ProductionStageBadge } from "@/components/workflow/production-stage";
 import { ReassignEditorButton } from "@/components/workflow/reassign-editor-button";
 import { hasAdAccess } from "@/lib/ad-access";
@@ -51,6 +52,8 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
   const editorHasTask = isAssignedEditor && ["ready_for_edit", "editing", "changes_requested"].includes(ad.production_stage);
   const creatorNeedsReview = isCreator && ad.production_stage === "creator_review";
   const canReassign = isReviewer && ["ready_for_edit", "editing", "changes_requested"].includes(ad.production_stage);
+  // Admin/manager can always upload final clip unless the ad is already approved (managers) or under any stage (admins)
+  const canUploadFinalClip = isReviewer && ad.production_stage !== "approved";
   const mediaVisible = isFinalMediaVisible(ad.production_stage);
   const latestVersionAt = versions[0]?.created_at ?? null;
   const resubmissionFeedback: ResubmissionFeedbackItem[] = [
@@ -115,6 +118,10 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
           <section className="min-w-0 space-y-5">
             {mediaVisible && ad.drive_file_id ? <AdVersionPreview ad={ad} versions={versions} /> : null}
+
+            {canUploadFinalClip ? (
+              <ManagerFinalUpload ad={ad} profile={profile} />
+            ) : null}
 
             {creatorCanEdit ? (
               <section className="panel overflow-hidden">

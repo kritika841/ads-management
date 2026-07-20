@@ -8,6 +8,7 @@ import { runServerAction } from "@/lib/client-action";
 import { RequestedChanges } from "@/components/review/requested-changes";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
+import { parseGoogleDriveVideoFileUrl } from "@/lib/drive-urls";
 import type { ResubmissionFeedbackItem } from "@/lib/resubmission";
 import type { AdWithRelations } from "@/lib/types";
 import { formatDateOnly } from "@/lib/utils";
@@ -17,11 +18,22 @@ export function EditorWorkspace({ ad, feedback, inProgressCount, maxConcurrentEd
   const router = useRouter();
   const resubmitting = ad.production_stage === "changes_requested";
   const [driveUrl, setDriveUrl] = useState(resubmitting ? ad.drive_url ?? "" : "");
+  const [driveUrlError, setDriveUrlError] = useState<string | null>(null);
   const [editorNotes, setEditorNotes] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [confirmationOpen, setConfirmationOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  function handleDriveUrlChange(value: string) {
+    setDriveUrl(value);
+    if (!value.trim()) {
+      setDriveUrlError(null);
+      return;
+    }
+    const validation = parseGoogleDriveVideoFileUrl(value);
+    setDriveUrlError(validation.error);
+  }
 
   function begin() {
     setMessage(null);
@@ -66,7 +78,17 @@ export function EditorWorkspace({ ad, feedback, inProgressCount, maxConcurrentEd
         </div>
       ) : null}
 
-      {(ad.production_stage === "editing" || resubmitting) ? <div className="border-t border-border p-5">{resubmitting ? <div className="mb-5"><RequestedChanges items={feedback} /></div> : null}<div className="grid gap-4 md:grid-cols-2"><Field label="Final edited video"><Input value={driveUrl} onChange={(event) => setDriveUrl(event.target.value)} placeholder="https://drive.google.com/file/d/..." /></Field><Field label="Editing note" hint="Optional"><Textarea className="min-h-20" value={editorNotes} onChange={(event) => setEditorNotes(event.target.value)} placeholder="What changed or what should reviewers know?" /></Field></div><div className="mt-5 flex justify-end"><Button disabled={isPending || !driveUrl.trim()} onClick={() => resubmitting ? setConfirmationOpen(true) : submit()}>{isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Send className="size-4" aria-hidden />}{resubmitting ? "Resubmit edited video" : "Submit edited video"}</Button></div></div> : null}
+      {(ad.production_stage === "editing" || resubmitting) ? <div className="border-t border-border p-5">{resubmitting ? <div className="mb-5"><RequestedChanges items={feedback} /></div> : null}<div className="grid gap-4 md:grid-cols-2"><Field label="Final edited video" hint="Must be a single Google Drive video file link — no folders or other websites.">
+          <Input
+            value={driveUrl}
+            onChange={(event) => handleDriveUrlChange(event.target.value)}
+            placeholder="https://drive.google.com/file/d/..."
+            aria-invalid={Boolean(driveUrlError)}
+          />
+          {driveUrlError ? (
+            <p className="mt-1.5 text-xs text-destructive" role="alert">{driveUrlError}</p>
+          ) : null}
+        </Field><Field label="Editing note" hint="Optional"><Textarea className="min-h-20" value={editorNotes} onChange={(event) => setEditorNotes(event.target.value)} placeholder="What changed or what should reviewers know?" /></Field></div><div className="mt-5 flex justify-end"><Button disabled={isPending || !driveUrl.trim() || Boolean(driveUrlError)} onClick={() => resubmitting ? setConfirmationOpen(true) : submit()}>{isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Send className="size-4" aria-hidden />}{resubmitting ? "Resubmit edited video" : "Submit edited video"}</Button></div></div> : null}
 
       {message ? <p className="mx-5 mb-5 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground" role="status">{message}</p> : null}
 
