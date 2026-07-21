@@ -106,29 +106,41 @@ function relativeTime(value: string) {
   return days < 7 ? `${days}d` : new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", timeZone: "Asia/Kolkata" }).format(new Date(value));
 }
 
+let sharedAudioCtx: AudioContext | null = null;
+
 function playChime() {
   try {
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContext) return;
-    const ctx = new AudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    
+    if (!sharedAudioCtx) {
+      sharedAudioCtx = new AudioContextClass();
+    }
+    
+    // Attempt to resume if suspended (e.g. autoplay policy restrictions)
+    if (sharedAudioCtx.state === 'suspended') {
+      sharedAudioCtx.resume().catch(() => {});
+    }
+
+    const t = sharedAudioCtx.currentTime + 0.05; // Add slight delay for scheduling safety
+    const osc = sharedAudioCtx.createOscillator();
+    const gain = sharedAudioCtx.createGain();
     
     osc.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(sharedAudioCtx.destination);
     
     osc.type = "sine";
     // Play a pleasant double chime (C6 then E6)
-    osc.frequency.setValueAtTime(1046.50, ctx.currentTime); // C6
-    osc.frequency.setValueAtTime(1318.51, ctx.currentTime + 0.1); // E6
+    osc.frequency.setValueAtTime(1046.50, t); // C6
+    osc.frequency.setValueAtTime(1318.51, t + 0.1); // E6
     
-    gain.gain.setValueAtTime(0, ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.05);
-    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.3);
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.3, t + 0.05);
+    gain.gain.linearRampToValueAtTime(0, t + 0.3);
     
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.3);
+    osc.start(t);
+    osc.stop(t + 0.3);
   } catch (e) {
-    // Ignore audio context errors (e.g. not interacted with page yet)
+    console.error("Audio chime error:", e);
   }
 }
