@@ -30,8 +30,9 @@ export function ReviewPanel({
   const [isPending, startTransition] = useTransition();
   const isReviewer = profile.role === "admin" || profile.role === "manager";
   const isAdmin = profile.role === "admin";
+  const isManager = profile.role === "manager";
   const canReviewNow = isReviewer && ad.status === "pending_review" && (ad.production_stage === "creator_review" || ad.production_stage === "final_review");
-  const canReopenApproved = isAdmin && ad.production_stage === "approved";
+  const canReopenApproved = (isAdmin || isManager) && ad.production_stage === "approved";
   const permissionMessage = isReviewer && !canReviewNow && !canReopenApproved
     ? ad.production_stage === "approved"
       ? "Final approval is complete."

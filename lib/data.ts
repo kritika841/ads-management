@@ -11,6 +11,7 @@ import type {
   AuditLog,
   Campaign,
   Comment,
+  EditorTimeLog,
   Notification,
   Product,
   Profile,
@@ -305,4 +306,95 @@ function normalizeAds(rows: unknown[]) {
         .filter(Boolean) as { id: string; name: string }[]
     };
   }) as AdWithRelations[];
+}
+
+export async function getEditorTimeLogs(adId: string): Promise<EditorTimeLog[]> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("editor_time_logs")
+    .select("*, editor:profiles!editor_time_logs_editor_id_fkey(id,name,avatar_url,role)")
+    .eq("ad_id", adId)
+    .order("session_started_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as EditorTimeLog[];
+}
+
+export async function getEditorTotalSeconds(adId: string): Promise<number> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin.rpc("get_editor_total_seconds", { p_ad_id: adId });
+  if (error) throw error;
+  return (data as number) ?? 0;
+}
+
+export type EditorTimelinePoint = { date: string; [editorId: string]: string | number };
+
+export async function getEditorTimelineData(days: number): Promise<EditorTimelinePoint[]> {
+  const admin = createSupabaseAdminClient();
+  const threshold = new Date();
+  threshold.setDate(threshold.getDate() - days);
+  
+  const { data, error } = await admin
+    .from("editor_time_logs")
+    .select("editor_id, session_started_at, session_ended_at, is_active")
+    .gte("session_started_at", threshold.toISOString())
+    .order("session_started_at", { ascending: true });
+    
+  if (error) throw error;
+
+  const grouped: Record<string, Record<string, number>> = {};
+  for (const log of (data || [])) {
+    const end = log.session_ended_at ? new Date(log.session_ended_at).getTime() : Date.now();
+    const start = new Date(log.session_started_at).getTime();
+    const seconds = Math.max(0, Math.floor((end - start) / 1000));
+    
+    // Group by local date string (YYYY-MM-DD)
+    const dateKey = new Date(log.session_started_at).toISOString().split('T')[0];
+    if (!grouped[dateKey]) grouped[dateKey] = {};
+    grouped[dateKey][log.editor_id] = (grouped[dateKey][log.editor_id] || 0) + seconds;
+  }
+
+  // Ensure all dates in range exist
+  const result: EditorTimelinePoint[] = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dateKey = d.toISOString().split('T')[0];
+    const point: EditorTimelinePoint = { date: dateKey, ...grouped[dateKey] };
+    result.push(point);
+  }
+  return result;
+}
+
+export async function getEditorAverageEditTimes(): Promise<Record<string, number>> {
+  const admin = createSupabaseAdminClient();
+  
+  // Fetch all time logs for completed/approved ads, or just all inactive time logs.
+  // To keep it simple and approximate the "average per video", we sum all time per ad, 
+  // then average across distinct ads per editor.
+  const { data, error } = await admin
+    .from("editor_time_logs")
+    .select("editor_id, ad_id, session_started_at, session_ended_at, is_active")
+    .eq("is_active", false)
+    .not("session_ended_at", "is", null);
+    
+  if (error) throw error;
+  
+  const adTotals: Record<string, Record<string, number>> = {};
+  for (const log of (data || [])) {
+    const start = new Date(log.session_started_at).getTime();
+    const end = new Date(log.session_ended_at).getTime();
+    const seconds = Math.max(0, Math.floor((end - start) / 1000));
+    
+    if (!adTotals[log.editor_id]) adTotals[log.editor_id] = {};
+    adTotals[log.editor_id][log.ad_id] = (adTotals[log.editor_id][log.ad_id] || 0) + seconds;
+  }
+  
+  const averages: Record<string, number> = {};
+  for (const [editorId, ads] of Object.entries(adTotals)) {
+    const adIds = Object.keys(ads);
+    if (adIds.length === 0) continue;
+    const totalSeconds = Object.values(ads).reduce((sum, s) => sum + s, 0);
+    averages[editorId] = Math.floor(totalSeconds / adIds.length);
+  }
+  return averages;
 }

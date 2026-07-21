@@ -222,6 +222,15 @@ export async function startEditing(adId: string) {
     p_ad_id: ad.id, p_actor_id: profile.id, p_action: "start_editing", p_editor_id: null, p_deadline: null, p_reason: null
   });
   if (updateError) return { ok: false, message: updateError.message };
+
+  // Open a new timer session for this editing session
+  await admin.from("editor_time_logs").insert({
+    ad_id: ad.id,
+    editor_id: profile.id,
+    session_started_at: new Date().toISOString(),
+    is_active: true
+  });
+
   if (ad.creator_id) await notifyUserIds(admin, [ad.creator_id], ad.id, "Editing started", `${profile.name} started editing ${ad.name}.`);
   revalidateAdPaths(ad.id);
   return { ok: true };
@@ -275,6 +284,15 @@ export async function submitEditedVideo(payload: z.input<typeof editorSubmission
     p_editor_notes: update.editor_notes ?? ""
   });
   if (submissionError) return { ok: false, message: submissionError.message };
+
+  // Close any active timer session when the editor submits
+  await admin
+    .from("editor_time_logs")
+    .update({ session_ended_at: new Date().toISOString(), is_active: false })
+    .eq("ad_id", ad.id)
+    .eq("editor_id", profile.id)
+    .eq("is_active", true);
+
   await notifySubmissionReviewers({ ...ad, ...update } as Ad, profile);
   revalidateAdPaths(ad.id);
   return { ok: true };
@@ -517,7 +535,8 @@ export async function reviewAd(adId: string, decision: "approve" | "request_chan
   }
 
   const isAdminReopen = profile.role === "admin" && decision === "request_changes" && ad.production_stage === "approved";
-  if (!isAdminReopen && (ad.status !== "pending_review" || !["creator_review", "final_review"].includes(ad.production_stage))) {
+  const isManagerReopen = profile.role === "manager" && decision === "request_changes" && ad.production_stage === "approved";
+  if (!isAdminReopen && !isManagerReopen && (ad.status !== "pending_review" || !["creator_review", "final_review"].includes(ad.production_stage))) {
     return { ok: false, message: "This video is not waiting for final review." };
   }
 
@@ -819,6 +838,73 @@ export async function resolveAnnotation(annotationId: string) {
     annotation_id: annotation.id
   });
   revalidatePath(`/ads/${annotation.ad_id}`);
+  return { ok: true };
+}
+
+export async function pauseEditingTimer(adId: string, reason: string) {
+  const profile = await requireProfile();
+  const parsed = z.object({ adId: z.string().uuid(), reason: z.string().trim().min(1, "A pause reason is required.").max(1000) }).safeParse({ adId, reason });
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid request." };
+
+  const admin = createSupabaseAdminClient();
+  const { data: ad, error: adError } = await admin.from("ads").select("editor_id,production_stage,name").eq("id", parsed.data.adId).maybeSingle();
+  if (adError || !ad) return { ok: false, message: adError?.message ?? "Ad not found." };
+  if (profile.role !== "editor" || ad.editor_id !== profile.id) {
+    return { ok: false, message: "Only the assigned editor can pause the timer." };
+  }
+  if (!(["editing", "changes_requested"] as string[]).includes(ad.production_stage)) {
+    return { ok: false, message: "Timer can only be paused while actively editing." };
+  }
+
+  const now = new Date().toISOString();
+  const { error } = await admin
+    .from("editor_time_logs")
+    .update({ session_ended_at: now, is_active: false, pause_reason: parsed.data.reason })
+    .eq("ad_id", parsed.data.adId)
+    .eq("editor_id", profile.id)
+    .eq("is_active", true);
+  if (error) return { ok: false, message: error.message };
+
+  await logActivity(parsed.data.adId, profile.id, "timer_paused", { reason: parsed.data.reason });
+  revalidateAdPaths(parsed.data.adId);
+  return { ok: true };
+}
+
+export async function resumeEditingTimer(adId: string) {
+  const profile = await requireProfile();
+  const parsedId = z.string().uuid().safeParse(adId);
+  if (!parsedId.success) return { ok: false, message: "Invalid ad id." };
+
+  const admin = createSupabaseAdminClient();
+  const { data: ad, error: adError } = await admin.from("ads").select("editor_id,production_stage,name").eq("id", parsedId.data).maybeSingle();
+  if (adError || !ad) return { ok: false, message: adError?.message ?? "Ad not found." };
+  if (profile.role !== "editor" || ad.editor_id !== profile.id) {
+    return { ok: false, message: "Only the assigned editor can resume the timer." };
+  }
+  if (!(["editing", "changes_requested"] as string[]).includes(ad.production_stage)) {
+    return { ok: false, message: "Timer can only be resumed while actively editing." };
+  }
+
+  // Prevent double-resume: check there's no active session already
+  const { data: existingActive } = await admin
+    .from("editor_time_logs")
+    .select("id")
+    .eq("ad_id", parsedId.data)
+    .eq("editor_id", profile.id)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (existingActive) return { ok: false, message: "Timer is already running." };
+
+  const { error } = await admin.from("editor_time_logs").insert({
+    ad_id: parsedId.data,
+    editor_id: profile.id,
+    session_started_at: new Date().toISOString(),
+    is_active: true
+  });
+  if (error) return { ok: false, message: error.message };
+
+  await logActivity(parsedId.data, profile.id, "timer_resumed", {});
+  revalidateAdPaths(parsedId.data);
   return { ok: true };
 }
 

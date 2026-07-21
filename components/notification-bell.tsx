@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { CheckCheck, Inbox } from "lucide-react";
 import { markAllNotificationsRead, markNotificationRead } from "@/app/actions/notifications";
@@ -23,6 +23,14 @@ export function NotificationBell({
     [locallyRead, notifications]
   );
   const unreadCount = unreadNotifications.length;
+  const prevUnreadCount = useRef(unreadCount);
+
+  useEffect(() => {
+    if (unreadCount > prevUnreadCount.current) {
+      playChime();
+    }
+    prevUnreadCount.current = unreadCount;
+  }, [unreadCount]);
 
   function markOneRead(id: string) {
     setLocallyRead((current) => new Set(current).add(id));
@@ -96,4 +104,31 @@ function relativeTime(value: string) {
   if (hours < 24) return `${hours}h`;
   const days = Math.floor(hours / 24);
   return days < 7 ? `${days}d` : new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", timeZone: "Asia/Kolkata" }).format(new Date(value));
+}
+
+function playChime() {
+  try {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    
+    osc.type = "sine";
+    // Play a pleasant double chime (C6 then E6)
+    osc.frequency.setValueAtTime(1046.50, ctx.currentTime); // C6
+    osc.frequency.setValueAtTime(1318.51, ctx.currentTime + 0.1); // E6
+    
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.05);
+    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.3);
+    
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+  } catch (e) {
+    // Ignore audio context errors (e.g. not interacted with page yet)
+  }
 }

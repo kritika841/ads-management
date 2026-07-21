@@ -5,6 +5,7 @@ import { AlertTriangle, ArrowRight, CalendarClock, Gauge, ListChecks } from "luc
 import { Avatar } from "@/components/ui/avatar";
 import { InfoTip } from "@/components/ui/info-tip";
 import { ProductionStageBadge } from "@/components/workflow/production-stage";
+import { EditorTimelineChart } from "@/components/dashboard/editor-timeline-chart";
 import type { DashboardSummaryModel } from "@/lib/dashboard-summary";
 import type { QueueKey } from "@/lib/work-queues";
 import { cn, formatDateOnly, formatDurationHours } from "@/lib/utils";
@@ -54,7 +55,16 @@ export function DashboardToday({ model, onSelectQueue }: { model: DashboardSumma
           ))}</div> : <div className="px-5 py-10 text-center text-sm text-muted-foreground">{model.priorityEmpty}</div>}
         </section>
 
-        {model.kind === "reviewer" ? <EditorWorkload rows={model.workloads} /> : <ProductionSnapshot rows={model.production} kind={model.kind} />}
+        {model.kind === "reviewer" ? (
+          <div>
+            <EditorWorkload rows={model.workloads} />
+            {model.timeline && model.timeline.length > 0 ? (
+              <EditorTimelineChart data={model.timeline} profiles={model.workloads} />
+            ) : null}
+          </div>
+        ) : (
+          <ProductionSnapshot rows={model.production} kind={model.kind} />
+        )}
       </div>
     </section>
   );
@@ -65,5 +75,5 @@ function ProductionSnapshot({ rows, kind }: { rows: DashboardSummaryModel["produ
 }
 
 function EditorWorkload({ rows }: { rows: DashboardSummaryModel["workloads"] }) {
-  return <section className="panel overflow-hidden"><div className="flex items-center gap-3 border-b border-border px-4 py-3.5"><span className="flex size-9 items-center justify-center rounded-md bg-accent text-primary"><Gauge className="size-[18px]" aria-hidden /></span><div><h3 className="text-sm font-semibold text-foreground">Editor workload</h3><p className="text-xs text-muted-foreground">Active assignments and available capacity</p></div></div>{rows.length ? <div className="max-h-72 divide-y divide-border overflow-y-auto">{rows.map((row) => { const ratio = row.capacity ? Math.min(100, Math.round((row.active / row.capacity) * 100)) : 0; return <div key={row.id} className="px-4 py-3"><div className="flex items-center gap-3"><Avatar name={row.name} src={row.avatarUrl} className="size-8" /><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-3"><p className="truncate text-sm font-medium text-foreground">{row.name}</p><p className={cn("text-xs font-medium", row.active >= row.capacity ? "text-warning" : "text-muted-foreground")}>{row.active} of {row.capacity} active</p></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div className={cn("h-full rounded-full", row.active >= row.capacity ? "bg-warning" : "bg-primary")} style={{ width: `${ratio}%` }} /></div></div></div></div>; })}</div> : <div className="px-5 py-10 text-center text-sm text-muted-foreground"><AlertTriangle className="mx-auto mb-2 size-5 text-border" aria-hidden />No active editors</div>}</section>;
+  return <section className="panel overflow-hidden"><div className="flex items-center gap-3 border-b border-border px-4 py-3.5"><span className="flex size-9 items-center justify-center rounded-md bg-accent text-primary"><Gauge className="size-[18px]" aria-hidden /></span><div><h3 className="text-sm font-semibold text-foreground">Editor workload</h3><p className="text-xs text-muted-foreground">Active assignments and available capacity</p></div></div>{rows.length ? <div className="max-h-72 divide-y divide-border overflow-y-auto">{rows.map((row) => { const ratio = row.capacity ? Math.min(100, Math.round((row.active / row.capacity) * 100)) : 0; return <div key={row.id} className="px-4 py-3"><div className="flex items-center gap-3"><Avatar name={row.name} src={row.avatarUrl} className="size-8" /><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-3"><p className="truncate text-sm font-medium text-foreground">{row.name}</p><div className="flex flex-col items-end"><p className={cn("text-xs font-medium", row.active >= row.capacity ? "text-warning" : "text-muted-foreground")}>{row.active} of {row.capacity} active</p>{row.avgSecondsPerVideo !== undefined && row.avgSecondsPerVideo > 0 ? <p className="mt-0.5 text-[10px] text-muted-foreground">avg. {formatDurationHours(row.avgSecondsPerVideo / 3600)} / video</p> : null}</div></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div className={cn("h-full rounded-full", row.active >= row.capacity ? "bg-warning" : "bg-primary")} style={{ width: `${ratio}%` }} /></div></div></div></div>; })}</div> : <div className="px-5 py-10 text-center text-sm text-muted-foreground"><AlertTriangle className="mx-auto mb-2 size-5 text-border" aria-hidden />No active editors</div>}</section>;
 }

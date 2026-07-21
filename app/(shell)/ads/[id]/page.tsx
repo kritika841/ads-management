@@ -11,13 +11,14 @@ import { Avatar } from "@/components/ui/avatar";
 import { ActivityDrawer } from "@/components/workflow/activity-drawer";
 import { CreatorItemForm } from "@/components/workflow/creator-item-form";
 import { CreatorReviewActions } from "@/components/workflow/creator-review-actions";
+import { EditingTimeDisplay } from "@/components/workflow/editing-time-display";
 import { EditorWorkspace } from "@/components/workflow/editor-workspace";
 import { ManagerFinalUpload } from "@/components/workflow/manager-final-upload";
 import { ProductionStageBadge } from "@/components/workflow/production-stage";
 import { ReassignEditorButton } from "@/components/workflow/reassign-editor-button";
 import { hasAdAccess } from "@/lib/ad-access";
 import { requireProfile } from "@/lib/auth";
-import { getAdDetail, getAppSettings, getCampaigns, getEditorInProgressCount, getEditorWorkloads, getProducts, getProfiles, getTags } from "@/lib/data";
+import { getAdDetail, getAppSettings, getCampaigns, getEditorInProgressCount, getEditorTimeLogs, getEditorWorkloads, getProducts, getProfiles, getTags } from "@/lib/data";
 import { canDeleteAd } from "@/lib/permissions";
 import { creatorEditableStages, isFinalMediaVisible, productionStageLabels, workflowWaitingLabel } from "@/lib/production-workflow";
 import type { ResubmissionFeedbackItem } from "@/lib/resubmission";
@@ -26,15 +27,20 @@ import { formatDateOnly } from "@/lib/utils";
 
 export default async function AdDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const [{ id }, profile] = await Promise.all([params, requireProfile()]);
-  const [detail, campaigns, products, profiles, tags, editorWorkloads, editorInProgressCount, settings] = await Promise.all([
+  const isReviewer = profile.role === "admin" || profile.role === "manager";
+  const isEditor = profile.role === "editor";
+
+  const [detail, campaigns, products, profiles, tags, editorWorkloads, editorInProgressCount, settings, timeLogs] = await Promise.all([
     getAdDetail(id),
     getCampaigns(),
     getProducts(),
     getProfiles(),
     getTags(),
     getEditorWorkloads(),
-    profile.role === "editor" ? getEditorInProgressCount(profile.id) : Promise.resolve(0),
-    getAppSettings()
+    isEditor ? getEditorInProgressCount(profile.id) : Promise.resolve(0),
+    getAppSettings(),
+    // Fetch time logs in parallel — resolved to [] for roles that don't need it
+    (isReviewer || isEditor) ? getEditorTimeLogs(id) : Promise.resolve([])
   ]);
 
   if (!detail) notFound();
@@ -42,7 +48,6 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
   const { ad, versions, comments, annotations, reviews, activity, collaboratorIds } = detail;
   const editors = profiles.filter((item) => item.role === "editor");
   const creators = profiles.filter((item) => item.role === "content_creator");
-  const isReviewer = profile.role === "admin" || profile.role === "manager";
   const mentionableUsers = profiles
     .filter((item) => item.active && item.id !== profile.id)
     .map((item) => ({ ...item, hasAccess: hasAdAccess(item, ad, collaboratorIds) }));
@@ -144,7 +149,7 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
               </section>
             ) : null}
 
-            {editorHasTask ? <EditorWorkspace ad={ad} feedback={resubmissionFeedback} inProgressCount={editorInProgressCount} maxConcurrentEdits={settings.max_concurrent_edits} /> : null}
+            {editorHasTask ? <EditorWorkspace ad={ad} feedback={resubmissionFeedback} inProgressCount={editorInProgressCount} maxConcurrentEdits={settings.max_concurrent_edits} timeLogs={timeLogs} /> : null}
             {creatorNeedsReview ? <CreatorReviewActions adId={ad.id} /> : null}
 
             <VersionHistory versions={versions} />
@@ -173,6 +178,7 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
             </section>
 
             {isReviewer ? <ReviewPanel ad={ad} profile={profile} reviews={reviews} annotations={annotations} /> : null}
+            {isReviewer && ad.editor_id ? <EditingTimeDisplay timeLogs={timeLogs} /> : null}
             <CommentThread adId={ad.id} comments={comments} mentionableUsers={mentionableUsers} canGrantAccess={isReviewer} />
           </aside>
         </div>

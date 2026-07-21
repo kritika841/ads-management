@@ -175,6 +175,18 @@ export type AuditLog = {
   actor?: Pick<Profile, "id" | "name" | "avatar_url" | "role"> | null;
 };
 
+export type EditorTimeLog = {
+  id: string;
+  ad_id: string;
+  editor_id: string;
+  session_started_at: string;
+  session_ended_at: string | null;
+  pause_reason: string | null;
+  is_active: boolean;
+  created_at: string;
+  editor?: Pick<Profile, "id" | "name" | "avatar_url" | "role">;
+};
+
 export type Assignment = {
   id: string;
   ad_id: string;
@@ -280,6 +292,11 @@ export type Database = {
         Row: Assignment;
         Insert: Partial<Assignment> & Pick<Assignment, "ad_id" | "assigned_to" | "assigned_by">;
         Update: Partial<Assignment>;
+      };
+      editor_time_logs: {
+        Row: EditorTimeLog;
+        Insert: Partial<EditorTimeLog> & Pick<EditorTimeLog, "ad_id" | "editor_id">;
+        Update: Partial<EditorTimeLog>;
       };
       tags: {
         Row: Tag;

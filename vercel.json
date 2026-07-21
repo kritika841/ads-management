@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/deadlines",
       "schedule": "35 18 * * *"
+    },
+    {
+      "path": "/api/cron/notification-email",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

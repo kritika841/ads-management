@@ -9,11 +9,12 @@ import { RequestedChanges } from "@/components/review/requested-changes";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import { parseGoogleDriveVideoFileUrl } from "@/lib/drive-urls";
+import { EditorTimer } from "@/components/workflow/editor-timer";
 import type { ResubmissionFeedbackItem } from "@/lib/resubmission";
-import type { AdWithRelations } from "@/lib/types";
+import type { AdWithRelations, EditorTimeLog } from "@/lib/types";
 import { formatDateOnly } from "@/lib/utils";
 
-export function EditorWorkspace({ ad, feedback, inProgressCount, maxConcurrentEdits }: { ad: AdWithRelations; feedback: ResubmissionFeedbackItem[]; inProgressCount: number; maxConcurrentEdits: number }) {
+export function EditorWorkspace({ ad, feedback, inProgressCount, maxConcurrentEdits, timeLogs }: { ad: AdWithRelations; feedback: ResubmissionFeedbackItem[]; inProgressCount: number; maxConcurrentEdits: number; timeLogs: EditorTimeLog[] }) {
   const atCapacity = inProgressCount >= maxConcurrentEdits;
   const router = useRouter();
   const resubmitting = ad.production_stage === "changes_requested";
@@ -89,6 +90,11 @@ export function EditorWorkspace({ ad, feedback, inProgressCount, maxConcurrentEd
             <p className="mt-1.5 text-xs text-destructive" role="alert">{driveUrlError}</p>
           ) : null}
         </Field><Field label="Editing note" hint="Optional"><Textarea className="min-h-20" value={editorNotes} onChange={(event) => setEditorNotes(event.target.value)} placeholder="What changed or what should reviewers know?" /></Field></div><div className="mt-5 flex justify-end"><Button disabled={isPending || !driveUrl.trim() || Boolean(driveUrlError)} onClick={() => resubmitting ? setConfirmationOpen(true) : submit()}>{isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Send className="size-4" aria-hidden />}{resubmitting ? "Resubmit edited video" : "Submit edited video"}</Button></div></div> : null}
+
+      {/* Live editing timer — shown whenever the editor is actively in editing or changes_requested */}
+      {(ad.production_stage === "editing" || resubmitting) ? (
+        <EditorTimer adId={ad.id} timeLogs={timeLogs} />
+      ) : null}
 
       {message ? <p className="mx-5 mb-5 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground" role="status">{message}</p> : null}
 

@@ -1,5 +1,6 @@
 import type { AdWithRelations, ProductionStage, Profile, UserRole } from "@/lib/types";
 import type { QueueKey } from "@/lib/work-queues";
+import type { EditorTimelinePoint } from "@/lib/data";
 
 export type DashboardSummaryTile = {
   key: string;
@@ -31,7 +32,8 @@ export type DashboardSummaryModel = {
   priorityEmpty: string;
   priorities: DashboardPriorityItem[];
   production: { label: string; count: number }[];
-  workloads: { id: string; name: string; avatarUrl: string | null; active: number; capacity: number }[];
+  workloads: { id: string; name: string; avatarUrl: string | null; active: number; capacity: number; avgSecondsPerVideo?: number }[];
+  timeline?: EditorTimelinePoint[];
 };
 
 const activeEditorStages: ProductionStage[] = ["ready_for_edit", "editing", "changes_requested"];
@@ -43,8 +45,10 @@ export function buildDashboardSummary(params: {
   editorWorkloads: Record<string, number>;
   editorCapacity: number;
   now?: Date;
+  editorAverageEditTimes?: Record<string, number>;
+  timelineData?: EditorTimelinePoint[];
 }): DashboardSummaryModel {
-  const { role, ads, profiles, editorWorkloads, editorCapacity } = params;
+  const { role, ads, profiles, editorWorkloads, editorCapacity, editorAverageEditTimes, timelineData } = params;
   const now = params.now ?? new Date();
   const today = istDate(now);
   const openAds = ads.filter((ad) => ad.production_stage !== "approved");
@@ -120,8 +124,16 @@ export function buildDashboardSummary(params: {
     production: [],
     workloads: profiles
       .filter((profile) => profile.active && profile.role === "editor")
-      .map((profile) => ({ id: profile.id, name: profile.name, avatarUrl: profile.avatar_url, active: editorWorkloads[profile.id] ?? 0, capacity: editorCapacity }))
-      .sort((a, b) => b.active - a.active || a.name.localeCompare(b.name))
+      .map((profile) => ({ 
+        id: profile.id, 
+        name: profile.name, 
+        avatarUrl: profile.avatar_url, 
+        active: editorWorkloads[profile.id] ?? 0, 
+        capacity: editorCapacity,
+        avgSecondsPerVideo: editorAverageEditTimes?.[profile.id]
+      }))
+      .sort((a, b) => b.active - a.active || a.name.localeCompare(b.name)),
+    timeline: timelineData
   };
 }
 
