@@ -180,7 +180,7 @@ export function EditorTimer({ adId, timeLogs }: { adId: string; timeLogs: Editor
             <div className="border-b border-border px-5 py-4">
               <h2 id="pause-timer-title" className="text-lg font-semibold text-foreground">Pause editing timer</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Let the team know why you're stepping away. This note will be visible to your manager and admin.
+                Let the team know why you&apos;re stepping away. This note will be visible to your manager and admin.
               </p>
             </div>
             <div className="space-y-4 p-5">

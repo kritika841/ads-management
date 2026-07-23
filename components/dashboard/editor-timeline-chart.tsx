@@ -5,7 +5,6 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { Gauge } from "lucide-react";
 import type { EditorTimelinePoint } from "@/lib/data";
 import { formatDurationHours } from "@/lib/utils";
-import type { Profile } from "@/lib/types";
 
 export function EditorTimelineChart({ data, profiles }: { data: EditorTimelinePoint[]; profiles: { id: string; name: string }[] }) {
   const [days, setDays] = useState<7 | 30 | 90>(30);
@@ -35,7 +34,7 @@ export function EditorTimelineChart({ data, profiles }: { data: EditorTimelinePo
           {[7, 30, 90].map((d) => (
             <button
               key={d}
-              onClick={() => setDays(d as any)}
+              onClick={() => setDays(d as 7 | 30 | 90)}
               className={`rounded-md px-2 py-1 text-xs font-medium transition ${days === d ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"}`}
             >
               {d}D

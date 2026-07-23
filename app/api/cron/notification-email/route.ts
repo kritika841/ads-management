@@ -40,8 +40,9 @@ export async function GET(request: Request) {
       // Ignore if user has no email or profile somehow
       if (!note.user || Array.isArray(note.user)) return acc;
       
-      const email = (note.user as any).email;
-      if (!acc[email]) acc[email] = { name: (note.user as any).name, notes: [] };
+      const user = note.user as { email: string; name: string };
+      const email = user.email;
+      if (!acc[email]) acc[email] = { name: user.name, notes: [] };
       acc[email].notes.push(note);
       return acc;
     }, {} as Record<string, { name: string; notes: typeof notifications }>);
