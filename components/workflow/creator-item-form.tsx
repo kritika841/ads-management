@@ -3,14 +3,14 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Link2, Loader2, Plus, Tags, UploadCloud } from "lucide-react";
-import { getNextAdName, saveCreatorItem, submitFinalClipByReviewer } from "@/app/actions/ads";
+import { getNextAdName, saveCreatorItem, submitFinalClipByReviewer, adminOverrideCreativeEdit } from "@/app/actions/ads";
 import { runServerAction } from "@/lib/client-action";
 import { RichTextEditor } from "@/components/dashboard/rich-text-editor";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { platforms } from "@/lib/constants";
 import { parseGoogleDriveVideoFileUrl } from "@/lib/drive-urls";
-import { creatorControlledStages, creatorSelectableStages, creatorStatusOptionLabels, type CreatorControlledStage } from "@/lib/production-workflow";
+import { creatorControlledStages, creatorSelectableStages, creatorStatusOptionLabels, productionStageLabels, productionStages, type CreatorControlledStage } from "@/lib/production-workflow";
 import type { AdWithRelations, Campaign, Product, Profile } from "@/lib/types";
 
 export function CreatorItemForm({
@@ -22,6 +22,7 @@ export function CreatorItemForm({
   initialAd,
   availableTags,
   editorWorkloads,
+  overrideMode,
   onSaved
 }: {
   profile: Profile;
@@ -32,6 +33,7 @@ export function CreatorItemForm({
   initialAd?: AdWithRelations | null;
   availableTags: string[];
   editorWorkloads: Record<string, number>;
+  overrideMode?: boolean;
   onSaved?: (adId: string) => void;
 }) {
   const router = useRouter();
@@ -43,9 +45,13 @@ export function CreatorItemForm({
     : activeCreators;
   const activeEditors = editors.filter((item) => item.active && item.role === "editor");
   const defaultCreatorId = initialAd?.creator_id ?? (profile.role === "content_creator" || profile.role === "manager" ? profile.id : activeCreators[0]?.id ?? "");
-  const initialStage = initialAd && creatorSelectableStages.includes(initialAd.production_stage as (typeof creatorSelectableStages)[number])
-    ? initialAd.production_stage as CreatorControlledStage
-    : creatorSelectableStages[0];
+  // In override mode the stage can be any production stage
+  const initialStageOverride = initialAd?.production_stage ?? productionStages[0];
+  const initialStage = overrideMode
+    ? initialStageOverride
+    : (initialAd && creatorSelectableStages.includes(initialAd.production_stage as (typeof creatorSelectableStages)[number])
+      ? initialAd.production_stage as CreatorControlledStage
+      : creatorSelectableStages[0]);
 
   const [name, setName] = useState(initialAd?.name ?? "");
   const [nameLoading, setNameLoading] = useState(!initialAd);
@@ -54,7 +60,7 @@ export function CreatorItemForm({
   const [creatorId, setCreatorId] = useState(defaultCreatorId);
   const [scriptHtml, setScriptHtml] = useState(initialAd?.script_html ?? "");
   const [scriptText, setScriptText] = useState(initialAd?.script_text ?? "");
-  const [stage, setStage] = useState<CreatorControlledStage>(initialStage);
+  const [stage, setStage] = useState<string>(initialStage);
   const [editorId, setEditorId] = useState(initialAd?.editor_id ?? "");
   const [rawFootageUrl, setRawFootageUrl] = useState(initialAd?.raw_footage_url ?? "");
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(initialAd?.platforms ?? []);
@@ -81,7 +87,7 @@ export function CreatorItemForm({
   }, [creatorId, initialAd]);
 
   const isHandoff = stage === "ready_for_edit";
-  const requiresRawFootage = creatorControlledStages.indexOf(stage) >= creatorControlledStages.indexOf("shoot_complete");
+  const requiresRawFootage = creatorControlledStages.indexOf(stage as CreatorControlledStage) >= creatorControlledStages.indexOf("shoot_complete");
   const canChooseCreator = profile.role === "admin" || profile.role === "manager";
 
   function handleFinalDriveUrlChange(value: string) {
@@ -122,6 +128,32 @@ export function CreatorItemForm({
   function save() {
     setMessage(null);
     startTransition(async () => {
+      if (overrideMode && initialAd) {
+        // Admin/manager override path — bypasses stage lock, creator locked
+        const response = await runServerAction(() => adminOverrideCreativeEdit({
+          id: initialAd.id,
+          name,
+          campaignId,
+          productId,
+          scriptHtml,
+          scriptText,
+          stage: stage as Parameters<typeof adminOverrideCreativeEdit>[0]["stage"],
+          editorId,
+          rawFootageUrl,
+          platforms: selectedPlatforms,
+          tags: selectedTags,
+          deadline,
+          notes
+        }));
+        if (!response.ok || !response.adId) {
+          setMessage(response.message ?? "Unable to save creative.");
+          return;
+        }
+        router.refresh();
+        onSaved?.(response.adId);
+        return;
+      }
+
       // Step 1: Save the creator item (creates or updates the ad record)
       const response = await runServerAction(() => saveCreatorItem({
         id: initialAd?.id,
@@ -131,7 +163,7 @@ export function CreatorItemForm({
         creatorId,
         scriptHtml,
         scriptText,
-        stage,
+        stage: stage as CreatorControlledStage,
         editorId,
         rawFootageUrl,
         platforms: selectedPlatforms,
@@ -167,12 +199,34 @@ export function CreatorItemForm({
 
   return (
     <div className="space-y-6">
+      {/* Override mode banner */}
+      {overrideMode ? (
+        <div className="flex items-start gap-3 rounded-xl border-2 border-amber-400/50 bg-amber-500/10 px-4 py-3">
+          <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-amber-500 text-[11px] font-bold text-white">!</span>
+          <div>
+            <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Override edit mode</p>
+            <p className="mt-0.5 text-xs text-amber-600 dark:text-amber-500">All fields are editable regardless of stage. The original creator cannot be changed.</p>
+          </div>
+        </div>
+      ) : null}
       <div className="grid gap-4 md:grid-cols-2">
         <Field label="Ad name" hint={initialAd ? undefined : "Auto-generated unique ID — read only."}><div className="relative"><Input value={name} readOnly={!initialAd} className={`font-mono tracking-widest ${!initialAd ? "bg-muted cursor-default" : ""}`} aria-busy={nameLoading} />{nameLoading ? <Loader2 className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" aria-hidden /> : null}</div></Field>
         <Field label="Campaign"><Select value={campaignId} onChange={(event) => setCampaignId(event.target.value)}>{campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}</Select></Field>
         <Field label="Product"><Select value={productId} onChange={(event) => setProductId(event.target.value)}><option value="">Choose product</option>{products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</Select></Field>
-        {canChooseCreator ? <Field label="Content creator"><Select value={creatorId} onChange={(event) => setCreatorId(event.target.value)}>{creatorsForDropdown.map((creator) => <option key={creator.id} value={creator.id}>{creator.name}{creator.id === profile.id && profile.role === "manager" ? " (you)" : ""}</option>)}</Select></Field> : null}
-        <Field label="Current status"><Select value={stage} onChange={(event) => setStage(event.target.value as CreatorControlledStage)}>{creatorSelectableStages.map((item) => <option key={item} value={item}>{creatorStatusOptionLabels[item]}</option>)}</Select></Field>
+        {/* In override mode, creator is read-only */}
+        {overrideMode ? (
+          <Field label="Content creator" hint="Read only — cannot be changed in override mode.">
+            <div className="flex h-10 items-center rounded-lg border border-border bg-muted px-3 text-sm text-muted-foreground">
+              {creators.find((c) => c.id === creatorId)?.name ?? "Unknown creator"}
+            </div>
+          </Field>
+        ) : canChooseCreator ? <Field label="Content creator"><Select value={creatorId} onChange={(event) => setCreatorId(event.target.value)}>{creatorsForDropdown.map((creator) => <option key={creator.id} value={creator.id}>{creator.name}{creator.id === profile.id && profile.role === "manager" ? " (you)" : ""}</option>)}</Select></Field> : null}
+        {/* In override mode show all stages; otherwise show creator-selectable stages only */}
+        {overrideMode ? (
+          <Field label="Production stage"><Select value={stage} onChange={(event) => setStage(event.target.value)}>{productionStages.map((item) => <option key={item} value={item}>{productionStageLabels[item]}</option>)}</Select></Field>
+        ) : (
+          <Field label="Current status"><Select value={stage} onChange={(event) => setStage(event.target.value as CreatorControlledStage)}>{creatorSelectableStages.map((item) => <option key={item} value={item}>{creatorStatusOptionLabels[item]}</option>)}</Select></Field>
+        )}
       </div>
 
       <Field label="Script / copy" hint="Required for every status."><RichTextEditor value={scriptHtml} onChange={(html, text) => { setScriptHtml(html); setScriptText(text); }} /></Field>

@@ -149,7 +149,7 @@ export function EditorPerformanceClient({
                   Total time
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Avg turnaround
+                  Avg active time
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Avg revisions
@@ -240,9 +240,9 @@ export function EditorPerformanceClient({
                     <td className="px-4 py-3 text-center font-mono text-xs text-foreground">
                       {formatDuration(stat.totalSeconds)}
                     </td>
-                    {/* Avg turnaround */}
+                    {/* Avg active time */}
                     <td className="px-4 py-3 text-center font-mono text-xs text-muted-foreground">
-                      {stat.avgTurnaroundHours !== null ? formatHours(stat.avgTurnaroundHours) : "—"}
+                      {stat.avgActiveEditHours !== null ? formatHours(stat.avgActiveEditHours) : "—"}
                     </td>
                     {/* Avg revisions */}
                     <td className="px-4 py-3 text-center">

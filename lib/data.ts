@@ -365,6 +365,35 @@ export async function getEditorTimelineData(days: number): Promise<EditorTimelin
   return result;
 }
 
+export async function getAllEditorTimeLogs(): Promise<EditorTimeLog[]> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("editor_time_logs")
+    .select("*, editor:profiles!editor_time_logs_editor_id_fkey(id,name,avatar_url,role)")
+    .order("session_started_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as EditorTimeLog[];
+}
+
+export async function getAllChangesRequestedLogs(): Promise<ActivityLog[]> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("activity_logs")
+    .select("id, ad_id, action, metadata, created_at, actor_id")
+    .in("action", [
+      "stage_changed",
+      "changes_requested",
+      "stage_changed_to_changes_requested",
+      "creator_requested_changes",
+      "final_changes_requested",
+      "approved_ad_reopened"
+    ])
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as ActivityLog[];
+}
+
+
 export async function getEditorAverageEditTimes(): Promise<Record<string, number>> {
   const admin = createSupabaseAdminClient();
   

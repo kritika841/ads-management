@@ -199,7 +199,107 @@ export async function saveCreatorItem(payload: z.input<typeof creatorItemSchema>
   return { ok: true, adId: saved.id };
 }
 
+/**
+ * Admin / manager override: edit ALL fields of any creative regardless of production stage.
+ * The creator_id is intentionally excluded — it cannot be changed.
+ */
+const adminOverrideSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().trim().min(1, "Ad name is required.").max(160),
+  campaignId: z.string().uuid({ message: "Choose a campaign." }),
+  productId: z.string().uuid({ message: "Choose a product." }),
+  scriptHtml: z.string().optional().nullable(),
+  scriptText: z.string().trim().min(1, "Script is required."),
+  stage: z.enum(["script_writing", "ready_to_shoot", "shoot_complete", "ready_for_edit", "editing", "creator_review", "final_review", "changes_requested", "approved"]),
+  editorId: z.string().uuid().optional().or(z.literal("")),
+  rawFootageUrl: z.string().trim().optional().or(z.literal("")),
+  platforms: z.array(z.string()).default([]),
+  tags: z.array(z.string()).default([]),
+  deadline: z.string().optional().nullable(),
+  notes: z.string().trim().max(4000).optional().nullable(),
+});
+
+export async function adminOverrideCreativeEdit(payload: z.input<typeof adminOverrideSchema>) {
+  const profile = await requireProfile();
+  if (profile.role !== "admin" && profile.role !== "manager") {
+    return { ok: false, message: "Only admins and managers can use override edit." };
+  }
+
+  const parsed = adminOverrideSchema.safeParse(payload);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid payload." };
+  }
+  const data = parsed.data;
+
+  const admin = createSupabaseAdminClient();
+  const { data: existing, error: fetchError } = await admin.from("ads").select("*").eq("id", data.id).maybeSingle();
+  if (fetchError || !existing) return { ok: false, message: fetchError?.message ?? "Ad not found." };
+  const currentAd = existing as Ad;
+
+  // Validate editor if provided
+  let editorId: string | null = currentAd.editor_id;
+  if (data.editorId !== undefined) {
+    if (!data.editorId) {
+      editorId = null;
+    } else {
+      const { data: editor, error: editorError } = await admin.from("profiles").select("id").eq("id", data.editorId).eq("role", "editor").eq("active", true).maybeSingle();
+      if (editorError || !editor) return { ok: false, message: editorError?.message ?? "Choose an active editor." };
+      editorId = editor.id;
+    }
+  }
+
+  const now = new Date().toISOString();
+  const stageIndex = ["script_writing", "ready_to_shoot", "shoot_complete", "ready_for_edit", "editing", "creator_review", "final_review", "changes_requested", "approved"].indexOf(data.stage);
+
+  const patch = {
+    name: data.name,
+    campaign_id: data.campaignId,
+    product_id: data.productId,
+    // creator_id intentionally omitted — cannot be changed
+    editor_id: editorId,
+    production_stage: data.stage,
+    raw_footage_url: data.rawFootageUrl?.trim() || currentAd.raw_footage_url,
+    script_html: sanitizeScriptHtml(data.scriptHtml) || null,
+    script_text: data.scriptText,
+    platforms: data.platforms,
+    deadline: data.deadline || null,
+    notes: data.notes || null,
+    script_ready_at: stageIndex >= 1 ? currentAd.script_ready_at ?? now : null,
+    shoot_completed_at: stageIndex >= 2 ? currentAd.shoot_completed_at ?? now : null,
+    raw_footage_shared_at: stageIndex >= 3 ? currentAd.raw_footage_shared_at ?? now : null,
+    editing_started_at: stageIndex >= 4 ? currentAd.editing_started_at ?? now : null,
+    creator_reviewed_at: stageIndex >= 5 ? currentAd.creator_reviewed_at ?? now : null,
+    final_approved_at: stageIndex >= 8 ? currentAd.final_approved_at ?? now : null,
+  };
+
+  const { data: savedRow, error: saveError } = await admin.from("ads").update(patch).eq("id", currentAd.id).select("*").single();
+  if (saveError || !savedRow) {
+    return { ok: false, message: saveError ? (saveError.message ?? "Unable to save.") : "Unable to save creative." };
+  }
+  const saved = savedRow as Ad;
+
+  const tagError = await syncTags(saved.id, data.tags);
+  if (tagError) return { ok: false, message: `Saved, but tags could not be updated: ${tagError}` };
+
+  await logActivity(saved.id, profile.id, "admin_creative_override", {
+    previous_stage: currentAd.production_stage,
+    new_stage: data.stage,
+    editor_id: editorId,
+    by: profile.role,
+  });
+
+  // Notify newly assigned editor
+  const newEditorAssigned = editorId && editorId !== currentAd.editor_id;
+  if (newEditorAssigned) {
+    await notifyUserIds(admin, [editorId!], saved.id, "New editing assignment", `${profile.name} assigned ${saved.name} to you.`);
+  }
+
+  revalidateAdPaths(saved.id);
+  return { ok: true, adId: saved.id };
+}
+
 export async function startEditing(adId: string) {
+
   const profile = await requireProfile();
   const parsedId = z.string().uuid().safeParse(adId);
   if (!parsedId.success) return { ok: false, message: "Invalid ad id." };

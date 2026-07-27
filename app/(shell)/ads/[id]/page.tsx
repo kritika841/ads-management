@@ -9,6 +9,7 @@ import { VideoTimestampProvider } from "@/components/review/video-timestamp-cont
 import { VersionHistory } from "@/components/review/version-history";
 import { Avatar } from "@/components/ui/avatar";
 import { ActivityDrawer } from "@/components/workflow/activity-drawer";
+import { AdminEditButton } from "@/components/workflow/admin-edit-button";
 import { CreatorItemForm } from "@/components/workflow/creator-item-form";
 import { CreatorReviewActions } from "@/components/workflow/creator-review-actions";
 import { EditingTimeDisplay } from "@/components/workflow/editing-time-display";
@@ -53,7 +54,7 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
     .map((item) => ({ ...item, hasAccess: hasAdAccess(item, ad, collaboratorIds) }));
   const isCreator = profile.role === "content_creator" && ad.creator_id === profile.id;
   const isAssignedEditor = profile.role === "editor" && ad.editor_id === profile.id;
-  const creatorCanEdit = (isCreator || isReviewer) && creatorEditableStages.includes(ad.production_stage as (typeof creatorEditableStages)[number]);
+  const creatorCanEdit = isCreator && creatorEditableStages.includes(ad.production_stage as (typeof creatorEditableStages)[number]);
   const editorHasTask = isAssignedEditor && ["ready_for_edit", "editing", "changes_requested"].includes(ad.production_stage);
   const creatorNeedsReview = isCreator && ad.production_stage === "creator_review";
   const canReassign = isReviewer && ["ready_for_edit", "editing", "changes_requested"].includes(ad.production_stage);
@@ -100,6 +101,18 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {isReviewer ? (
+              <AdminEditButton
+                ad={ad}
+                profile={profile}
+                creators={creators}
+                editors={editors}
+                campaigns={campaigns.filter((item) => item.active)}
+                products={products.filter((item) => item.active)}
+                availableTags={tags}
+                editorWorkloads={editorWorkloads}
+              />
+            ) : null}
             <ActivityDrawer activity={activity} />
             {canDeleteAd(profile.role) ? <DeleteAdButton adId={ad.id} adName={ad.name} redirectAfterDelete /> : null}
           </div>

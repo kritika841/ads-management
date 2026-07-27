@@ -14,8 +14,7 @@ export async function markNotificationRead(notificationId: string) {
     .eq("id", notificationId)
     .eq("user_id", profile.id);
 
-  revalidatePath("/dashboard");
-  revalidatePath("/library");
+  revalidatePath("/", "layout");
 }
 
 export async function markAllNotificationsRead() {
@@ -28,10 +27,17 @@ export async function markAllNotificationsRead() {
     .eq("user_id", profile.id)
     .is("read_at", null);
 
-  revalidatePath("/dashboard");
-  revalidatePath("/library");
-  revalidatePath("/analytics");
-  revalidatePath("/admin/users");
-  revalidatePath("/admin/settings");
-  revalidatePath("/admin/audit");
+  revalidatePath("/", "layout");
+}
+
+export async function clearAllNotifications() {
+  const profile = await requireProfile();
+  const supabase = await createSupabaseServerClient();
+
+  await supabase
+    .from("notifications")
+    .delete()
+    .eq("user_id", profile.id);
+
+  revalidatePath("/", "layout");
 }

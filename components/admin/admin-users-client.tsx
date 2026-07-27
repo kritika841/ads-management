@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy, Loader2, Pencil, Power, PowerOff, RefreshCw, Search, Trash2, UserPlus, Users, X } from "lucide-react";
+import { BarChart2, Check, Copy, Loader2, Pencil, Power, PowerOff, RefreshCw, Search, Trash2, UserPlus, Users, X } from "lucide-react";
 import { activateUser, deactivateUser, deleteUser, saveUser } from "@/app/actions/admin";
 import { runServerAction } from "@/lib/client-action";
 import { Avatar } from "@/components/ui/avatar";
@@ -12,10 +12,11 @@ import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { averageApprovalHours, approvalRate } from "@/lib/analytics";
 import { userRoles } from "@/lib/constants";
-import type { AdWithRelations, Profile, UserRole } from "@/lib/types";
+import type { ActivityLog, AdWithRelations, EditorTimeLog, Profile, UserRole } from "@/lib/types";
 import { cn, formatDurationHours } from "@/lib/utils";
+import { EditorPerformanceClient } from "@/components/admin/editor-performance-client";
 
-export function AdminUsersClient({ profiles, ads, currentProfileId }: { profiles: Profile[]; ads: AdWithRelations[]; currentProfileId: string }) {
+export function AdminUsersClient({ profiles, ads, timeLogs, activityLogs, currentProfileId }: { profiles: Profile[]; ads: AdWithRelations[]; timeLogs: EditorTimeLog[]; activityLogs: ActivityLog[]; currentProfileId: string }) {
   const router = useRouter();
   const { toast } = useToast();
   const [modalOpen, setModalOpen] = useState(false);
@@ -31,6 +32,7 @@ export function AdminUsersClient({ profiles, ads, currentProfileId }: { profiles
   const [copied, setCopied] = useState(false);
   const [deleting, setDeleting] = useState<Profile | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [activeTab, setActiveTab] = useState<"people" | "performance">("people");
 
   const stats = useMemo(() => new Map(profiles.map((profile) => {
     const userAds = adsForProfile(profile, ads);
@@ -120,9 +122,37 @@ export function AdminUsersClient({ profiles, ads, currentProfileId }: { profiles
     <main className="page-container">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div><h1 className="text-2xl font-semibold text-foreground">People</h1><p className="mt-1 text-sm text-muted-foreground">Manage access, roles, passwords, and team performance.</p></div>
-        <Button onClick={() => open()} className="w-full sm:w-auto"><UserPlus className="size-4" aria-hidden />Add approved user</Button>
+        {activeTab === "people" ? <Button onClick={() => open()} className="w-full sm:w-auto"><UserPlus className="size-4" aria-hidden />Add approved user</Button> : null}
       </div>
 
+      {/* Tab switcher */}
+      <div className="mt-4 flex gap-1 rounded-lg border border-border bg-muted/40 p-1 w-fit">
+        <button
+          type="button"
+          className={cn("flex items-center gap-2 rounded-md px-4 py-1.5 text-sm font-medium transition-colors", activeTab === "people" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}
+          onClick={() => setActiveTab("people")}
+        >
+          <Users className="size-4" aria-hidden />
+          People
+        </button>
+        <button
+          type="button"
+          className={cn("flex items-center gap-2 rounded-md px-4 py-1.5 text-sm font-medium transition-colors", activeTab === "performance" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}
+          onClick={() => setActiveTab("performance")}
+        >
+          <BarChart2 className="size-4" aria-hidden />
+          Editor Performance
+        </button>
+      </div>
+
+      {activeTab === "performance" ? (
+        <section className="mt-6">
+          <EditorPerformanceClient profiles={profiles} ads={ads} timeLogs={timeLogs} activityLogs={activityLogs} />
+        </section>
+      ) : null}
+
+      {activeTab === "people" ? (
+      <>
       <section className="mt-6 grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-4">
         <Metric label="Total people" value={profiles.length} />
         <Metric label="Active" value={activeCount} tone="emerald" />
@@ -160,6 +190,8 @@ export function AdminUsersClient({ profiles, ads, currentProfileId }: { profiles
         </div>
         {!filteredProfiles.length ? <div className="flex min-h-48 flex-col items-center justify-center text-center"><Users className="size-6 text-border" aria-hidden /><p className="mt-3 text-sm font-medium text-muted-foreground">No people found</p><p className="mt-1 text-xs text-muted-foreground">Try another search or role.</p></div> : null}
       </section>
+      </>
+      ) : null}
 
       {modalOpen ? (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-neutral-950/45 p-0 backdrop-blur-[2px] sm:p-6" role="dialog" aria-modal="true" aria-labelledby="user-modal-title">

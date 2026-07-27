@@ -20,7 +20,7 @@ export type EditorStat = {
   completed: number;
 
   totalSeconds: number;           // sum of all editor_time_log sessions within the date range
-  avgTurnaroundHours: number | null; // average wall-clock hours from editing_started_at to final_approved_at
+  avgActiveEditHours: number | null; // average lifetime active editing time for completed videos
   avgRevisions: number;           // average number of change_requested cycles to get to approval
   idle: boolean;                  // no active assignments right now
   adsWithLogs: AdTimeSummary[];
@@ -65,16 +65,21 @@ export function computeEditorStats(
   const endMs   = endDate   ? localEndOfDayMs(endDate)   : Infinity;
   const hasPeriod = startMs > 0 || endMs < Infinity;
 
-  // Pre-build per-editor, per-ad time totals — filtered by date range
+  // Pre-build per-editor, per-ad time totals
   const editorAdSeconds: Record<string, Record<string, number>> = {};
   const editorTotalSeconds: Record<string, number> = {};
+  const editorAdLifetimeSeconds: Record<string, Record<string, number>> = {};
 
   for (const log of timeLogs) {
     const logStartMs = new Date(log.session_started_at).getTime();
-    if (logStartMs < startMs || logStartMs > endMs) continue;
-
     const logEndMs = log.session_ended_at ? new Date(log.session_ended_at).getTime() : now;
     const seconds = Math.max(0, Math.floor((logEndMs - logStartMs) / 1000));
+
+    if (!editorAdLifetimeSeconds[log.editor_id]) editorAdLifetimeSeconds[log.editor_id] = {};
+    editorAdLifetimeSeconds[log.editor_id][log.ad_id] =
+      (editorAdLifetimeSeconds[log.editor_id][log.ad_id] ?? 0) + seconds;
+
+    if (logStartMs < startMs || logStartMs > endMs) continue;
 
     if (!editorAdSeconds[log.editor_id]) editorAdSeconds[log.editor_id] = {};
     editorAdSeconds[log.editor_id][log.ad_id] =
@@ -111,12 +116,9 @@ export function computeEditorStats(
       ).length;
 
       // Helper: was this ad assigned to the editor within the date range?
-      // "Assigned" timestamp = raw_footage_shared_at (handed to editor) or editing_started_at fallback
+      // "Assigned" timestamp = editing_started_at
       function assignedInPeriod(ad: AdWithRelations): boolean {
-        const assignedAt =
-          ad.raw_footage_shared_at
-            ? new Date(ad.raw_footage_shared_at).getTime()
-            : ad.editing_started_at
+        const assignedAt = ad.editing_started_at
             ? new Date(ad.editing_started_at).getTime()
             : null;
         if (assignedAt === null) return false;
@@ -155,18 +157,15 @@ export function computeEditorStats(
       const totalSeconds = editorTotalSeconds[editor.id] ?? 0;
       const adSecondsMap = editorAdSeconds[editor.id] ?? {};
 
-      // ─── AVG TURNAROUND ──────────────────────────────────────────────
-      // Wall-clock hours from editing_started_at to final_approved_at for completed ads
-      const turnaroundHoursList: number[] = completedAds.flatMap((ad) => {
-        const approvedAt = ad.final_approved_at ?? ad.approved_at;
-        const editStart  = ad.editing_started_at;
-        if (!approvedAt || !editStart) return [];
-        const hours = (new Date(approvedAt).getTime() - new Date(editStart).getTime()) / 3_600_000;
-        return hours >= 0 ? [hours] : [];
+      // ─── AVG ACTIVE EDITING TIME ──────────────────────────────────────────────
+      // Average lifetime active editing time for completed ads
+      const activeEditHoursList: number[] = completedAds.flatMap((ad) => {
+        const lifetimeSeconds = editorAdLifetimeSeconds[editor.id]?.[ad.id] ?? 0;
+        return lifetimeSeconds > 0 ? [lifetimeSeconds / 3600] : [];
       });
-      const avgTurnaroundHours =
-        turnaroundHoursList.length > 0
-          ? turnaroundHoursList.reduce((s, v) => s + v, 0) / turnaroundHoursList.length
+      const avgActiveEditHours =
+        activeEditHoursList.length > 0
+          ? activeEditHoursList.reduce((s, v) => s + v, 0) / activeEditHoursList.length
           : null;
 
       // ─── AVG REVISIONS ───────────────────────────────────────────────
@@ -215,7 +214,7 @@ export function computeEditorStats(
         started,
         completed,
         totalSeconds,
-        avgTurnaroundHours,
+        avgActiveEditHours,
         avgRevisions,
         idle: assigned === 0,
         adsWithLogs,

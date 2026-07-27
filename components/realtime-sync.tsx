@@ -37,8 +37,10 @@ export function RealtimeSync({ userId, role }: { userId: string; role: UserRole 
       statusTimer.current = setTimeout(() => setState(realtimeConnected.current ? "live" : "fallback"), 4_000);
     };
 
-    const checkForUpdates = async () => {
-      if (!active || checking.current || document.visibilityState !== "visible" || !navigator.onLine) return;
+    const checkForUpdates = async (eventOrForce?: unknown) => {
+      if (!active || checking.current || !navigator.onLine) return;
+      const isForced = !!eventOrForce;
+      if (!isForced && document.visibilityState !== "visible") return;
       checking.current = true;
       try {
         const { data, error } = await supabase.rpc("get_user_sync_state");

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
+  BarChart2,
   BarChart3,
   Bell,
   House,
@@ -42,12 +43,16 @@ export function AppShell({
     { href: "/library", label: "Creative library", icon: LayoutDashboard },
     ...(profile.role === "admin" || profile.role === "manager"
       ? [{ href: "/analytics", label: "Analytics", icon: BarChart3 }]
+      : []),
+    ...(profile.role === "manager"
+      ? [{ href: "/admin/performance", label: "Editor Performance", icon: BarChart2 }]
       : [])
   ];
   const adminLinks: NavItem[] =
     profile.role === "admin"
       ? [
           { href: "/admin/users", label: "People", icon: Users },
+          { href: "/admin/performance", label: "Editor Performance", icon: BarChart2 },
           { href: "/admin/products", label: "Products", icon: Package },
           { href: "/admin/settings", label: "Settings", icon: Settings }
         ]
@@ -117,7 +122,7 @@ export function AppShell({
             <div className="flex items-center gap-1.5">
               <ThemeToggle />
               <RealtimeSync userId={profile.id} role={profile.role} />
-              <NotificationBell notifications={notifications}>
+              <NotificationBell notifications={notifications} userId={profile.id}>
                 <Bell className="size-[18px]" aria-hidden />
               </NotificationBell>
               <div className="ml-1 flex items-center gap-2 rounded-lg border border-border bg-card py-1 pl-1 pr-2">
