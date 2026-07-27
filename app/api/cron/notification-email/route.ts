@@ -4,7 +4,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export const maxDuration = 60; // Extend duration if many emails
 
-// Vercel Cron handler for emailing unread notifications after 1 hour.
+// Cron handler for emailing unread notifications after 1 hour.
 export async function GET(request: Request) {
   // Basic auth check for cron
   const authHeader = request.headers.get("authorization");
