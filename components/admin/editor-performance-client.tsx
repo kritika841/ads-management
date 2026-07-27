@@ -116,7 +116,7 @@ export function EditorPerformanceClient({
           <span className="font-medium text-foreground">Column legend:</span>
           <span className="flex items-center gap-1.5">
             <span className="inline-block size-2 rounded-full bg-primary" />
-            <span className="font-medium">In-period</span> — assigned & actioned within selected dates
+            <span className="font-medium">In-period</span> — assigned and actioned within the selected dates
           </span>
           <span className="flex items-center gap-1.5">
             <span className="inline-block size-2 rounded-full bg-amber-500" />
@@ -318,7 +318,7 @@ function ExpandedEditorDetail({ stat, hasPeriod }: { stat: EditorStat; hasPeriod
             <tr className="border-b border-border bg-muted/30">
               <th className="px-3 py-2 text-left font-semibold text-muted-foreground">Video name</th>
               <th className="px-3 py-2 text-left font-semibold text-muted-foreground">Stage</th>
-              <th className="px-3 py-2 text-center font-semibold text-muted-foreground">Time logged</th>
+                <th className="px-3 py-2 text-center font-semibold text-muted-foreground">Time logged</th>
               <th className="px-3 py-2 text-center font-semibold text-muted-foreground">
                 Revisions
                 <span className="ml-1 font-normal text-muted-foreground/70">(submissions with changes)</span>
@@ -372,7 +372,7 @@ function ExpandedEditorDetail({ stat, hasPeriod }: { stat: EditorStat; hasPeriod
 
       {/* Per-editor stats summary in detail panel */}
       {hasPeriod && (
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <MiniStat label="Started — in-period" value={stat.startedInPeriod} color="primary" />
           <MiniStat label="Started — backlog" value={stat.startedBacklog} color="amber" />
           <MiniStat label="Completed — in-period" value={stat.completedInPeriod} color="success" />

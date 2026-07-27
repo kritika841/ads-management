@@ -150,12 +150,14 @@ export async function saveCreatorItem(payload: z.input<typeof creatorItemSchema>
   }
 
   const now = new Date().toISOString();
+  const assignedAt = editorId ? (currentAd?.editor_id === editorId && currentAd?.assigned_at ? currentAd.assigned_at : now) : null;
   const patch = {
     name: data.name,
     campaign_id: data.campaignId,
     product_id: data.productId,
     creator_id: data.creatorId,
     editor_id: editorId,
+    assigned_at: assignedAt,
     production_stage: data.stage,
     raw_footage_url: rawFootageUrl,
     script_html: sanitizeScriptHtml(data.scriptHtml) || null,
@@ -250,6 +252,7 @@ export async function adminOverrideCreativeEdit(payload: z.input<typeof adminOve
 
   const now = new Date().toISOString();
   const stageIndex = ["script_writing", "ready_to_shoot", "shoot_complete", "ready_for_edit", "editing", "creator_review", "final_review", "changes_requested", "approved"].indexOf(data.stage);
+  const assignedAt = editorId ? (currentAd.editor_id === editorId && currentAd.assigned_at ? currentAd.assigned_at : now) : null;
 
   const patch = {
     name: data.name,
@@ -257,6 +260,7 @@ export async function adminOverrideCreativeEdit(payload: z.input<typeof adminOve
     product_id: data.productId,
     // creator_id intentionally omitted — cannot be changed
     editor_id: editorId,
+    assigned_at: assignedAt,
     production_stage: data.stage,
     raw_footage_url: data.rawFootageUrl?.trim() || currentAd.raw_footage_url,
     script_html: sanitizeScriptHtml(data.scriptHtml) || null,

@@ -15,6 +15,7 @@ const analyticsSlaMigration = readFileSync("supabase/migrations/0015_analytics_s
 const workflowIntegrityMigration = readFileSync("supabase/migrations/0016_workflow_integrity.sql", "utf8");
 const atomicSubmissionMigration = readFileSync("supabase/migrations/0017_atomic_submission_and_tags.sql", "utf8");
 const atomicEditorTransitionsMigration = readFileSync("supabase/migrations/0018_atomic_editor_transitions.sql", "utf8");
+const assignedEditorTimestampMigration = readFileSync("supabase/migrations/0027_assigned_editor_timestamp.sql", "utf8");
 
 describe("database migration", () => {
   it("enables RLS on core tables", () => {
@@ -134,5 +135,12 @@ describe("database migration", () => {
     expect(atomicEditorTransitionsMigration).toContain("p_action = 'assign_editor'");
     expect(atomicEditorTransitionsMigration).toContain("p_action = 'reassign_editor'");
     expect(atomicEditorTransitionsMigration).toContain("insert into public.activity_logs");
+  });
+
+  it("stores a real editor assignment timestamp and backfills legacy rows", () => {
+    expect(assignedEditorTimestampMigration).toContain("add column if not exists assigned_at timestamptz");
+    expect(assignedEditorTimestampMigration).toContain("coalesce(raw_footage_shared_at, editing_started_at, workflow_status_changed_at)");
+    expect(assignedEditorTimestampMigration).toContain("assigned_at = now()");
+    expect(assignedEditorTimestampMigration).toContain("create index if not exists ads_assigned_at_idx");
   });
 });

@@ -11,3 +11,5 @@ supabase/.temp
 .env.*.local
 /satmi-485912-b4298b754909.json
 *.tsbuildinfo
+.vercel
+.env*

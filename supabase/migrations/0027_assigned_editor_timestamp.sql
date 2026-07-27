@@ -1,3 +1,13 @@
+alter table public.ads
+add column if not exists assigned_at timestamptz;
+
+update public.ads
+set assigned_at = coalesce(raw_footage_shared_at, editing_started_at, workflow_status_changed_at)
+where assigned_at is null
+  and editor_id is not null;
+
+create index if not exists ads_assigned_at_idx on public.ads(assigned_at);
+
 create or replace function public.transition_editor_work_atomic(
   p_ad_id uuid,
   p_actor_id uuid,
