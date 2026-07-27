@@ -39,6 +39,11 @@ export type AdTimeSummary = {
 
 const activeStages = new Set(["ready_for_edit", "editing", "changes_requested"]);
 
+function assignedAtMs(ad: AdWithRelations): number | null {
+  const value = ad.assigned_at ?? ad.raw_footage_shared_at ?? ad.editing_started_at ?? null;
+  return value ? new Date(value).getTime() : null;
+}
+
 /** Parse a Date as local midnight (YYYY-MM-DD -> 00:00:00 local). */
 function localMidnightMs(d: Date): number {
   const iso = d.toISOString().slice(0, 10); // "YYYY-MM-DD"
@@ -116,11 +121,9 @@ export function computeEditorStats(
       ).length;
 
       // Helper: was this ad assigned to the editor within the date range?
-      // "Assigned" timestamp = editing_started_at
+      // "Assigned" timestamp = assigned_at (legacy fallback: raw_footage_shared_at / editing_started_at)
       function assignedInPeriod(ad: AdWithRelations): boolean {
-        const assignedAt = ad.editing_started_at
-            ? new Date(ad.editing_started_at).getTime()
-            : null;
+        const assignedAt = assignedAtMs(ad);
         if (assignedAt === null) return false;
         return assignedAt >= startMs && assignedAt <= endMs;
       }
@@ -193,7 +196,7 @@ export function computeEditorStats(
             totalSeconds: adSecondsMap[ad.id] ?? 0,
             revisions: Math.max(fromLogs, fromVersions),
             isActive: activeStages.has(ad.production_stage),
-            startedAt: ad.editing_started_at,
+            startedAt: ad.assigned_at ?? ad.raw_footage_shared_at ?? ad.editing_started_at,
           };
         })
         .sort((a, b) => {

@@ -88,6 +88,7 @@ export type Ad = {
   script_ready_at: string | null;
   shoot_completed_at: string | null;
   raw_footage_shared_at: string | null;
+  assigned_at?: string | null;
   editing_started_at: string | null;
   creator_reviewed_at: string | null;
   final_approved_at: string | null;
