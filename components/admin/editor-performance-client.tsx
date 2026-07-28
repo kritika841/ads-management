@@ -46,16 +46,11 @@ export function EditorPerformanceClient({
   }
 
   const totalAssigned = stats.reduce((s, e) => s + e.assigned, 0);
-  const totalCompleted = stats.reduce((s, e) => s + e.completed, 0);
+  const totalCompleted = stats.reduce((s, e) => s + (hasPeriod ? e.completedInPeriod : e.completed), 0);
   const totalSeconds = stats.reduce((s, e) => s + e.totalSeconds, 0);
+  const totalRevisionCount = stats.reduce((s, e) => s + e.totalRevisions, 0);
+  const overallAvgRevisions = totalCompleted > 0 ? Math.round((totalRevisionCount / totalCompleted) * 10) / 10 : null;
   const idleCount = stats.filter((e) => e.idle).length;
-  const overallAvgRevisions = (() => {
-    const withRevs = stats.filter((e) => e.completed > 0);
-    if (!withRevs.length) return 0;
-    const total = withRevs.reduce((s, e) => s + e.avgRevisions * e.completed, 0);
-    const count = withRevs.reduce((s, e) => s + e.completed, 0);
-    return count > 0 ? Math.round((total / count) * 10) / 10 : 0;
-  })();
 
   return (
     <div className="space-y-6">
@@ -110,21 +105,6 @@ export function EditorPerformanceClient({
         />
       </div>
 
-      {/* Legend for split columns */}
-      {hasPeriod && (
-        <div className="flex flex-wrap items-center gap-4 rounded-lg border border-border bg-muted/30 px-4 py-2.5 text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">Column legend:</span>
-          <span className="flex items-center gap-1.5">
-            <span className="inline-block size-2 rounded-full bg-primary" />
-            <span className="font-medium">In-period</span> — assigned and actioned within the selected dates
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="inline-block size-2 rounded-full bg-amber-500" />
-            <span className="font-medium">Backlog</span> — assigned before the range, actioned during it
-          </span>
-        </div>
-      )}
-
       {/* Per-editor rows */}
       <div className="overflow-hidden rounded-xl border border-border">
         <div className="overflow-x-auto">
@@ -137,19 +117,14 @@ export function EditorPerformanceClient({
                 <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Assigned
                 </th>
-                {/* Started — split header */}
-                <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground" colSpan={hasPeriod ? 2 : 1}>
+                <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Started
                 </th>
-                {/* Completed — split header */}
-                <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground" colSpan={hasPeriod ? 2 : 1}>
+                <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Completed
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Total time
-                </th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Avg active time
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Avg revisions
@@ -159,25 +134,6 @@ export function EditorPerformanceClient({
                 </th>
                 <th className="w-8 px-2" />
               </tr>
-              {hasPeriod && (
-                <tr className="border-b border-border bg-muted/20">
-                  {/* spacers for Editor, Assigned */}
-                  <th className="px-4 py-1" />
-                  <th className="px-4 py-1" />
-                  {/* Started sub-headers */}
-                  <th className="px-2 py-1 text-center text-[10px] font-medium text-primary">In-period</th>
-                  <th className="px-2 py-1 text-center text-[10px] font-medium text-amber-500">Backlog</th>
-                  {/* Completed sub-headers */}
-                  <th className="px-2 py-1 text-center text-[10px] font-medium text-primary">In-period</th>
-                  <th className="px-2 py-1 text-center text-[10px] font-medium text-amber-500">Backlog</th>
-                  {/* spacers for rest */}
-                  <th className="px-4 py-1" />
-                  <th className="px-4 py-1" />
-                  <th className="px-4 py-1" />
-                  <th className="px-4 py-1" />
-                  <th className="px-2 py-1" />
-                </tr>
-              )}
             </thead>
             <tbody className="divide-y divide-border">
               {stats.map((stat) => (
@@ -198,56 +154,23 @@ export function EditorPerformanceClient({
                         </div>
                       </div>
                     </td>
-                    {/* Assigned */}
                     <td className="px-4 py-3 text-center">
                       <span className="font-semibold text-foreground">{stat.assigned}</span>
                     </td>
-                    {/* Started — split or single */}
-                    {hasPeriod ? (
-                      <>
-                        <td className="px-2 py-3 text-center">
-                          <span className="font-semibold text-primary">{stat.startedInPeriod}</span>
-                        </td>
-                        <td className="px-2 py-3 text-center">
-                          <span className={cn("font-semibold", stat.startedBacklog > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground")}>
-                            {stat.startedBacklog > 0 ? stat.startedBacklog : "—"}
-                          </span>
-                        </td>
-                      </>
-                    ) : (
-                      <td className="px-4 py-3 text-center">
-                        <span className="font-semibold text-foreground">{stat.started}</span>
-                      </td>
-                    )}
-                    {/* Completed — split or single */}
-                    {hasPeriod ? (
-                      <>
-                        <td className="px-2 py-3 text-center">
-                          <span className="font-semibold text-success">{stat.completedInPeriod}</span>
-                        </td>
-                        <td className="px-2 py-3 text-center">
-                          <span className={cn("font-semibold", stat.completedBacklog > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground")}>
-                            {stat.completedBacklog > 0 ? stat.completedBacklog : "—"}
-                          </span>
-                        </td>
-                      </>
-                    ) : (
-                      <td className="px-4 py-3 text-center">
-                        <span className="font-semibold text-success">{stat.completed}</span>
-                      </td>
-                    )}
+                    <td className="px-2 py-3 text-center">
+                      <span className="font-semibold text-primary">{hasPeriod ? stat.startedInPeriod : stat.started}</span>
+                    </td>
+                    <td className="px-2 py-3 text-center">
+                      <span className="font-semibold text-success">{hasPeriod ? stat.completedInPeriod : stat.completed}</span>
+                    </td>
                     {/* Total time */}
                     <td className="px-4 py-3 text-center font-mono text-xs text-foreground">
                       {formatDuration(stat.totalSeconds)}
                     </td>
-                    {/* Avg active time */}
-                    <td className="px-4 py-3 text-center font-mono text-xs text-muted-foreground">
-                      {stat.avgActiveEditHours !== null ? formatHours(stat.avgActiveEditHours) : "—"}
-                    </td>
                     {/* Avg revisions */}
                     <td className="px-4 py-3 text-center">
-                      <span className={stat.avgRevisions > 1 ? "font-semibold text-amber-600 dark:text-amber-400" : "text-foreground"}>
-                        {stat.completed > 0 ? stat.avgRevisions : "—"}
+                      <span className={stat.avgRevisions !== null ? "font-semibold text-amber-600 dark:text-amber-400" : "text-foreground"}>
+                        {stat.avgRevisions !== null ? stat.avgRevisions.toFixed(1) : "—"}
                       </span>
                     </td>
                     {/* Status */}
@@ -273,7 +196,7 @@ export function EditorPerformanceClient({
                   </tr>
                   {expanded === stat.id && (
                     <tr key={`${stat.id}-detail`}>
-                      <td colSpan={hasPeriod ? 11 : 9} className="bg-muted/30 px-4 pb-4 pt-2">
+                      <td colSpan={8} className="bg-muted/30 px-4 pb-4 pt-2">
                         <ExpandedEditorDetail stat={stat} hasPeriod={hasPeriod} />
                       </td>
                     </tr>
@@ -286,10 +209,9 @@ export function EditorPerformanceClient({
       </div>
 
       {/* Overall avg revisions footer note */}
-      {stats.some((s) => s.completed > 0) && (
+      {overallAvgRevisions !== null && (
         <p className="text-xs text-muted-foreground text-right">
-          Overall avg revisions across all editors:{" "}
-          <span className="font-medium text-foreground">{overallAvgRevisions}</span>
+          Overall average revisions per completed video: <span className="font-medium text-foreground">{overallAvgRevisions.toFixed(1)}</span>
         </p>
       )}
     </div>
@@ -297,12 +219,14 @@ export function EditorPerformanceClient({
 }
 
 function ExpandedEditorDetail({ stat, hasPeriod }: { stat: EditorStat; hasPeriod: boolean }) {
-  if (stat.adsWithLogs.length === 0) {
+  const visibleAds = stat.adsWithLogs.filter((ad) => ad.stage !== "ready_for_edit");
+
+  if (visibleAds.length === 0) {
     return (
       <div className="rounded-lg border border-border bg-card p-4 text-center text-sm text-muted-foreground">
         {stat.idle
           ? "This editor currently has no videos assigned to them."
-          : "No editing time recorded yet for any assigned videos."}
+          : "No assigned videos to review yet."}
       </div>
     );
   }
@@ -323,14 +247,12 @@ function ExpandedEditorDetail({ stat, hasPeriod }: { stat: EditorStat; hasPeriod
                 Revisions
                 <span className="ml-1 font-normal text-muted-foreground/70">(submissions with changes)</span>
               </th>
-              {hasPeriod && (
-                <th className="px-3 py-2 text-center font-semibold text-muted-foreground">Bucket</th>
-              )}
-              <th className="px-3 py-2 text-center font-semibold text-muted-foreground">State</th>
+              <th className="px-3 py-2 text-left font-semibold text-muted-foreground">Product</th>
+              <th className="px-3 py-2 text-center font-semibold text-muted-foreground">Progress</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {stat.adsWithLogs.map((ad) => (
+            {visibleAds.map((ad) => (
               <tr key={ad.adId} className="hover:bg-muted/30">
                 <td className="px-3 py-2">
                   <span className="font-medium text-foreground">{ad.adName}</span>
@@ -346,13 +268,11 @@ function ExpandedEditorDetail({ stat, hasPeriod }: { stat: EditorStat; hasPeriod
                     {ad.revisions > 0 ? ad.revisions : "—"}
                   </span>
                 </td>
-                {hasPeriod && (
-                  <td className="px-3 py-2 text-center">
-                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-muted text-muted-foreground">
-                      {ad.isActive ? "Active" : "—"}
-                    </span>
-                  </td>
-                )}
+                <td className="px-3 py-2 text-left">
+                  <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                    {ad.productName ?? "No product"}
+                  </span>
+                </td>
                 <td className="px-3 py-2 text-center">
                   {ad.isActive ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
@@ -372,11 +292,9 @@ function ExpandedEditorDetail({ stat, hasPeriod }: { stat: EditorStat; hasPeriod
 
       {/* Per-editor stats summary in detail panel */}
       {hasPeriod && (
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <MiniStat label="Started — in-period" value={stat.startedInPeriod} color="primary" />
-          <MiniStat label="Started — backlog" value={stat.startedBacklog} color="amber" />
-          <MiniStat label="Completed — in-period" value={stat.completedInPeriod} color="success" />
-          <MiniStat label="Completed — backlog" value={stat.completedBacklog} color="amber" />
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-2">
+          <MiniStat label="Started" value={stat.startedInPeriod} color="primary" />
+          <MiniStat label="Completed" value={stat.completedInPeriod} color="success" />
         </div>
       )}
     </div>
