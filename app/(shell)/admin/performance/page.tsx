@@ -1,6 +1,6 @@
 import { EditorPerformanceClient } from "@/components/admin/editor-performance-client";
 import { requireRole } from "@/lib/auth";
-import { getAds, getAllChangesRequestedLogs, getAllEditorTimeLogs, getProfiles } from "@/lib/data";
+import { getAds, getAllActivityLogs, getAllEditorTimeLogs, getProfiles } from "@/lib/data";
 
 export const metadata = { title: "Editor Performance – AdFlow" };
 
@@ -10,7 +10,7 @@ export default async function EditorPerformancePage() {
     getProfiles(),
     getAds(),
     getAllEditorTimeLogs(),
-    getAllChangesRequestedLogs(),
+    getAllActivityLogs(),
   ]);
 
   return (

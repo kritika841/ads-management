@@ -1,27 +1,32 @@
 import type { ActivityLog, AdWithRelations, EditorTimeLog, Profile } from "@/lib/types";
 
+type TimelineStage = "ready_for_edit" | "editing" | "approved";
+
+type AdTimeline = {
+  readyForEdit: number[];
+  editing: number[];
+  approved: number[];
+};
+
 export type EditorStat = {
   id: string;
   name: string;
   email: string;
   avatarUrl: string | null;
-  assigned: number;               // currently active (ready_for_edit | editing | changes_requested)
+  assigned: number;               // videos assigned to this editor within the selected period
 
-  // Started — split into two buckets
-  startedInPeriod: number;        // assigned within range AND editing started within range
-  startedBacklog: number;         // assigned BEFORE range but editing started within range
+  startedInPeriod: number;        // editing started within the selected period
+  startedBacklog: number;         // kept for compatibility; no longer displayed
 
-  // Completed — split into two buckets
-  completedInPeriod: number;      // assigned within range AND approved within range
-  completedBacklog: number;       // assigned BEFORE range but approved within range
+  completedInPeriod: number;      // approved within the selected period
+  completedBacklog: number;       // kept for compatibility; no longer displayed
 
-  /** Kept as convenience totals (sum of the two buckets above) */
   started: number;
   completed: number;
 
   totalSeconds: number;           // sum of all editor_time_log sessions within the date range
-  avgActiveEditHours: number | null; // average lifetime active editing time for completed videos
-  avgRevisions: number;           // average number of change_requested cycles to get to approval
+  totalRevisions: number;         // total number of change_requested cycles for completed videos
+  avgRevisions: number | null;    // average revisions per completed video
   idle: boolean;                  // no active assignments right now
   adsWithLogs: AdTimeSummary[];
 };
@@ -35,13 +40,93 @@ export type AdTimeSummary = {
   revisions: number;   // number of times this ad went to changes_requested
   isActive: boolean;
   startedAt: string | null;
+  periodState: "completed_in_period" | "started_in_period" | "backlog" | "other";
+  productName: string | null;
 };
 
 const activeStages = new Set(["ready_for_edit", "editing", "changes_requested"]);
+const assignmentActions = new Set(["editor_assigned", "editor_reassigned", "assign_editor", "reassign_editor", "assigned"]);
 
 function assignedAtMs(ad: AdWithRelations): number | null {
   const value = ad.assigned_at ?? ad.raw_footage_shared_at ?? ad.editing_started_at ?? null;
   return value ? new Date(value).getTime() : null;
+}
+
+function timelineStageFromLog(log: ActivityLog): TimelineStage | null {
+  const meta = log.metadata as Record<string, unknown> | null;
+  const stage =
+    (typeof meta?.new_stage === "string" ? meta.new_stage : null) ??
+    (typeof meta?.production_stage === "string" ? meta.production_stage : null);
+
+  if (stage === "ready_for_edit" || stage === "editing" || stage === "approved") {
+    return stage;
+  }
+
+  if (log.action === "editor_assigned" || log.action === "editor_reassigned" || log.action === "assigned") {
+    return "ready_for_edit";
+  }
+  if (log.action === "editing_started") {
+    return "editing";
+  }
+  if (log.action === "final_approval_granted" || log.action === "approved") {
+    return "approved";
+  }
+
+  return null;
+}
+
+function buildTimelines(activityLogs: ActivityLog[]): Record<string, AdTimeline> {
+  const timelines: Record<string, AdTimeline> = {};
+
+  for (const log of activityLogs) {
+    if (!log.ad_id) continue;
+    const stage = timelineStageFromLog(log);
+    if (!stage) continue;
+
+    const at = new Date(log.created_at).getTime();
+    if (!Number.isFinite(at)) continue;
+
+    if (!timelines[log.ad_id]) {
+      timelines[log.ad_id] = { readyForEdit: [], editing: [], approved: [] };
+    }
+
+    if (stage === "ready_for_edit") timelines[log.ad_id].readyForEdit.push(at);
+    if (stage === "editing") timelines[log.ad_id].editing.push(at);
+    if (stage === "approved") timelines[log.ad_id].approved.push(at);
+  }
+
+  for (const timeline of Object.values(timelines)) {
+    timeline.readyForEdit.sort((a, b) => a - b);
+    timeline.editing.sort((a, b) => a - b);
+    timeline.approved.sort((a, b) => a - b);
+  }
+
+  return timelines;
+}
+
+function latestAtOrBefore(values: number[], beforeMs: number): number | null {
+  for (let index = values.length - 1; index >= 0; index--) {
+    if (values[index] <= beforeMs) return values[index];
+  }
+  return null;
+}
+
+function stageAtOrFallback(ad: AdWithRelations, timelines: Record<string, AdTimeline>, adId: string, stage: TimelineStage): number | null {
+  const timeline = timelines[adId];
+  if (timeline) {
+    const fromTimeline =
+      stage === "ready_for_edit"
+        ? latestAtOrBefore(timeline.readyForEdit, Infinity)
+        : stage === "editing"
+          ? latestAtOrBefore(timeline.editing, Infinity)
+          : latestAtOrBefore(timeline.approved, Infinity);
+    if (fromTimeline !== null) return fromTimeline;
+  }
+
+  if (stage === "ready_for_edit") return assignedAtMs(ad);
+  if (stage === "editing") return ad.editing_started_at ? new Date(ad.editing_started_at).getTime() : null;
+  const approvedAt = ad.final_approved_at ?? ad.approved_at;
+  return approvedAt ? new Date(approvedAt).getTime() : null;
 }
 
 /** Parse a Date as local midnight (YYYY-MM-DD -> 00:00:00 local). */
@@ -68,8 +153,6 @@ export function computeEditorStats(
   // Use local midnight/end-of-day so that picking "today" in IST doesn't shift to UTC and miss sessions
   const startMs = startDate ? localMidnightMs(startDate) : 0;
   const endMs   = endDate   ? localEndOfDayMs(endDate)   : Infinity;
-  const hasPeriod = startMs > 0 || endMs < Infinity;
-
   // Pre-build per-editor, per-ad time totals
   const editorAdSeconds: Record<string, Record<string, number>> = {};
   const editorTotalSeconds: Record<string, number> = {};
@@ -110,84 +193,89 @@ export function computeEditorStats(
     }
   }
 
+  const timelines = buildTimelines(activityLogs);
+  const adById = Object.fromEntries(ads.map((ad) => [ad.id, ad]));
+
+  const adsAssignedInPeriod: Record<string, Set<string>> = {};
+  for (const log of activityLogs) {
+    if (!log.ad_id) continue;
+    const stage = timelineStageFromLog(log);
+    const meta = log.metadata as Record<string, unknown> | null;
+    const targetEditorId = typeof meta?.editor_id === "string"
+      ? meta.editor_id
+      : typeof meta?.editorId === "string"
+        ? meta.editorId
+        : null;
+    if (!targetEditorId) continue;
+    if (!assignmentActions.has(log.action) && stage !== "ready_for_edit") continue;
+
+    const at = new Date(log.created_at).getTime();
+    if (!Number.isFinite(at)) continue;
+    if (at < startMs || at > endMs) continue;
+
+    (adsAssignedInPeriod[targetEditorId] ??= new Set()).add(log.ad_id);
+  }
+
   return editors
     .filter((p) => p.role === "editor")
     .map((editor) => {
       const editorAds = ads.filter((ad) => ad.editor_id === editor.id);
 
-      // Assigned = current snapshot — NOT date-filtered (it's a "right now" value)
-      const assigned = editorAds.filter((ad) =>
-        activeStages.has(ad.production_stage)
-      ).length;
-
-      // Helper: was this ad assigned to the editor within the date range?
-      // "Assigned" timestamp = assigned_at (legacy fallback: raw_footage_shared_at / editing_started_at)
-      function assignedInPeriod(ad: AdWithRelations): boolean {
-        const assignedAt = assignedAtMs(ad);
-        if (assignedAt === null) return false;
-        return assignedAt >= startMs && assignedAt <= endMs;
-      }
-
-      // ─── STARTED split ───────────────────────────────────────────────
-      // A video counts as "started" if editing_started_at is within the range
-      const startedAds = editorAds.filter((ad) => {
-        if (!ad.editing_started_at) return false;
-        const ms = new Date(ad.editing_started_at).getTime();
-        return ms >= startMs && ms <= endMs;
+    const assignedAdIdsThisPeriod = adsAssignedInPeriod[editor.id] ?? new Set<string>();
+      const assigned = assignedAdIdsThisPeriod.size;
+      // ─── STARTED ─────────────────────────────────────────────────────
+      const startedAds = editorAds.flatMap((ad) => {
+        const startedAt = stageAtOrFallback(ad, timelines, ad.id, "editing");
+        if (startedAt === null) return [];
+        return [{ ad, startedAt }];
       });
-      const startedInPeriod = startedAds.filter((ad) => assignedInPeriod(ad)).length;
-      const startedBacklog  = startedAds.filter((ad) => !assignedInPeriod(ad)).length;
       const started = startedAds.length;
-
-      // ─── COMPLETED split ─────────────────────────────────────────────
-      // A video counts as "completed" if final_approved_at is within the range
-      const completedAds = editorAds.filter((ad) => {
-        const approvedAt = ad.final_approved_at ?? ad.approved_at;
-        if (!approvedAt) return false;
-        const ms = new Date(approvedAt).getTime();
-        return ms >= startMs && ms <= endMs;
+      const startedInPeriod = startedAds.filter(
+        ({ ad, startedAt }) =>
+          startedAt >= startMs && startedAt <= endMs && assignedAdIdsThisPeriod.has(ad.id)
+      ).length;
+      const startedBacklog = Math.max(0, started - startedInPeriod);
+      // ─── COMPLETED ───────────────────────────────────────────────────
+      const completedAds = editorAds.flatMap((ad) => {
+        if (ad.production_stage !== "approved" || ad.status !== "approved") return [];
+        const completedAt = stageAtOrFallback(ad, timelines, ad.id, "approved");
+        if (completedAt === null) return [];
+        return [{ ad, completedAt }];
       });
-      const completedInPeriod = completedAds.filter((ad) => {
-        if (!hasPeriod) return true;
-        return assignedInPeriod(ad);
-      }).length;
-      const completedBacklog  = completedAds.filter((ad) => {
-        if (!hasPeriod) return false;
-        return !assignedInPeriod(ad);
-      }).length;
-      const completed = completedAds.length;
-
+     const completed = completedAds.length;
+      const completedInPeriodAds = completedAds.filter(
+        ({ ad, completedAt }) =>
+          completedAt >= startMs && completedAt <= endMs && assignedAdIdsThisPeriod.has(ad.id)
+      );
+      const completedInPeriod = completedInPeriodAds.length;
+      const completedBacklog = Math.max(0, completed - completedInPeriod);
       const totalSeconds = editorTotalSeconds[editor.id] ?? 0;
       const adSecondsMap = editorAdSeconds[editor.id] ?? {};
 
-      // ─── AVG ACTIVE EDITING TIME ──────────────────────────────────────────────
-      // Average lifetime active editing time for completed ads
-      const activeEditHoursList: number[] = completedAds.flatMap((ad) => {
-        const lifetimeSeconds = editorAdLifetimeSeconds[editor.id]?.[ad.id] ?? 0;
-        return lifetimeSeconds > 0 ? [lifetimeSeconds / 3600] : [];
-      });
-      const avgActiveEditHours =
-        activeEditHoursList.length > 0
-          ? activeEditHoursList.reduce((s, v) => s + v, 0) / activeEditHoursList.length
-          : null;
-
-      // ─── AVG REVISIONS ───────────────────────────────────────────────
-      // Use activity log counts; fall back to (version_count - 1) when logs are absent
-      const totalRevisions = completedAds.reduce((sum, ad) => {
-        // Prefer the activity-log count; if zero, try version_count as a fallback
-        const fromLogs = adRevisionCount[ad.id] ?? 0;
-        const fromVersions = Math.max(0, (ad.version_count ?? 1) - 1);
+const revisionScope = completedAds;
+      const totalRevisions = revisionScope.reduce((sum, ad) => {
+        const fromLogs = adRevisionCount[ad.ad.id] ?? 0;
+        const fromVersions = Math.max(0, (ad.ad.version_count ?? 1) - 1);
         return sum + Math.max(fromLogs, fromVersions);
       }, 0);
-      const avgRevisions =
-        completed > 0 ? Math.round((totalRevisions / completed) * 10) / 10 : 0;
-
+      const avgRevisions = revisionScope.length > 0 ? totalRevisions / revisionScope.length : null;
       // Show all ads that have time logs in range OR are currently active
       const adsWithLogs: AdTimeSummary[] = editorAds
         .filter((ad) => adSecondsMap[ad.id] !== undefined || activeStages.has(ad.production_stage))
         .map((ad) => {
           const fromLogs = adRevisionCount[ad.id] ?? 0;
           const fromVersions = Math.max(0, (ad.version_count ?? 1) - 1);
+          const startedAt =
+            stageAtOrFallback(ad, timelines, ad.id, "editing") ??
+            stageAtOrFallback(ad, timelines, ad.id, "ready_for_edit");
+          const completedAt = stageAtOrFallback(ad, timelines, ad.id, "approved");
+const isStartedInPeriod = startedAt !== null && startedAt >= startMs && startedAt <= endMs && assignedAdIdsThisPeriod.has(ad.id);
+          const isCompletedInPeriod = completedAt !== null && completedAt >= startMs && completedAt <= endMs && assignedAdIdsThisPeriod.has(ad.id);
+          const periodState: AdTimeSummary["periodState"] = isCompletedInPeriod
+            ? "completed_in_period"
+            : isStartedInPeriod
+              ? "started_in_period"
+              : "backlog";
           return {
             adId: ad.id,
             adName: ad.name,
@@ -196,7 +284,9 @@ export function computeEditorStats(
             totalSeconds: adSecondsMap[ad.id] ?? 0,
             revisions: Math.max(fromLogs, fromVersions),
             isActive: activeStages.has(ad.production_stage),
-            startedAt: ad.assigned_at ?? ad.raw_footage_shared_at ?? ad.editing_started_at,
+            startedAt: startedAt !== null ? new Date(startedAt).toISOString() : null,
+            periodState,
+            productName: ad.product?.name ?? null,
           };
         })
         .sort((a, b) => {
@@ -217,7 +307,7 @@ export function computeEditorStats(
         started,
         completed,
         totalSeconds,
-        avgActiveEditHours,
+        totalRevisions,
         avgRevisions,
         idle: assigned === 0,
         adsWithLogs,

@@ -64,18 +64,91 @@ function ad(overrides: Partial<AdWithRelations>): AdWithRelations {
 }
 
 describe("editor performance", () => {
-  it("uses assigned_at to split in-period work from backlog", () => {
+  it("uses the editing-start date to classify completed work as in-period when the work started in range", () => {
     const stats = computeEditorStats(
       [editor("editor")],
       [
-        ad({ id: "in-period", assigned_at: "2026-07-11T01:00:00.000Z", editing_started_at: "2026-07-11T02:00:00.000Z", final_approved_at: "2026-07-11T05:00:00.000Z", approved_at: "2026-07-11T05:00:00.000Z" }),
-        ad({ id: "backlog", assigned_at: "2026-07-08T02:00:00.000Z", editing_started_at: "2026-07-11T03:00:00.000Z", final_approved_at: "2026-07-11T06:00:00.000Z", approved_at: "2026-07-11T06:00:00.000Z" })
+        ad({ id: "in-period", assigned_at: "2026-07-08T02:00:00.000Z", editing_started_at: "2026-07-10T02:00:00.000Z", final_approved_at: "2026-07-11T05:00:00.000Z", approved_at: "2026-07-11T05:00:00.000Z" })
+      ],
+      [
+        { id: "t1", ad_id: "in-period", editor_id: "editor", session_started_at: "2026-07-10T02:00:00.000Z", session_ended_at: "2026-07-10T03:00:00.000Z", pause_reason: null, is_active: false, created_at: "2026-07-10T02:00:00.000Z" }
+      ] as EditorTimeLog[],
+      [
+        { id: "assign-1", ad_id: "in-period", actor_id: "creator", action: "editor_assigned", metadata: { production_stage: "ready_for_edit" }, created_at: "2026-07-08T02:00:00.000Z" },
+        { id: "start-1", ad_id: "in-period", actor_id: "editor", action: "editing_started", metadata: { previous_stage: "ready_for_edit", production_stage: "editing" }, created_at: "2026-07-10T02:00:00.000Z" },
+        { id: "approve-1", ad_id: "in-period", actor_id: "manager", action: "final_approval_granted", metadata: { previous_stage: "final_review", production_stage: "approved" }, created_at: "2026-07-11T05:00:00.000Z" }
+      ] as ActivityLog[],
+      new Date("2026-07-10T00:00:00.000Z"),
+      new Date("2026-07-11T23:59:59.999Z")
+    );
+
+    expect(stats[0]).toMatchObject({
+      assigned: 0,
+      startedInPeriod: 1,
+      startedBacklog: 0,
+      completedInPeriod: 1,
+      completedBacklog: 0
+    });
+  });
+
+  it("labels each ad as completed in period, started in period, or backlog", () => {
+    const stats = computeEditorStats(
+      [editor("editor")],
+      [
+        ad({ id: "period-complete", assigned_at: "2026-07-08T02:00:00.000Z", editing_started_at: "2026-07-10T02:00:00.000Z", final_approved_at: "2026-07-11T05:00:00.000Z", approved_at: "2026-07-11T05:00:00.000Z" }),
+        ad({ id: "backlog", assigned_at: "2026-07-08T02:00:00.000Z", editing_started_at: null, final_approved_at: null, approved_at: null, production_stage: "ready_for_edit" })
+      ],
+      [],
+      [
+        { id: "assign-1", ad_id: "period-complete", actor_id: "creator", action: "editor_assigned", metadata: { production_stage: "ready_for_edit" }, created_at: "2026-07-08T02:00:00.000Z" },
+        { id: "start-1", ad_id: "period-complete", actor_id: "editor", action: "editing_started", metadata: { previous_stage: "ready_for_edit", production_stage: "editing" }, created_at: "2026-07-10T02:00:00.000Z" },
+        { id: "approve-1", ad_id: "period-complete", actor_id: "manager", action: "final_approval_granted", metadata: { previous_stage: "final_review", production_stage: "approved" }, created_at: "2026-07-11T05:00:00.000Z" },
+        { id: "assign-2", ad_id: "backlog", actor_id: "creator", action: "editor_assigned", metadata: { production_stage: "ready_for_edit" }, created_at: "2026-07-08T02:00:00.000Z" }
+      ] as ActivityLog[],
+      new Date("2026-07-10T00:00:00.000Z"),
+      new Date("2026-07-11T23:59:59.999Z")
+    );
+
+    expect(stats[0].adsWithLogs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ adId: "period-complete", periodState: "completed_in_period" }),
+        expect.objectContaining({ adId: "backlog", periodState: "backlog" })
+      ])
+    );
+  });
+
+  it("counts assigned work by the selected period", () => {
+    const stats = computeEditorStats(
+      [editor("editor")],
+      [ad({ id: "assigned-in-range", assigned_at: "2026-07-08T02:00:00.000Z", editing_started_at: null, final_approved_at: null, approved_at: null })],
+      [],
+      [{ id: "assign-1", ad_id: "assigned-in-range", actor_id: "creator", action: "editor_assigned", metadata: { production_stage: "ready_for_edit" }, created_at: "2026-07-08T02:00:00.000Z" } as ActivityLog],
+      new Date("2026-07-08T00:00:00.000Z"),
+      new Date("2026-07-08T23:59:59.999Z")
+    );
+
+    expect(stats[0]).toMatchObject({ assigned: 0 });
+  });
+
+  it("uses activity-log events to split in-period work from backlog", () => {
+    const stats = computeEditorStats(
+      [editor("editor")],
+      [
+        ad({ id: "in-period", assigned_at: null, editing_started_at: null, final_approved_at: null, approved_at: null }),
+        ad({ id: "backlog", assigned_at: null, editing_started_at: null, final_approved_at: null, approved_at: null })
       ],
       [
         { id: "t1", ad_id: "in-period", editor_id: "editor", session_started_at: "2026-07-11T02:00:00.000Z", session_ended_at: "2026-07-11T03:00:00.000Z", pause_reason: null, is_active: false, created_at: "2026-07-11T02:00:00.000Z" },
         { id: "t2", ad_id: "backlog", editor_id: "editor", session_started_at: "2026-07-11T03:00:00.000Z", session_ended_at: "2026-07-11T04:00:00.000Z", pause_reason: null, is_active: false, created_at: "2026-07-11T03:00:00.000Z" }
       ] as EditorTimeLog[],
-      [] as ActivityLog[],
+      [
+        { id: "assign-1", ad_id: "in-period", actor_id: "creator", action: "editor_assigned", metadata: { production_stage: "ready_for_edit" }, created_at: "2026-07-11T01:00:00.000Z" },
+        { id: "start-1", ad_id: "in-period", actor_id: "editor", action: "editing_started", metadata: { previous_stage: "ready_for_edit", production_stage: "editing" }, created_at: "2026-07-11T02:00:00.000Z" },
+        { id: "approve-1", ad_id: "in-period", actor_id: "manager", action: "final_approval_granted", metadata: { previous_stage: "final_review", production_stage: "approved" }, created_at: "2026-07-11T05:00:00.000Z" },
+        { id: "assign-2", ad_id: "backlog", actor_id: "creator", action: "editor_assigned", metadata: { production_stage: "ready_for_edit" }, created_at: "2026-07-08T02:00:00.000Z" },
+        { id: "start-2", ad_id: "backlog", actor_id: "editor", action: "editing_started", metadata: { previous_stage: "ready_for_edit", production_stage: "editing" }, created_at: "2026-07-11T03:00:00.000Z" },
+        { id: "approve-2", ad_id: "backlog", actor_id: "manager", action: "final_approval_granted", metadata: { previous_stage: "final_review", production_stage: "approved" }, created_at: "2026-07-11T06:00:00.000Z" }
+      ] as ActivityLog[],
       new Date("2026-07-11T00:00:00.000Z"),
       new Date("2026-07-11T23:59:59.999Z")
     );
@@ -83,11 +156,11 @@ describe("editor performance", () => {
     expect(stats).toHaveLength(1);
     expect(stats[0]).toMatchObject({
       started: 2,
-      startedInPeriod: 1,
-      startedBacklog: 1,
+      startedInPeriod: 2,
+      startedBacklog: 0,
       completed: 2,
-      completedInPeriod: 1,
-      completedBacklog: 1
+      completedInPeriod: 2,
+      completedBacklog: 0
     });
   });
 });

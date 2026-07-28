@@ -22,7 +22,7 @@ export const emptyDashboardFilters: DashboardFilterState = {
   campaign: "all",
   product: "all",
   platform: "all",
-  tag: "all",
+  tag: "",
   deadline: "all",
   sort: "all",
   view: "grid"
@@ -39,7 +39,7 @@ export function readDashboardFilters(search: string, savedView?: string | null):
     campaign: params.get("campaign") ?? "all",
     product: params.get("product") ?? "all",
     platform: params.get("platform") ?? "all",
-    tag: params.get("tag") ?? "all",
+    tag: params.get("tag") ?? "",
     deadline: params.get("deadline") ?? "all",
     sort: params.get("sort") ?? "all",
     view: requestedView === "table" ? "table" : "grid"

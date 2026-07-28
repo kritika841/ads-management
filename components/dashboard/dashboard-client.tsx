@@ -38,12 +38,14 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
   const [campaign, setCampaign] = useState("all");
   const [product, setProduct] = useState("all");
   const [platform, setPlatform] = useState("all");
-  const [tag, setTag] = useState("all");
+  const [tag, setTag] = useState<string[]>([]);
+  const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
   const [deadline, setDeadline] = useState("all");
   const [sort, setSort] = useState("all");
   const [view, setView] = useState<DashboardView>("grid");
   const [urlInitialized, setUrlInitialized] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [tagDropdownRef, setTagDropdownRef] = useState<HTMLDivElement | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editingAd, setEditingAd] = useState<AdWithRelations | null>(null);
   const [previewAd, setPreviewAd] = useState<AdWithRelations | null>(null);
@@ -69,15 +71,26 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
     const state = readDashboardFilters(window.location.search, saved);
     setQuery(state.q); setStage(state.stage); setEditor(state.editor); setCreator(state.creator);
     setCampaign(state.campaign); setProduct(state.product); setPlatform(state.platform);
-    setTag(state.tag); setDeadline(state.deadline); setSort(state.sort); setView(state.view);
+    setTag(state.tag ? state.tag.split(",").filter(Boolean) : []); setDeadline(state.deadline); setSort(state.sort); setView(state.view);
     setUrlInitialized(true);
   }, []);
   useEffect(() => { window.localStorage.setItem("adflow-dashboard-view", view); }, [view]);
   useEffect(() => {
     if (!urlInitialized) return;
-    const url = writeDashboardFilters(new URL(window.location.href), { q: query, stage, editor, creator, campaign, product, platform, tag, deadline, sort, view });
+    const url = writeDashboardFilters(new URL(window.location.href), { q: query, stage, editor, creator, campaign, product, platform, tag: tag.join(","), deadline, sort, view });
     window.history.replaceState(null, "", url);
   }, [campaign, creator, deadline, editor, platform, product, query, sort, stage, tag, urlInitialized, view]);
+
+  useEffect(() => {
+    if (!tagDropdownOpen) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (!tagDropdownRef?.contains(event.target as Node)) {
+        setTagDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [tagDropdownOpen, tagDropdownRef]);
   useEffect(() => { setQueue(queueForRole(profile.role, initialQueue) ?? queueOptions[0].key); }, [initialQueue, profile.role, queueOptions]);
   useEffect(() => {
     function keydown(event: KeyboardEvent) {
@@ -99,7 +112,7 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
       .filter((ad) => campaign === "all" || ad.campaign_id === campaign)
       .filter((ad) => product === "all" || ad.product_id === product)
       .filter((ad) => platform === "all" || ad.platforms.includes(platform as AdWithRelations["platforms"][number]))
-      .filter((ad) => tag === "all" || ad.tags.some((item) => item.name === tag))
+      .filter((ad) => tag.length === 0 || tag.every((selectedTag) => ad.tags.some((item) => item.name === selectedTag)))
       .filter((ad) => {
         if (deadline === "all") return true;
         if (!ad.deadline || ad.status === "approved" || ad.status === "published") return false;
@@ -117,8 +130,8 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
     });
   }, [ads, campaign, creator, deadline, editor, platform, product, query, queue, sort, stage, tag]);
 
-  const filtersActive = [stage, editor, creator, campaign, product, platform, tag, deadline, sort].some((value) => value !== "all");
-  const gridFilterKey = [queue, query, stage, editor, creator, campaign, product, platform, tag, deadline, sort].join("|");
+  const filtersActive = [stage, editor, creator, campaign, product, platform, deadline, sort].some((value) => value !== "all") || tag.length > 0;
+  const gridFilterKey = [queue, query, stage, editor, creator, campaign, product, platform, ...tag, deadline, sort].join("|");
   const visibleGridAds = filteredAds.slice(0, visibleGridCount);
   const hasMoreGridAds = view === "grid" && visibleGridCount < filteredAds.length;
 
@@ -163,7 +176,7 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
     if (campaign !== "all") chips.push({ key: "campaign", label: `Campaign: ${labelFor(campaigns, campaign)}`, clear: () => setCampaign("all") });
     if (product !== "all") chips.push({ key: "product", label: `Product: ${labelFor(products, product)}`, clear: () => setProduct("all") });
     if (platform !== "all") chips.push({ key: "platform", label: `Platform: ${platform}`, clear: () => setPlatform("all") });
-    if (tag !== "all") chips.push({ key: "tag", label: `Tag: #${tag}`, clear: () => setTag("all") });
+    if (tag.length > 0) chips.push({ key: "tag", label: `Tags: ${tag.map((item) => `#${item}`).join(", ")}`, clear: () => setTag([]) });
     if (deadline !== "all") chips.push({ key: "deadline", label: `Deadline: ${deadline === "soon" ? "Due in 3 days" : deadline === "today" ? "Due today" : "Overdue"}`, clear: () => setDeadline("all") });
     if (sort !== "all") chips.push({ key: "sort", label: `Sort: ${sort === "deadline" ? "Deadline first" : sort === "waiting" ? "Waiting longest" : "Oldest created"}`, clear: () => setSort("all") });
     return chips;
@@ -171,7 +184,7 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
 
   function clearFilters(clearSearch = false) {
     setStage("all"); setEditor("all"); setCreator("all"); setCampaign("all"); setProduct("all");
-    setPlatform("all"); setTag("all"); setDeadline("all"); setSort("all");
+    setPlatform("all"); setTag([]); setDeadline("all"); setSort("all");
     if (clearSearch) setQuery("");
   }
 
@@ -326,7 +339,36 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
     <section className="panel mt-4 p-3">
       <div className="flex flex-col gap-2 lg:flex-row"><div className="relative flex-1"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden /><Input ref={searchRef} className="pl-9 pr-10" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search ads, scripts, people, products, or tags" /><kbd className="pointer-events-none absolute right-2 top-1/2 hidden h-6 min-w-6 -translate-y-1/2 items-center justify-center rounded border border-border bg-muted px-1.5 text-[11px] font-medium text-muted-foreground sm:inline-flex">/</kbd></div><Button variant={filtersOpen || filtersActive ? "primary" : "secondary"} onClick={() => setFiltersOpen((current) => !current)}><Filter className="size-4" aria-hidden />Filters{filtersActive ? <span className="size-1.5 rounded-full bg-current" /> : null}</Button><div className="flex rounded-lg border border-border bg-muted p-1"><Button size="icon" variant={view === "grid" ? "secondary" : "ghost"} className="size-8" title="Grid view" onClick={() => setView("grid")}><Grid2X2 className="size-4" aria-hidden /></Button><Button size="icon" variant={view === "table" ? "secondary" : "ghost"} className="size-8" title="Table view" onClick={() => setView("table")}><Table2 className="size-4" aria-hidden /></Button></div></div>
       {activeFilters.length || query ? <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">{query ? <FilterChip label={`Search: ${query}`} onRemove={() => setQuery("")} /> : null}{activeFilters.map((filter) => <FilterChip key={filter.key} label={filter.label} onRemove={filter.clear} />)}<button type="button" className="h-7 px-2 text-xs font-medium text-muted-foreground hover:text-foreground" onClick={() => clearFilters(true)}>Clear all</button></div> : null}
-      {filtersOpen ? <div className="mt-3 border-t border-border pt-3"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><FilterSelect label="Status" value={stage} onChange={setStage} options={productionStages.map((item) => ({ value: item, label: productionStageLabels[item] }))} />{profile.role === "admin" || profile.role === "manager" ? <><FilterSelect label="Editor" value={editor} onChange={setEditor} options={editors.map((item) => ({ value: item.id, label: item.name }))} /><FilterSelect label="Creator" value={creator} onChange={setCreator} options={creators.map((item) => ({ value: item.id, label: item.name }))} /></> : null}<FilterSelect label="Campaign" value={campaign} onChange={setCampaign} options={campaigns.map((item) => ({ value: item.id, label: item.name }))} /><FilterSelect label="Product" value={product} onChange={setProduct} options={products.map((item) => ({ value: item.id, label: item.name }))} /><FilterSelect label="Platform" value={platform} onChange={setPlatform} options={platforms.map((item) => ({ value: item, label: item }))} /><FilterSelect label="Tag" value={tag} onChange={setTag} options={availableTags.map((item) => ({ value: item, label: `#${item}` }))} /><FilterSelect label="Deadline" value={deadline} onChange={setDeadline} options={[{ value: "overdue", label: "Overdue" }, { value: "today", label: "Due today" }, { value: "soon", label: "Due in 3 days" }]} /><FilterSelect label="Sort" value={sort} onChange={setSort} options={[{ value: "deadline", label: "Deadline first" }, { value: "waiting", label: "Waiting longest" }, { value: "oldest", label: "Oldest created" }]} /></div></div> : null}
+      {filtersOpen ? <div className="mt-3 border-t border-border pt-3"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><FilterSelect label="Status" value={stage} onChange={setStage} options={productionStages.map((item) => ({ value: item, label: productionStageLabels[item] }))} />{profile.role === "admin" || profile.role === "manager" ? <><FilterSelect label="Editor" value={editor} onChange={setEditor} options={editors.map((item) => ({ value: item.id, label: item.name }))} /><FilterSelect label="Creator" value={creator} onChange={setCreator} options={creators.map((item) => ({ value: item.id, label: item.name }))} /></> : null}<FilterSelect label="Campaign" value={campaign} onChange={setCampaign} options={campaigns.map((item) => ({ value: item.id, label: item.name }))} /><FilterSelect label="Product" value={product} onChange={setProduct} options={products.map((item) => ({ value: item.id, label: item.name }))} /><FilterSelect label="Platform" value={platform} onChange={setPlatform} options={platforms.map((item) => ({ value: item, label: item }))} /><div className="relative" ref={(node) => setTagDropdownRef(node)}>
+            <label className="space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">Tag</span>
+              <button type="button" className="flex h-10 w-full items-center justify-between rounded-lg border border-input bg-card px-3 text-sm text-foreground transition-[border-color,box-shadow,background-color] duration-150 hover:border-ring/50 focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20" onClick={() => setTagDropdownOpen((current) => !current)}>
+                <span className={cn("block min-w-0 truncate", tag.length ? "text-foreground" : "text-muted-foreground")}>{tag.length ? tag.map((item) => `#${item}`).join(", ") : "All tags"}</span>
+                <span className="text-muted-foreground">▾</span>
+              </button>
+            </label>
+            {tagDropdownOpen ? (
+              <div className="absolute left-0 right-0 z-50 mt-2 w-full min-w-full rounded-xl border border-border bg-card p-3 shadow-soft">
+                <div className="max-h-60 space-y-2 overflow-y-auto pr-2">
+                  {availableTags.map((item) => (
+                    <label key={item} className="flex items-center gap-2 rounded-lg border border-border/70 bg-background px-3 py-2 text-sm hover:border-ring/50">
+                      <input type="checkbox" className="h-4 w-4 rounded border-border text-primary shadow-sm focus:ring-ring" checked={tag.includes(item)} onChange={(event) => {
+                        if (event.target.checked) {
+                          setTag((current) => Array.from(new Set([...current, item])));
+                        } else {
+                          setTag((current) => current.filter((value) => value !== item));
+                        }
+                      }} />
+                      <span className="truncate">#{item}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="mt-3 flex justify-end">
+                  <Button size="sm" variant="secondary" onClick={() => setTagDropdownOpen(false)}>Done</Button>
+                </div>
+              </div>
+            ) : null}
+          </div><FilterSelect label="Deadline" value={deadline} onChange={setDeadline} options={[{ value: "overdue", label: "Overdue" }, { value: "today", label: "Due today" }, { value: "soon", label: "Due in 3 days" }]} /><FilterSelect label="Sort" value={sort} onChange={setSort} options={[{ value: "deadline", label: "Deadline first" }, { value: "waiting", label: "Waiting longest" }, { value: "oldest", label: "Oldest created" }]} /></div></div> : null}
     </section>
 
     <div className="mt-4 flex items-center justify-between gap-3 flex-wrap">
@@ -437,7 +479,7 @@ function WorkflowCard({ ad, mediaToken, profile, editors, editorWorkloads, pendi
       <button type="button" onClick={(e) => { e.stopPropagation(); onToggleSelect(); }} aria-label={selected ? "Deselect" : "Select"} aria-pressed={selected} className={`absolute right-2 top-2 z-10 flex size-7 items-center justify-center rounded-md border transition-all duration-150 ${selected ? "border-primary bg-primary text-primary-foreground opacity-100" : "border-border bg-card/80 text-muted-foreground opacity-0 group-hover/card:opacity-100"}`}>{selected ? <SquareCheck className="size-4" aria-hidden /> : <Square className="size-4" aria-hidden />}</button>
       {canPreview ? (
         playing ? <InlineCardVideo ad={ad} mediaToken={mediaToken} poster={thumbnail} onClose={onStopPlaying} onError={onPlaybackError} /> :
-        <button className="relative block aspect-video w-full overflow-hidden bg-neutral-950" onPointerEnter={() => { if (mediaToken) void fetch(mediaUrl(ad, mediaToken, true)); }} onFocus={() => { if (mediaToken) void fetch(mediaUrl(ad, mediaToken, true)); }} onClick={onPlay} aria-label={`Play ${ad.name}`}>
+        <button className="relative block aspect-video w-full overflow-hidden bg-neutral-950" onPointerEnter={() => { if (mediaToken) { void fetch(mediaUrl(ad, mediaToken, true)).catch(() => undefined); } }} onFocus={() => { if (mediaToken) { void fetch(mediaUrl(ad, mediaToken, true)).catch(() => undefined); } }} onClick={onPlay} aria-label={`Play ${ad.name}`}>
           {thumbnail ? <CardThumbnail src={thumbnail} name={ad.name} /> : <MediaPlaceholder label="Final video submitted" />}
           <span className="absolute left-3 top-3 max-w-[75%]"><ProductionStageBadge stage={ad.production_stage} /></span>
           <span className="absolute left-1/2 top-1/2 inline-flex size-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-black/65 text-white shadow-lg backdrop-blur-sm transition duration-200 group-hover/card:scale-105 group-hover/card:bg-black/80"><Play className="ml-0.5 size-5 fill-current" aria-hidden /></span>
@@ -450,7 +492,14 @@ function WorkflowCard({ ad, mediaToken, profile, editors, editorWorkloads, pendi
       )}
       <div className="p-4">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0"><h2 className="truncate text-[15px] font-semibold text-foreground">{ad.name}</h2><p className="mt-0.5 truncate text-xs text-muted-foreground">{ad.campaign?.name ?? "No campaign"}</p></div>
+          <div className="min-w-0">
+            <h2 className="truncate text-[15px] font-semibold text-foreground">{ad.name}</h2>
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">{ad.campaign?.name ?? "No campaign"}</p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {ad.product?.name ? <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">Product · {ad.product.name}</span> : null}
+              {ad.tags.slice(0, 3).map((tag) => <span key={tag.id} className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">#{tag.name}</span>)}
+            </div>
+          </div>
           <div className="flex gap-0.5">{canDeleteAd(profile.role) ? <DeleteAdButton adId={ad.id} adName={ad.name} compact /> : null}{canPreview ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-50" title="Download video" disabled={downloading} onClick={(e) => { e.stopPropagation(); onDownload(); }}>{downloading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Download className="size-4" aria-hidden />}</button> : null}{canPreview ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" title="Preview" onClick={onPreview}><Eye className="size-4" aria-hidden /></button> : null}</div>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-3 border-y border-border py-3"><Person label="Creator" person={ad.creator} /><Person label="Editor" person={ad.editor} /></div>
@@ -521,7 +570,7 @@ function WorkflowTable({ ads, profile, pendingId, selectedIds, downloadingIds, o
   }), [ads, tableSort]);
   const changeSort = (key: TableSortKey) => setTableSort((current) => current.key === key ? { key, direction: current.direction === "asc" ? "desc" : "asc" } : { key, direction: "asc" });
 
-  return <section className="panel mt-3 overflow-x-auto"><table className="w-full min-w-[960px] text-left text-sm"><thead className="border-b border-border bg-muted text-xs uppercase text-muted-foreground"><tr><th className="w-10 px-3 py-3" /><SortHeader label="Creative" sortKey="name" sort={tableSort} onSort={changeSort} /><SortHeader label="Status" sortKey="status" sort={tableSort} onSort={changeSort} /><SortHeader label="Creator" sortKey="creator" sort={tableSort} onSort={changeSort} /><SortHeader label="Editor" sortKey="editor" sort={tableSort} onSort={changeSort} /><SortHeader label="Time in status" sortKey="waiting" sort={tableSort} onSort={changeSort} /><th className="px-4 py-3" /></tr></thead><tbody className="divide-y divide-border">{sortedAds.map((ad) => { const reviewable = reviewer && (ad.production_stage === "creator_review" || ad.production_stage === "final_review"); const isSelected = selectedIds.has(ad.id); const canDownload = isFinalMediaVisible(ad.production_stage) && Boolean(ad.drive_file_id); const isDownloadingRow = downloadingIds.has(ad.id); const open = () => router.push(`/ads/${ad.id}`); return <tr key={ad.id} className={`cursor-pointer transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${isSelected ? "bg-accent/40" : ""}`} role="link" tabIndex={0} onClick={open} onKeyDown={(event) => { if (event.key === "Enter") open(); }}><td className="px-3 py-3" onClick={(e) => { e.stopPropagation(); onToggleSelect(ad.id); }}><button type="button" aria-label={isSelected ? "Deselect" : "Select"} aria-pressed={isSelected} className={`flex size-7 items-center justify-center rounded-md border transition-colors ${isSelected ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:border-ring"}`}>{isSelected ? <SquareCheck className="size-4" aria-hidden /> : <Square className="size-4" aria-hidden />}</button></td><td className="px-4 py-3"><p className="font-medium text-foreground">{ad.name}</p><p className="text-xs text-muted-foreground">{ad.campaign?.name}</p></td><td className="px-4 py-3"><ProductionStageBadge stage={ad.production_stage} className="bg-muted text-muted-foreground shadow-none" /></td><td className="px-4 py-3">{ad.creator?.name ?? "Unassigned"}</td><td className="px-4 py-3">{ad.editor?.name ?? "Unassigned"}</td><td className="px-4 py-3 text-muted-foreground normal-case" suppressHydrationWarning>{workflowStageAgeLabel(ad.production_stage, ad.workflow_status_changed_at)}</td><td className="px-4 py-3"><div className="flex justify-end gap-2" onClick={(event) => event.stopPropagation()}>{reviewable ? <><Button size="sm" disabled={pendingId === ad.id} onClick={() => onApprove(ad)}>Approve</Button><Button size="sm" variant="secondary" onClick={() => onRequestChanges(ad)}>Changes</Button></> : <Button size="sm" variant="secondary" onClick={open}>Open<ArrowRight className="size-3.5" aria-hidden /></Button>}{canDownload ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-50" title="Download video" disabled={isDownloadingRow} onClick={() => onDownload(ad)}>{isDownloadingRow ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Download className="size-4" aria-hidden />}</button> : null}{canDeleteAd(profile.role) ? <DeleteAdButton adId={ad.id} adName={ad.name} compact /> : null}</div></td></tr>; })}</tbody></table></section>;
+  return <section className="panel mt-3 overflow-x-auto"><table className="w-full min-w-[960px] text-left text-sm"><thead className="border-b border-border bg-muted text-xs uppercase text-muted-foreground"><tr><th className="w-10 px-3 py-3" /><SortHeader label="Creative" sortKey="name" sort={tableSort} onSort={changeSort} /><SortHeader label="Status" sortKey="status" sort={tableSort} onSort={changeSort} /><SortHeader label="Creator" sortKey="creator" sort={tableSort} onSort={changeSort} /><SortHeader label="Editor" sortKey="editor" sort={tableSort} onSort={changeSort} /><SortHeader label="Time in status" sortKey="waiting" sort={tableSort} onSort={changeSort} /><th className="px-4 py-3" /></tr></thead><tbody className="divide-y divide-border">{sortedAds.map((ad) => { const reviewable = reviewer && (ad.production_stage === "creator_review" || ad.production_stage === "final_review"); const isSelected = selectedIds.has(ad.id); const canDownload = isFinalMediaVisible(ad.production_stage) && Boolean(ad.drive_file_id); const isDownloadingRow = downloadingIds.has(ad.id); const open = () => router.push(`/ads/${ad.id}`); return <tr key={ad.id} className={`cursor-pointer transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${isSelected ? "bg-accent/40" : ""}`} role="link" tabIndex={0} onClick={open} onKeyDown={(event) => { if (event.key === "Enter") open(); }}><td className="px-3 py-3" onClick={(e) => { e.stopPropagation(); onToggleSelect(ad.id); }}><button type="button" aria-label={isSelected ? "Deselect" : "Select"} aria-pressed={isSelected} className={`flex size-7 items-center justify-center rounded-md border transition-colors ${isSelected ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:border-ring"}`}>{isSelected ? <SquareCheck className="size-4" aria-hidden /> : <Square className="size-4" aria-hidden />}</button></td><td className="px-4 py-3"><p className="font-medium text-foreground">{ad.name}</p><p className="text-xs text-muted-foreground">{ad.campaign?.name}</p><div className="mt-1 flex flex-wrap gap-1.5">{ad.product?.name ? <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">Product · {ad.product.name}</span> : null}{ad.tags.slice(0, 2).map((tag) => <span key={tag.id} className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">#{tag.name}</span>)}</div></td><td className="px-4 py-3"><ProductionStageBadge stage={ad.production_stage} className="bg-muted text-muted-foreground shadow-none" /></td><td className="px-4 py-3">{ad.creator?.name ?? "Unassigned"}</td><td className="px-4 py-3">{ad.editor?.name ?? "Unassigned"}</td><td className="px-4 py-3 text-muted-foreground normal-case" suppressHydrationWarning>{workflowStageAgeLabel(ad.production_stage, ad.workflow_status_changed_at)}</td><td className="px-4 py-3"><div className="flex justify-end gap-2" onClick={(event) => event.stopPropagation()}>{reviewable ? <><Button size="sm" disabled={pendingId === ad.id} onClick={() => onApprove(ad)}>Approve</Button><Button size="sm" variant="secondary" onClick={() => onRequestChanges(ad)}>Changes</Button></> : <Button size="sm" variant="secondary" onClick={open}>Open<ArrowRight className="size-3.5" aria-hidden /></Button>}{canDownload ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-50" title="Download video" disabled={isDownloadingRow} onClick={() => onDownload(ad)}>{isDownloadingRow ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Download className="size-4" aria-hidden />}</button> : null}{canDeleteAd(profile.role) ? <DeleteAdButton adId={ad.id} adName={ad.name} compact /> : null}</div></td></tr>; })}</tbody></table></section>;
 }
 
 function SortHeader({ label, sortKey, sort, onSort }: { label: string; sortKey: TableSortKey; sort: TableSort; onSort: (key: TableSortKey) => void }) {

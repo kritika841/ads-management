@@ -375,19 +375,12 @@ export async function getAllEditorTimeLogs(): Promise<EditorTimeLog[]> {
   return (data ?? []) as EditorTimeLog[];
 }
 
-export async function getAllChangesRequestedLogs(): Promise<ActivityLog[]> {
+export async function getAllActivityLogs(): Promise<ActivityLog[]> {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("activity_logs")
     .select("id, ad_id, action, metadata, created_at, actor_id")
-    .in("action", [
-      "stage_changed",
-      "changes_requested",
-      "stage_changed_to_changes_requested",
-      "creator_requested_changes",
-      "final_changes_requested",
-      "approved_ad_reopened"
-    ])
+    .not("ad_id", "is", null)
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data ?? []) as ActivityLog[];
