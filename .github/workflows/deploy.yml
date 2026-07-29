@@ -30,7 +30,7 @@ jobs:
             package.json \
             package-lock.json \
             ecosystem.config.cjs \
-            next.config.js
+            next.config.ts
 
       - name: Upload build to VPS
         uses: appleboy/scp-action@v0.1.7
