@@ -1,17 +1,52 @@
 name: Deploy to Hostinger VPS
+
 on:
   push:
     branches: [main]
+
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy over SSH
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Package build output
+        run: |
+          tar -czf release.tar.gz \
+            .next \
+            public \
+            package.json \
+            package-lock.json \
+            ecosystem.config.cjs \
+            next.config.js
+
+      - name: Upload build to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          source: "release.tar.gz"
+          target: "/home/deployer/apps/satmi-ads"
+
+      - name: Extract and restart on VPS
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT }}
-          script: |
-            bash /home/deployer/apps/satmi-ads/deploy.sh
+          script: bash /home/deployer/apps/satmi-ads/deploy.sh
