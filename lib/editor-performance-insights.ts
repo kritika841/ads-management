@@ -256,9 +256,8 @@ function buildAdTimeline(ad: AdWithRelations, activityLogs: ActivityLog[], nowMs
   }));
 
   const durations: AdStageDurations = {
-    assignmentToStart: durationHours(milestones.assignedAt, milestones.editingStartedAt, nowMs),
+   assignmentToStart: durationHours(milestones.assignedAt, milestones.editingStartedAt, nowMs),
     editing: durationHours(milestones.editingStartedAt, milestones.submittedAt, nowMs),
-    creatorReview: durationHours(milestones.submittedAt, milestones.creatorReviewedAt, nowMs),
     creatorReview: durationHours(milestones.submittedAt, milestones.creatorDecisionAt, nowMs),
     finalReview: durationHours(milestones.creatorApprovedAt, milestones.finalDecisionAt, nowMs)
   };
