@@ -263,7 +263,7 @@ function buildAdTimeline(ad: AdWithRelations, activityLogs: ActivityLog[], nowMs
     finalReview: durationHours(milestones.creatorApprovedAt, milestones.finalDecisionAt, nowMs)
   };
 
-  return { steps: timelineEvents, milestones, durations };
+  return { steps: timelineEvents, events, milestones, durations };
 }
 
 function buildTrendBuckets(startMs: number, endMs: number): EditorTrendPoint[] {
