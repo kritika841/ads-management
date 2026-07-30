@@ -51,6 +51,10 @@ const reassignEditorSchema = z.object({
   reason: z.string().trim().min(1, "A reassignment reason is required.").max(1000)
 });
 
+const unfreezeEditingSchema = z.object({
+  adId: z.string().uuid()
+});
+
 export async function saveCreatorItem(payload: z.input<typeof creatorItemSchema>) {
   const profile = await requireProfile();
   if (profile.role !== "content_creator" && profile.role !== "admin" && profile.role !== "manager") {
@@ -532,6 +536,47 @@ export async function reassignEditor(payload: z.input<typeof reassignEditorSchem
   if (updateError) return { ok: false, message: updateError.message };
   await notifyUserIds(admin, [editor.id], ad.id, "Editing assignment", `${profile.name} assigned ${ad.name} to you. Reason: ${data.reason}`);
   if (previousEditorId) await notifyUserIds(admin, [previousEditorId], ad.id, "Assignment changed", `${ad.name} was reassigned to another editor.`);
+  revalidateAdPaths(ad.id);
+  return { ok: true };
+}
+
+export async function unfreezeForEditing(payload: z.input<typeof unfreezeEditingSchema>) {
+  const profile = await requireProfile();
+  if (profile.role !== "admin" && profile.role !== "manager") {
+    return { ok: false, message: "Only managers and admins can unfreeze editing." };
+  }
+
+  const parsed = unfreezeEditingSchema.safeParse(payload);
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid editing override." };
+
+  const admin = createSupabaseAdminClient();
+  const { data: row, error } = await admin.from("ads").select("*").eq("id", parsed.data.adId).maybeSingle();
+  if (error || !row) return { ok: false, message: error?.message ?? "Ad not found." };
+
+  const ad = row as Ad;
+  if (!ad.editor_id) return { ok: false, message: "Assign an editor before unfreezing this creative." };
+  if (ad.production_stage !== "ready_for_edit") {
+    return { ok: false, message: "This creative is already being edited or no longer waiting for editing." };
+  }
+
+  const { error: transitionError } = await admin.rpc("transition_editor_work_atomic", {
+    p_ad_id: ad.id,
+    p_actor_id: profile.id,
+    p_action: "force_start_editing",
+    p_editor_id: null,
+    p_deadline: null,
+    p_reason: null
+  });
+  if (transitionError) return { ok: false, message: transitionError.message };
+
+  await notifyUserIds(
+    admin,
+    [ad.editor_id],
+    ad.id,
+    "Editing unfrozen",
+    `${profile.name} allowed ${ad.name} to start editing immediately.`
+  );
+
   revalidateAdPaths(ad.id);
   return { ok: true };
 }

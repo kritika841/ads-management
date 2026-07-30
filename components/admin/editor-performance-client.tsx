@@ -108,7 +108,7 @@ export function EditorPerformanceClient({
       {/* Per-editor rows */}
       <div className="overflow-hidden rounded-xl border border-border">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[1050px] text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/40">
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -119,6 +119,9 @@ export function EditorPerformanceClient({
                 </th>
                 <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Started
+                </th>
+                <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Submitted
                 </th>
                 <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Completed
@@ -161,6 +164,14 @@ export function EditorPerformanceClient({
                       <span className="font-semibold text-primary">{hasPeriod ? stat.startedInPeriod : stat.started}</span>
                     </td>
                     <td className="px-2 py-3 text-center">
+                      <span className="font-semibold text-sky-600 dark:text-sky-400">{hasPeriod ? stat.submittedInPeriod : stat.submitted}</span>
+                      {hasPeriod && stat.submittedBacklog > 0 && (
+                        <p className="mt-0.5 text-[10px] font-normal text-amber-600 dark:text-amber-400">
+                          +{stat.submittedBacklog} backlog
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-2 py-3 text-center">
                       <span className="font-semibold text-success">{hasPeriod ? stat.completedInPeriod : stat.completed}</span>
                     </td>
                     {/* Total time */}
@@ -196,7 +207,7 @@ export function EditorPerformanceClient({
                   </tr>
                   {expanded === stat.id && (
                     <tr key={`${stat.id}-detail`}>
-                      <td colSpan={8} className="bg-muted/30 px-4 pb-4 pt-2">
+                      <td colSpan={9} className="bg-muted/30 px-4 pb-4 pt-2">
                         <ExpandedEditorDetail stat={stat} hasPeriod={hasPeriod} />
                       </td>
                     </tr>
@@ -292,8 +303,9 @@ function ExpandedEditorDetail({ stat, hasPeriod }: { stat: EditorStat; hasPeriod
 
       {/* Per-editor stats summary in detail panel */}
       {hasPeriod && (
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-2">
+        <div className="mt-3 grid grid-cols-3 gap-3">
           <MiniStat label="Started" value={stat.startedInPeriod} color="primary" />
+          <MiniStat label="Submitted" value={stat.submittedInPeriod} color="sky" backlog={stat.submittedBacklog} />
           <MiniStat label="Completed" value={stat.completedInPeriod} color="success" />
         </div>
       )}
@@ -301,15 +313,19 @@ function ExpandedEditorDetail({ stat, hasPeriod }: { stat: EditorStat; hasPeriod
   );
 }
 
-function MiniStat({ label, value, color }: { label: string; value: number; color: "primary" | "success" | "amber" }) {
+function MiniStat({ label, value, color, backlog }: { label: string; value: number; color: "primary" | "success" | "amber" | "sky"; backlog?: number }) {
   const colorClass =
     color === "primary" ? "text-primary" :
     color === "success" ? "text-success" :
+    color === "sky" ? "text-sky-600 dark:text-sky-400" :
     "text-amber-600 dark:text-amber-400";
   return (
     <div className="rounded-md border border-border bg-card px-3 py-2">
       <p className="text-[10px] text-muted-foreground">{label}</p>
       <p className={cn("mt-0.5 text-lg font-bold", colorClass)}>{value}</p>
+      {backlog !== undefined && backlog > 0 && (
+        <p className="mt-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">+{backlog} backlog</p>
+      )}
     </div>
   );
 }

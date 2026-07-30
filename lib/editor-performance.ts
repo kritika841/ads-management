@@ -1,10 +1,10 @@
 import type { ActivityLog, AdWithRelations, EditorTimeLog, Profile } from "@/lib/types";
 
-type TimelineStage = "ready_for_edit" | "editing" | "approved";
-
+type TimelineStage = "ready_for_edit" | "editing" | "creator_review" | "approved";
 type AdTimeline = {
   readyForEdit: number[];
   editing: number[];
+  creatorReview: number[];
   approved: number[];
 };
 
@@ -21,8 +21,12 @@ export type EditorStat = {
   completedInPeriod: number;      // approved within the selected period
   completedBacklog: number;       // kept for compatibility; no longer displayed
 
+  submittedInPeriod: number;      // sent to creator_review within the selected period, ad also assigned in period
+  submittedBacklog: number;       // sent to creator_review within the selected period, but ad was assigned before the period
+
   started: number;
   completed: number;
+  submitted: number;              // total lifetime videos submitted for review
 
   totalSeconds: number;           // sum of all editor_time_log sessions within the date range
   totalRevisions: number;         // total number of change_requested cycles for completed videos
@@ -58,7 +62,7 @@ function timelineStageFromLog(log: ActivityLog): TimelineStage | null {
     (typeof meta?.new_stage === "string" ? meta.new_stage : null) ??
     (typeof meta?.production_stage === "string" ? meta.production_stage : null);
 
-  if (stage === "ready_for_edit" || stage === "editing" || stage === "approved") {
+  if (stage === "ready_for_edit" || stage === "editing" || stage === "creator_review" || stage === "approved") {
     return stage;
   }
 
@@ -67,6 +71,9 @@ function timelineStageFromLog(log: ActivityLog): TimelineStage | null {
   }
   if (log.action === "editing_started") {
     return "editing";
+  }
+  if (log.action === "edited_video_submitted" || log.action === "edited_video_resubmitted") {
+    return "creator_review";
   }
   if (log.action === "final_approval_granted" || log.action === "approved") {
     return "approved";
@@ -87,17 +94,19 @@ function buildTimelines(activityLogs: ActivityLog[]): Record<string, AdTimeline>
     if (!Number.isFinite(at)) continue;
 
     if (!timelines[log.ad_id]) {
-      timelines[log.ad_id] = { readyForEdit: [], editing: [], approved: [] };
+      timelines[log.ad_id] = { readyForEdit: [], editing: [], creatorReview: [], approved: [] };
     }
 
     if (stage === "ready_for_edit") timelines[log.ad_id].readyForEdit.push(at);
     if (stage === "editing") timelines[log.ad_id].editing.push(at);
+    if (stage === "creator_review") timelines[log.ad_id].creatorReview.push(at);
     if (stage === "approved") timelines[log.ad_id].approved.push(at);
   }
 
   for (const timeline of Object.values(timelines)) {
     timeline.readyForEdit.sort((a, b) => a - b);
     timeline.editing.sort((a, b) => a - b);
+    timeline.creatorReview.sort((a, b) => a - b);
     timeline.approved.sort((a, b) => a - b);
   }
 
@@ -119,12 +128,15 @@ function stageAtOrFallback(ad: AdWithRelations, timelines: Record<string, AdTime
         ? latestAtOrBefore(timeline.readyForEdit, Infinity)
         : stage === "editing"
           ? latestAtOrBefore(timeline.editing, Infinity)
-          : latestAtOrBefore(timeline.approved, Infinity);
+          : stage === "creator_review"
+            ? latestAtOrBefore(timeline.creatorReview, Infinity)
+            : latestAtOrBefore(timeline.approved, Infinity);
     if (fromTimeline !== null) return fromTimeline;
   }
 
   if (stage === "ready_for_edit") return assignedAtMs(ad);
   if (stage === "editing") return ad.editing_started_at ? new Date(ad.editing_started_at).getTime() : null;
+  if (stage === "creator_review") return ad.submitted_at ? new Date(ad.submitted_at).getTime() : null;
   const approvedAt = ad.final_approved_at ?? ad.approved_at;
   return approvedAt ? new Date(approvedAt).getTime() : null;
 }
@@ -235,7 +247,7 @@ export function computeEditorStats(
           startedAt >= startMs && startedAt <= endMs && assignedAdIdsThisPeriod.has(ad.id)
       ).length;
       const startedBacklog = Math.max(0, started - startedInPeriod);
-      // ─── COMPLETED ───────────────────────────────────────────────────
+// ─── COMPLETED ───────────────────────────────────────────────────
       const completedAds = editorAds.flatMap((ad) => {
         if (ad.production_stage !== "approved" || ad.status !== "approved") return [];
         const completedAt = stageAtOrFallback(ad, timelines, ad.id, "approved");
@@ -249,6 +261,23 @@ export function computeEditorStats(
       );
       const completedInPeriod = completedInPeriodAds.length;
       const completedBacklog = Math.max(0, completed - completedInPeriod);
+
+     // ─── SUBMITTED FOR REVIEW ──────────────────────────────────────────
+      const submittedAds = editorAds.flatMap((ad) => {
+        const submittedAt = stageAtOrFallback(ad, timelines, ad.id, "creator_review");
+        if (submittedAt === null) return [];
+        return [{ ad, submittedAt }];
+      });
+      const submitted = submittedAds.length;
+      const submittedInPeriodAds = submittedAds.filter(
+        ({ ad, submittedAt }) =>
+          submittedAt >= startMs && submittedAt <= endMs && assignedAdIdsThisPeriod.has(ad.id)
+      );
+      const submittedInPeriod = submittedInPeriodAds.length;
+      const submittedInWindowRegardlessOfAssignment = submittedAds.filter(
+        ({ submittedAt }) => submittedAt >= startMs && submittedAt <= endMs
+      ).length;
+      const submittedBacklog = Math.max(0, submittedInWindowRegardlessOfAssignment - submittedInPeriod);
       const totalSeconds = editorTotalSeconds[editor.id] ?? 0;
       const adSecondsMap = editorAdSeconds[editor.id] ?? {};
 
@@ -304,8 +333,11 @@ const isStartedInPeriod = startedAt !== null && startedAt >= startMs && startedA
         startedBacklog,
         completedInPeriod,
         completedBacklog,
+        submittedInPeriod,
+        submittedBacklog,
         started,
         completed,
+        submitted,
         totalSeconds,
         totalRevisions,
         avgRevisions,

@@ -17,6 +17,7 @@ import { EditorWorkspace } from "@/components/workflow/editor-workspace";
 import { ManagerFinalUpload } from "@/components/workflow/manager-final-upload";
 import { ProductionStageBadge } from "@/components/workflow/production-stage";
 import { ReassignEditorButton } from "@/components/workflow/reassign-editor-button";
+import { UnfreezeEditingButton } from "@/components/workflow/unfreeze-editing-button";
 import { hasAdAccess } from "@/lib/ad-access";
 import { requireProfile } from "@/lib/auth";
 import { getAdDetail, getAppSettings, getCampaigns, getEditorInProgressCount, getEditorTimeLogs, getEditorWorkloads, getProducts, getProfiles, getTags } from "@/lib/data";
@@ -113,6 +114,7 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
                 editorWorkloads={editorWorkloads}
               />
             ) : null}
+            {isReviewer && ad.editor_id && ad.production_stage === "ready_for_edit" ? <UnfreezeEditingButton ad={ad} /> : null}
             <ActivityDrawer activity={activity} />
             {canDeleteAd(profile.role) ? <DeleteAdButton adId={ad.id} adName={ad.name} redirectAfterDelete /> : null}
           </div>
