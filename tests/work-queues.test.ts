@@ -11,6 +11,7 @@ describe("role work queues", () => {
       "Pending editor assign",
       "With editor",
       "Needs my review",
+      "Changes requested",
       "Awaiting final",
       "Approved"
     ]);
@@ -25,6 +26,7 @@ describe("role work queues", () => {
     expect(matchesQueue(item("ready_for_edit"), "new_assignments")).toBe(true);
     expect(matchesQueue(item("editing"), "editing")).toBe(true);
     expect(matchesQueue(item("changes_requested"), "changes")).toBe(true);
+    expect(matchesQueue(item("creator_changes_requested"), "creator_changes")).toBe(true);
     expect(matchesQueue(item("creator_review"), "submitted")).toBe(true);
     expect(matchesQueue(item("final_review"), "submitted")).toBe(true);
   });

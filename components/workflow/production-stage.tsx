@@ -11,6 +11,7 @@ const stageStyles: Record<ProductionStage, string> = {
   changes_requested: "border-warning/30 bg-warning/15 text-warning",
   creator_review: "border-warning/30 bg-warning/15 text-warning",
   final_review: "border-primary/30 bg-accent text-accent-foreground",
+  creator_changes_requested: "border-warning/30 bg-warning/15 text-warning",
   approved: "border-success/30 bg-success/15 text-success"
 };
 

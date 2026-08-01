@@ -11,6 +11,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { ActivityDrawer } from "@/components/workflow/activity-drawer";
 import { AdminEditButton } from "@/components/workflow/admin-edit-button";
 import { CreatorItemForm } from "@/components/workflow/creator-item-form";
+import { CreatorChangeRequestActions } from "@/components/workflow/creator-change-request-actions";
 import { CreatorReviewActions } from "@/components/workflow/creator-review-actions";
 import { EditingTimeDisplay } from "@/components/workflow/editing-time-display";
 import { EditorWorkspace } from "@/components/workflow/editor-workspace";
@@ -58,6 +59,7 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
   const creatorCanEdit = isCreator && creatorEditableStages.includes(ad.production_stage as (typeof creatorEditableStages)[number]);
   const editorHasTask = isAssignedEditor && ["ready_for_edit", "editing", "changes_requested"].includes(ad.production_stage);
   const creatorNeedsReview = isCreator && ad.production_stage === "creator_review";
+  const creatorNeedsChanges = isCreator && ad.production_stage === "creator_changes_requested";
   const canReassign = isReviewer && ["ready_for_edit", "editing", "changes_requested"].includes(ad.production_stage);
   // Admin/manager can always upload final clip unless the ad is already approved (managers) or under any stage (admins)
   const canUploadFinalClip = isReviewer && ad.production_stage !== "approved";
@@ -166,6 +168,7 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
 
             {editorHasTask ? <EditorWorkspace ad={ad} feedback={resubmissionFeedback} inProgressCount={editorInProgressCount} maxConcurrentEdits={settings.max_concurrent_edits} timeLogs={timeLogs} /> : null}
             {creatorNeedsReview ? <CreatorReviewActions adId={ad.id} /> : null}
+            {creatorNeedsChanges ? <CreatorChangeRequestActions ad={ad} editors={editors} workloads={editorWorkloads} campaigns={campaigns.filter((item) => item.active)} products={products.filter((item) => item.active)} availableTags={tags} /> : null}
 
             <VersionHistory versions={versions} />
           </section>
@@ -214,6 +217,7 @@ function DetailRow({ label, value, icon }: { label: string; value: string; icon?
 function currentOwner(ad: AdWithRelations) {
   if (["script_writing", "ready_to_shoot", "shoot_complete"].includes(ad.production_stage)) return ad.creator?.name ?? "Content creator";
   if (["ready_for_edit", "editing", "changes_requested"].includes(ad.production_stage)) return ad.editor?.name ?? "Editor not assigned";
+  if (ad.production_stage === "creator_changes_requested") return ad.creator?.name ?? "Content creator";
   if (ad.production_stage === "creator_review") return `${ad.creator?.name ?? "Content creator"} or final reviewer`;
   if (ad.production_stage === "final_review") return "Manager or admin";
   return "Complete";
@@ -229,6 +233,7 @@ function nextStepText(ad: AdWithRelations) {
     changes_requested: "The assigned editor must address the latest feedback and resubmit.",
     creator_review: "The creator may review it, or a manager/admin may approve directly.",
     final_review: "Waiting for final approval from a manager or admin.",
+    creator_changes_requested: "The creator needs to address reviewer feedback.",
     approved: "Final approval is complete."
   } satisfies Record<AdWithRelations["production_stage"], string>;
   return messages[ad.production_stage];

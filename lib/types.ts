@@ -26,6 +26,7 @@ export type ProductionStage =
   | "editing"
   | "creator_review"
   | "final_review"
+  | "creator_changes_requested"
   | "changes_requested"
   | "approved";
 

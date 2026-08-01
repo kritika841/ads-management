@@ -34,6 +34,7 @@ export type AnalyticsSlaTargets = {
   editing: number;
   creator_review: number;
   final_review: number;
+  creator_changes_requested: number;
   changes_requested: number;
 };
 
@@ -66,13 +67,13 @@ export type AnalyticsDashboardModel = {
 };
 
 type AggregateRow = { id: string; name: string; started: number; wip: number; approved: number; approvalRate: number | null; medianCycleHours: number | null; firstPassRate: number | null; avgRevisions: number | null };
-type TargetStage = "ready_for_edit" | "editing" | "creator_review" | "final_review" | "changes_requested";
+type TargetStage = "ready_for_edit" | "editing" | "creator_review" | "final_review" | "creator_changes_requested" | "changes_requested";
 type Period = { fromMs: number; toMs: number };
 type StageEvent = { stage: ProductionStage; at: number };
 type StageInterval = { adId: string; stage: ProductionStage; startedAt: number; endedAt: number; hours: number };
 
 const IST_OFFSET_MS = 330 * 60_000;
-const targetStages: TargetStage[] = ["ready_for_edit", "editing", "creator_review", "final_review", "changes_requested"];
+const targetStages: TargetStage[] = ["ready_for_edit", "editing", "creator_review", "final_review", "creator_changes_requested", "changes_requested"];
 const stageLabels: Record<ProductionStage, string> = {
   script_writing: "Script in progress",
   ready_to_shoot: "Ready to shoot",
@@ -81,6 +82,7 @@ const stageLabels: Record<ProductionStage, string> = {
   editing: "Editing",
   creator_review: "Creator review",
   final_review: "Final review",
+  creator_changes_requested: "Changes requested to creator",
   changes_requested: "Requested revisions",
   approved: "Approved"
 };
@@ -130,6 +132,7 @@ export function slaTargetsFromSettings(settings: AppSettings): AnalyticsSlaTarge
     editing: settings.editing_sla_hours,
     creator_review: settings.creator_review_sla_hours,
     final_review: settings.final_review_sla_hours,
+    creator_changes_requested: settings.revision_sla_hours,
     changes_requested: settings.revision_sla_hours
   };
 }
@@ -354,9 +357,9 @@ function firstEventTime(ad: AdWithRelations, stage: ProductionStage) { if (stage
 function hasChanges(reviews: ReviewAction[]) { return reviews.some((review) => review.decision === "request_changes" || review.decision === "reject"); }
 function revisionCount(ad: AdWithRelations) { return Math.max(0, (ad.version_count ?? 0) - 1); }
 function stageAt(events: StageEvent[], at: number) { return events.filter((event) => event.at <= at).at(-1)?.stage ?? null; }
-function ownerName(ad: AdWithRelations) { if (["ready_for_edit", "editing", "changes_requested"].includes(ad.production_stage)) return ad.editor?.name ?? "Unassigned editor"; if (ad.production_stage === "final_review") return "Manager / Admin"; return ad.creator?.name ?? "Unassigned creator"; }
+function ownerName(ad: AdWithRelations) { if (["ready_for_edit", "editing", "changes_requested"].includes(ad.production_stage)) return ad.editor?.name ?? "Unassigned editor"; if (ad.production_stage === "final_review") return "Manager / Admin"; if (ad.production_stage === "creator_changes_requested") return ad.creator?.name ?? "Unassigned creator"; return ad.creator?.name ?? "Unassigned creator"; }
 function severityScore(item: AnalyticsDashboardModel["bottlenecks"][number]) { const base = item.severity === "breached" ? 2_000 : item.severity === "at_risk" ? 1_000 : 0; return base + (item.targetHours ? item.ageHours / item.targetHours : item.ageHours / 100); }
-function productionOrder(stage: ProductionStage) { return ["script_writing", "ready_to_shoot", "shoot_complete", "ready_for_edit", "editing", "changes_requested", "creator_review", "final_review", "approved"].indexOf(stage); }
+function productionOrder(stage: ProductionStage) { return ["script_writing", "ready_to_shoot", "shoot_complete", "ready_for_edit", "editing", "changes_requested", "creator_review", "final_review", "creator_changes_requested", "approved"].indexOf(stage); }
 function isTargetStage(stage: ProductionStage): stage is TargetStage { return targetStages.includes(stage as TargetStage); }
 function isProductionStage(value: unknown): value is ProductionStage { return typeof value === "string" && productionOrder(value as ProductionStage) >= 0; }
 function inPeriod(value: number, period: Period) { return value >= period.fromMs && value <= period.toMs; }

@@ -5,6 +5,7 @@ export type QueueKey =
   | "pending_editor_assign"
   | "with_editor"
   | "creator_review"
+  | "creator_changes"
   | "final_review"
   | "new_assignments"
   | "editing"
@@ -22,6 +23,7 @@ export function queuesForRole(role: UserRole): { key: QueueKey; label: string }[
       { key: "pending_editor_assign", label: "Pending editor assign" },
       { key: "with_editor", label: "With editor" },
       { key: "creator_review", label: "Needs my review" },
+      { key: "creator_changes", label: "Changes requested" },
       { key: "final_review", label: "Awaiting final" },
       { key: "approved", label: "Approved" }
     ];
@@ -57,6 +59,7 @@ export function matchesQueue(item: { production_stage: ProductionStage }, queue:
   if (queue === "pending_editor_assign") return stage === "shoot_complete";
   if (queue === "with_editor") return ["ready_for_edit", "editing", "changes_requested"].includes(stage);
   if (queue === "creator_review") return stage === "creator_review";
+  if (queue === "creator_changes") return stage === "creator_changes_requested";
   if (queue === "final_review") return stage === "final_review";
   if (queue === "new_assignments") return stage === "ready_for_edit";
   if (queue === "editing") return stage === "editing";

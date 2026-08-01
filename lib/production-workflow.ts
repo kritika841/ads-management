@@ -25,6 +25,7 @@ export const productionStages: ProductionStage[] = [
   "editing",
   "creator_review",
   "final_review",
+  "creator_changes_requested",
   "changes_requested",
   "approved"
 ];
@@ -37,6 +38,7 @@ export const productionStageLabels: Record<ProductionStage, string> = {
   editing: "Editing",
   creator_review: "Creator review",
   final_review: "Final review",
+  creator_changes_requested: "Changes requested to creator",
   changes_requested: "Changes requested",
   approved: "Approved"
 };
@@ -49,6 +51,7 @@ export const productionStageShortLabels: Record<ProductionStage, string> = {
   editing: "Editing",
   creator_review: "Creator review",
   final_review: "Final review",
+  creator_changes_requested: "Creator changes",
   changes_requested: "Changes",
   approved: "Approved"
 };
@@ -88,7 +91,7 @@ export const creatorEditableStages = [
 ] as const satisfies readonly ProductionStage[];
 
 export function legacyStatusForProductionStage(stage: ProductionStage): AdStatus {
-  if (stage === "creator_review" || stage === "final_review") return "pending_review";
+  if (stage === "creator_review" || stage === "final_review" || stage === "creator_changes_requested") return "pending_review";
   if (stage === "changes_requested") return "changes_requested";
   if (stage === "approved") return "approved";
   return "draft";
@@ -109,6 +112,7 @@ export function workflowStageAgeLabel(stage: ProductionStage, changedAt: string,
     .replace("Waiting ", "");
 
   if (stage === "approved") return age === "just now" ? "Approved just now" : `Approved ${age} ago`;
+  if (stage === "creator_changes_requested") return age === "just now" ? "Changes requested just now" : `Changes requested ${age} ago`;
   if (stage === "changes_requested") return age === "just now" ? "Changes requested just now" : `Changes requested ${age} ago`;
   return age === "just now" ? "Entered status just now" : `In this status for ${age}`;
 }
@@ -176,7 +180,7 @@ export function creatorReviewTransition(decision: "approve" | "request_changes")
     : { status: "changes_requested", productionStage: "changes_requested", approvalStage: "manager_review" };
 }
 
-export function finalReviewTransition(decision: "approve" | "request_changes" | "reject"): {
+export function finalReviewTransition(decision: "approve" | "request_changes" | "reject", target: "creator" | "editor" = "editor"): {
   status: AdStatus;
   productionStage: ProductionStage;
   approvalStage: ApprovalStage;
@@ -186,8 +190,8 @@ export function finalReviewTransition(decision: "approve" | "request_changes" | 
   }
 
   return {
-    status: decision === "reject" ? "rejected" : "changes_requested",
-    productionStage: "changes_requested",
+    status: decision === "reject" ? "rejected" : target === "creator" ? "changes_requested" : "changes_requested",
+    productionStage: decision === "reject" ? "changes_requested" : target === "creator" ? "creator_changes_requested" : "changes_requested",
     approvalStage: "manager_review"
   };
 }

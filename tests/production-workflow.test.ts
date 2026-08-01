@@ -68,11 +68,17 @@ describe("production workflow", () => {
       productionStage: "changes_requested",
       approvalStage: "manager_review"
     });
+    expect(finalReviewTransition("request_changes", "creator")).toEqual({
+      status: "changes_requested",
+      productionStage: "creator_changes_requested",
+      approvalStage: "manager_review"
+    });
   });
 
   it("keeps the legacy analytics status synchronized", () => {
     expect(legacyStatusForProductionStage("shoot_complete")).toBe("draft");
     expect(legacyStatusForProductionStage("creator_review")).toBe("pending_review");
+    expect(legacyStatusForProductionStage("creator_changes_requested")).toBe("pending_review");
     expect(legacyStatusForProductionStage("changes_requested")).toBe("changes_requested");
     expect(legacyStatusForProductionStage("approved")).toBe("approved");
   });

@@ -26,6 +26,7 @@ export function ReviewPanel({
   const router = useRouter();
   const { toast } = useToast();
   const [note, setNote] = useState("");
+  const [changeTarget, setChangeTarget] = useState<"creator" | "editor" | "">("");
   const [approvalQueued, setApprovalQueued] = useState(false);
   const [isPending, startTransition] = useTransition();
   const isReviewer = profile.role === "admin" || profile.role === "manager";
@@ -33,6 +34,7 @@ export function ReviewPanel({
   const isManager = profile.role === "manager";
   const canReviewNow = isReviewer && ad.status === "pending_review" && (ad.production_stage === "creator_review" || ad.production_stage === "final_review");
   const canReopenApproved = (isAdmin || isManager) && ad.production_stage === "approved";
+  const canChooseChangeTarget = ad.production_stage === "final_review" || (ad.production_stage === "approved" && (isAdmin || isManager));
   const permissionMessage = isReviewer && !canReviewNow && !canReopenApproved
     ? ad.production_stage === "approved"
       ? "Final approval is complete."
@@ -57,11 +59,12 @@ export function ReviewPanel({
 
   function saveDecision(decision: "approve" | "request_changes") {
     startTransition(async () => {
-      const response = await runServerAction(() => reviewAd(ad.id, decision, note));
+      const response = await runServerAction(() => reviewAd(ad.id, decision, note, changeTarget || undefined));
       setApprovalQueued(false);
-      toast({ title: response.ok ? (decision === "approve" ? "Creative approved" : "Changes requested") : "Review not saved", description: response.ok ? (decision === "approve" ? "Final approval is complete." : "The creative was returned to the editor.") : response.message ?? "Unable to review.", tone: response.ok ? "success" : "error" });
+      toast({ title: response.ok ? (decision === "approve" ? "Creative approved" : "Changes requested") : "Review not saved", description: response.ok ? (decision === "approve" ? "Final approval is complete." : changeTarget === "creator" ? "The creative was returned to the creator." : "The creative was returned to the editor.") : response.message ?? "Unable to review.", tone: response.ok ? "success" : "error" });
       if (response.ok) {
         setNote("");
+        setChangeTarget("");
         router.refresh();
       }
     });
@@ -85,6 +88,24 @@ export function ReviewPanel({
               placeholder="Approval note or specific requested changes"
             />
           </Field> : null}
+          {canChooseChangeTarget && !canReopenApproved ? (
+            <Field label="Change target" hint="Choose whether the request goes back to the creator or the editor.">
+              <Select value={changeTarget} onChange={(event) => setChangeTarget(event.target.value as "creator" | "editor" | "") }>
+                <option value="">Choose target</option>
+                <option value="creator">Creator</option>
+                <option value="editor">Editor</option>
+              </Select>
+            </Field>
+          ) : null}
+          {canReopenApproved ? (
+            <Field label="Change target" hint="Choose where the reopened creative should go next.">
+              <Select value={changeTarget} onChange={(event) => setChangeTarget(event.target.value as "creator" | "editor" | "") }>
+                <option value="">Choose target</option>
+                <option value="creator">Creator</option>
+                <option value="editor">Editor</option>
+              </Select>
+            </Field>
+          ) : null}
           <div className="grid gap-2">
             <Button disabled={isPending || approvalQueued || !canReviewNow} onClick={() => decide("approve")}>
               {isPending || approvalQueued ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" aria-hidden />}
@@ -92,11 +113,11 @@ export function ReviewPanel({
             </Button>
             <Button
               variant="secondary"
-              disabled={isPending || approvalQueued || !canReviewNow || !note.trim()}
+              disabled={isPending || approvalQueued || !canReviewNow || !note.trim() || (canChooseChangeTarget && !changeTarget) || (canReopenApproved && !changeTarget)}
               onClick={() => decide("request_changes")}
             >
               <Send className="size-4" aria-hidden />
-              Request Changes
+              Request changes
             </Button>
           </div>
 
@@ -113,11 +134,11 @@ export function ReviewPanel({
               </Field>
               <Button
                 variant="secondary"
-                disabled={isPending || !note.trim()}
+                disabled={isPending || !note.trim() || !changeTarget}
                 onClick={() => decide("request_changes")}
               >
                 {isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Send className="size-4" aria-hidden />}
-                Reopen and request changes
+                Reopen and request changes to creator
               </Button>
             </div>
           ) : null}

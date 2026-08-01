@@ -52,6 +52,7 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
   const [playingAdId, setPlayingAdId] = useState<string | null>(null);
   const [cancelAd, setCancelAd] = useState<AdWithRelations | null>(null);
   const [cancelReason, setCancelReason] = useState("");
+  const [cancelTarget, setCancelTarget] = useState<"creator" | "editor" | "">("");
   const [actingAdId, setActingAdId] = useState<string | null>(null);
   const [visibleGridCount, setVisibleGridCount] = useState(gridPageSize);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -64,7 +65,18 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const editors = profiles.filter((item) => item.role === "editor");
   const creators = profiles.filter((item) => item.role === "content_creator");
+  const creatorHasRequestedChanges = profile.role === "content_creator" && ads.some((ad) => ad.creator_id === profile.id && ad.production_stage === "creator_changes_requested");
   const canCreate = profile.role === "content_creator" || profile.role === "admin" || profile.role === "manager";
+  const createBlocked = profile.role === "content_creator" && creatorHasRequestedChanges;
+
+  function handleCreateClick() {
+    if (createBlocked) {
+      toast({ title: "Cannot add creative", description: "You must resolve requested changes before creating a new video.", tone: "info" });
+      return;
+    }
+
+    openCreatorForm();
+  }
 
   useEffect(() => {
     const saved = window.localStorage.getItem("adflow-dashboard-view");
@@ -96,7 +108,7 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
     function keydown(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
       if (event.key === "/" && !target?.isContentEditable && target?.tagName !== "INPUT" && target?.tagName !== "TEXTAREA") { event.preventDefault(); searchRef.current?.focus(); }
-      if (event.key === "Escape" && !isPending) { setFormOpen(false); setEditingAd(null); setPreviewAd(null); setCancelAd(null); }
+      if (event.key === "Escape" && !isPending) { setFormOpen(false); setEditingAd(null); setPreviewAd(null); setCancelAd(null); setCancelTarget(""); }
     }
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
@@ -229,12 +241,19 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
 
   function saveDecision(ad: AdWithRelations, decision: "approve" | "request_changes", note = "") {
     startTransition(async () => {
-      const response = await runServerAction(() => reviewAd(ad.id, decision, note));
-      if (!response.ok) toast({ title: "Review not saved", description: response.message ?? "Unable to save review.", tone: "error" });
-      else { toast({ title: decision === "approve" ? `${ad.name} approved` : "Changes requested", description: decision === "approve" ? "The creative is now approved." : `${ad.name} was returned to the editor.`, tone: "success" }); setCancelAd(null); setCancelReason(""); router.refresh(); }
+      const target = ad.production_stage === "final_review" || ad.production_stage === "approved" ? cancelTarget || undefined : undefined;
+      const response = await runServerAction(() => reviewAd(ad.id, decision, note, target));
+      if (!response.ok) {
+        toast({ title: "Review not saved", description: response.message ?? "Unable to save review.", tone: "error" });
+      } else {
+        const resolvedTarget = target ?? "editor";
+        toast({ title: decision === "approve" ? `${ad.name} approved` : "Changes requested", description: decision === "approve" ? "The creative is now approved." : resolvedTarget === "creator" ? `${ad.name} was returned to the creator.` : `${ad.name} was returned to the editor.`, tone: "success" });
+        setCancelAd(null); setCancelReason(""); setCancelTarget(""); router.refresh();
+      }
       setActingAdId(null);
     });
   }
+
 
   function assign(ad: AdWithRelations, editorId: string, deadline: string) {
     setActingAdId(ad.id);
@@ -332,7 +351,7 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
   }
 
   return <main className="page-container">
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><h1 className="text-2xl font-semibold text-foreground">Creative library</h1><p className="mt-1 text-sm text-muted-foreground">Your work, organized by what needs attention next.</p></div>{canCreate ? <Button onClick={() => openCreatorForm()}><Plus className="size-4" aria-hidden />Add creative</Button> : null}</div>
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><h1 className="text-2xl font-semibold text-foreground">Creative library</h1><p className="mt-1 text-sm text-muted-foreground">Your work, organized by what needs attention next.</p></div>{canCreate ? <Button onClick={handleCreateClick} disabled={createBlocked} title={createBlocked ? "Resolve requested changes before creating another creative." : undefined}><Plus className="size-4" aria-hidden />Add creative</Button> : null}</div>
 
     <div className="mt-6 overflow-x-auto pb-1"><div className="inline-flex min-w-max rounded-md border border-border bg-card p-1 shadow-sm">{queueOptions.map((option) => <button key={option.key} className={cn("flex h-9 items-center gap-2 rounded px-3 text-sm font-medium transition", queue === option.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")} onClick={() => selectQueue(option.key)}>{option.label}<span className={cn("rounded-full px-1.5 py-0.5 text-[10px]", queue === option.key ? "bg-primary-foreground/15" : "bg-muted text-muted-foreground")}>{ads.filter((ad) => matchesQueue(ad, option.key)).length}</span></button>)}</div></div>
 
@@ -400,7 +419,7 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
 
     {formOpen ? <Modal open labelledBy="creator-form-title" onClose={() => { setFormOpen(false); setEditingAd(null); }} className="p-0 sm:p-6"><section className="mx-auto min-h-full w-full bg-card shadow-float sm:min-h-0 sm:max-w-5xl sm:rounded-xl"><div className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-border bg-card px-5 sm:rounded-t-lg"><div><h2 id="creator-form-title" className="text-lg font-semibold text-foreground">{editingAd ? (editingAd && !creatorEditableStages.includes(editingAd.production_stage as (typeof creatorEditableStages)[number]) && (profile.role === "admin" || profile.role === "manager") ? "Override edit creative" : "Update creative") : "Add creative"}</h2><p className="text-xs text-muted-foreground">{editingAd && !creatorEditableStages.includes(editingAd.production_stage as (typeof creatorEditableStages)[number]) && (profile.role === "admin" || profile.role === "manager") ? "Admin/manager override — all fields editable." : "Set the current preparation status and save."}</p></div><Button size="icon" variant="ghost" title="Close" onClick={() => { setFormOpen(false); setEditingAd(null); }}><X className="size-5" aria-hidden /></Button></div><div className="p-5"><CreatorItemForm profile={profile} creators={creators} editors={editors} campaigns={campaigns.filter((item) => item.active)} products={products.filter((item) => item.active)} initialAd={editingAd} availableTags={availableTags} editorWorkloads={editorWorkloads} overrideMode={Boolean(editingAd && !creatorEditableStages.includes(editingAd.production_stage as (typeof creatorEditableStages)[number]) && (profile.role === "admin" || profile.role === "manager"))} onSaved={() => { setFormOpen(false); setEditingAd(null); router.refresh(); }} /></div></section></Modal> : null}
 
-    {cancelAd ? <Modal open labelledBy="changes-title" onClose={() => setCancelAd(null)} className="flex items-center justify-center p-4"><section className="w-full max-w-lg rounded-xl border border-border bg-card shadow-float dark:shadow-none"><div className="flex items-start justify-between border-b border-border px-5 py-4"><div><h2 id="changes-title" className="text-lg font-semibold text-foreground">Request changes</h2><p className="mt-1 text-sm text-muted-foreground">Tell the assigned editor exactly what must change.</p></div><Button size="icon" variant="ghost" className="size-9" title="Close" onClick={() => setCancelAd(null)}><X className="size-5" aria-hidden /></Button></div><div className="p-5"><Textarea className="min-h-32" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} placeholder="Required changes" /></div><div className="flex justify-end gap-2 border-t border-border px-5 py-4"><Button variant="secondary" onClick={() => setCancelAd(null)}>Keep in review</Button><Button variant="danger" disabled={isPending || !cancelReason.trim()} onClick={() => decide(cancelAd, "request_changes", cancelReason.trim())}>{isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <X className="size-4" aria-hidden />}Send changes</Button></div></section></Modal> : null}
+    {cancelAd ? <Modal open labelledBy="changes-title" onClose={() => { setCancelAd(null); setCancelTarget(""); }} className="flex items-center justify-center p-4"><section className="w-full max-w-lg rounded-xl border border-border bg-card shadow-float dark:shadow-none"><div className="flex items-start justify-between border-b border-border px-5 py-4"><div><h2 id="changes-title" className="text-lg font-semibold text-foreground">Request changes</h2><p className="mt-1 text-sm text-muted-foreground">Tell the {cancelAd.production_stage === "final_review" || cancelAd.production_stage === "approved" ? "creator or editor" : "editor"} exactly what must change.</p></div><Button size="icon" variant="ghost" className="size-9" title="Close" onClick={() => { setCancelAd(null); setCancelTarget(""); }}><X className="size-5" aria-hidden /></Button></div><div className="space-y-4 p-5"><Textarea className="min-h-32" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} placeholder="Required changes" />{cancelAd.production_stage === "final_review" || cancelAd.production_stage === "approved" ? <Select value={cancelTarget} onChange={(event) => setCancelTarget(event.target.value as "creator" | "editor" | "") }><option value="">Choose target</option><option value="creator">Creator</option><option value="editor">Editor</option></Select> : null}</div><div className="flex justify-end gap-2 border-t border-border px-5 py-4"><Button variant="secondary" onClick={() => { setCancelAd(null); setCancelTarget(""); }}>Keep in review</Button><Button variant="danger" disabled={isPending || !cancelReason.trim() || ((cancelAd.production_stage === "final_review" || cancelAd.production_stage === "approved") && !cancelTarget)} onClick={() => decide(cancelAd, "request_changes", cancelReason.trim())}>{isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <X className="size-4" aria-hidden />}Send changes</Button></div></section></Modal> : null}
     <AdPreviewModal ad={previewAd} onClose={() => setPreviewAd(null)} />
     {bulkTagModalOpen ? <BulkTagModal count={selectedIds.size} availableTags={availableTags} pending={isBulkTagging} onClose={() => setBulkTagModalOpen(false)} onSubmit={submitBulkTags} /> : null}
   </main>;
@@ -471,8 +490,9 @@ function WorkflowCard({ ad, mediaToken, profile, editors, editorWorkloads, pendi
   const canFinalReview = reviewer && (ad.production_stage === "creator_review" || ad.production_stage === "final_review");
   const canAssignEditor = ad.production_stage === "shoot_complete" && (reviewer || (profile.role === "content_creator" && ad.creator_id === profile.id));
   const activeEditors = editors.filter((item) => item.active);
+  const creatorChangeRequested = profile.role === "content_creator" && ad.creator_id === profile.id && ad.production_stage === "creator_changes_requested";
   const creatorEditable = creatorEditableStages.includes(ad.production_stage as (typeof creatorEditableStages)[number]) && (reviewer || (profile.role === "content_creator" && ad.creator_id === profile.id));
-  const actionLabel = creatorEditable ? "Update" : profile.role === "editor" && ad.production_stage === "ready_for_edit" ? "Open assignment" : profile.role === "editor" && (ad.production_stage === "editing" || ad.production_stage === "changes_requested") ? "Submit video" : profile.role === "content_creator" && ad.production_stage === "creator_review" ? "Review edit" : "Open";
+  const actionLabel = creatorChangeRequested ? "Resubmit creative" : creatorEditable ? "Update" : profile.role === "editor" && ad.production_stage === "ready_for_edit" ? "Open assignment" : profile.role === "editor" && (ad.production_stage === "editing" || ad.production_stage === "changes_requested") ? "Submit video" : profile.role === "content_creator" && ad.production_stage === "creator_review" ? "Review edit" : "Open";
   return (
     <article className="group/card relative overflow-hidden rounded-xl border border-border bg-card shadow-soft transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-ring/40 hover:shadow-float dark:shadow-none dark:hover:border-ring/60">
       {pending ? <div className="absolute inset-0 z-20 flex items-center justify-center bg-card/75 backdrop-blur-[1px]" role="status"><span className="inline-flex items-center gap-2 rounded-lg border border-border bg-popover px-3 py-2 text-sm font-medium text-foreground shadow-soft dark:shadow-none"><Loader2 className="size-4 animate-spin text-primary" aria-hidden />Saving...</span></div> : null}
@@ -518,6 +538,8 @@ function WorkflowCard({ ad, mediaToken, profile, editors, editorWorkloads, pendi
               <Button size="sm" variant="secondary" onClick={onEdit}>Update</Button>
             </div>
           </div>
+        ) : creatorChangeRequested ? (
+          <Link href={`/ads/${ad.id}`} className="mt-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-md border border-border bg-card text-sm font-medium text-foreground hover:bg-muted">Resubmit creative<ArrowRight className="size-3.5" aria-hidden /></Link>
         ) : creatorEditable ? (
           <Button className="mt-3 w-full" size="sm" variant="secondary" onClick={onEdit}>{actionLabel}<ArrowRight className="size-3.5" aria-hidden /></Button>
         ) : (

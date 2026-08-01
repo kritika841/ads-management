@@ -216,7 +216,7 @@ const adminOverrideSchema = z.object({
   productId: z.string().uuid({ message: "Choose a product." }),
   scriptHtml: z.string().optional().nullable(),
   scriptText: z.string().trim().min(1, "Script is required."),
-  stage: z.enum(["script_writing", "ready_to_shoot", "shoot_complete", "ready_for_edit", "editing", "creator_review", "final_review", "changes_requested", "approved"]),
+    stage: z.enum(["script_writing", "ready_to_shoot", "shoot_complete", "ready_for_edit", "editing", "creator_review", "final_review", "creator_changes_requested", "changes_requested", "approved"]),
   editorId: z.string().uuid().optional().or(z.literal("")),
   rawFootageUrl: z.string().trim().optional().or(z.literal("")),
   platforms: z.array(z.string()).default([]),
@@ -255,7 +255,7 @@ export async function adminOverrideCreativeEdit(payload: z.input<typeof adminOve
   }
 
   const now = new Date().toISOString();
-  const stageIndex = ["script_writing", "ready_to_shoot", "shoot_complete", "ready_for_edit", "editing", "creator_review", "final_review", "changes_requested", "approved"].indexOf(data.stage);
+  const stageIndex = ["script_writing", "ready_to_shoot", "shoot_complete", "ready_for_edit", "editing", "creator_review", "final_review", "creator_changes_requested", "changes_requested", "approved"].indexOf(data.stage);
   const assignedAt = editorId ? (currentAd.editor_id === editorId && currentAd.assigned_at ? currentAd.assigned_at : now) : null;
 
   const patch = {
@@ -658,7 +658,126 @@ export async function creatorReviewAd(adId: string, decision: "approve" | "reque
   return { ok: true };
 }
 
-export async function reviewAd(adId: string, decision: "approve" | "request_changes", note: string) {
+const creatorChangeResolutionSchema = z.object({
+  adId: z.string().uuid(),
+  route: z.enum(["review", "editor"]),
+  editorId: z.string().uuid().optional().or(z.literal("")),
+  deadline: z.string().trim().optional().or(z.literal("")),
+  note: z.string().trim().max(4000).optional().nullable(),
+  name: z.string().trim().min(1, "Ad name is required.").max(160),
+  campaignId: z.string().uuid({ message: "Choose a campaign." }),
+  productId: z.string().uuid({ message: "Choose a product." }),
+  scriptText: z.string().trim().min(1, "Script is required."),
+  rawFootageUrl: z.string().trim().optional().or(z.literal("")),
+  platforms: z.array(z.string()).default([]),
+  tags: z.array(z.string()).default([])
+});
+
+export async function resolveCreatorChangeRequest(payload: z.input<typeof creatorChangeResolutionSchema>) {
+  const profile = await requireProfile();
+  const parsed = creatorChangeResolutionSchema.safeParse(payload);
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid change request resolution." };
+  if (profile.role !== "content_creator") {
+    return { ok: false, message: "Only the assigned content creator can resolve creator change requests." };
+  }
+
+  const data = parsed.data;
+  const admin = createSupabaseAdminClient();
+  const { data: row, error } = await admin.from("ads").select("*").eq("id", data.adId).maybeSingle();
+  if (error || !row) return { ok: false, message: error?.message ?? "Ad not found." };
+  const ad = row as Ad;
+
+  if (ad.creator_id !== profile.id) {
+    return { ok: false, message: "You do not own this creative." };
+  }
+  if (ad.production_stage !== "creator_changes_requested") {
+    return { ok: false, message: "This creative is not waiting on creator changes." };
+  }
+
+  const { data: campaign, error: campaignError } = await admin.from("campaigns").select("id").eq("id", data.campaignId).eq("active", true).maybeSingle();
+  if (campaignError || !campaign) return { ok: false, message: campaignError?.message ?? "Choose an active campaign." };
+
+  const { data: product, error: productError } = await admin.from("products").select("id").eq("id", data.productId).eq("active", true).maybeSingle();
+  if (productError || !product) return { ok: false, message: productError?.message ?? "Choose an active product." };
+
+  let rawFootageUrl = ad.raw_footage_url;
+  if (data.rawFootageUrl?.trim()) {
+    const rawUrlError = validateGoogleDriveUrl(data.rawFootageUrl, "raw footage folder");
+    if (rawUrlError) return { ok: false, message: rawUrlError };
+    rawFootageUrl = data.rawFootageUrl.trim();
+  }
+
+  const creativeFields = {
+    name: data.name,
+    campaign_id: data.campaignId,
+    product_id: data.productId,
+    script_text: data.scriptText,
+    raw_footage_url: rawFootageUrl,
+    platforms: data.platforms
+  };
+
+  if (data.route === "editor") {
+    if (!data.editorId) return { ok: false, message: "Choose an editor to send this back for editing." };
+    if (!data.deadline) return { ok: false, message: "Choose a deadline before assigning an editor." };
+
+    const { data: editor, error: editorError } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("id", data.editorId)
+      .eq("role", "editor")
+      .eq("active", true)
+      .maybeSingle();
+    if (editorError || !editor) return { ok: false, message: editorError?.message ?? "Choose an active editor." };
+
+    const { error: updateError } = await admin.from("ads").update({
+      ...creativeFields,
+      editor_id: editor.id,
+      assigned_at: new Date().toISOString(),
+      production_stage: "ready_for_edit",
+      approval_stage: "manager_review",
+      deadline: data.deadline,
+      creator_reviewed_at: null,
+      final_approved_at: null
+    }).eq("id", ad.id);
+    if (updateError) return { ok: false, message: updateError.message };
+
+    const tagError = await syncTags(ad.id, data.tags);
+    if (tagError) return { ok: false, message: `The creative was sent to editing, but tags could not be updated: ${tagError}` };
+
+    await notifyUserIds(admin, [editor.id], ad.id, "Returned to editing", `${profile.name} sent ${ad.name} back to editing.`);
+    await logActivity(ad.id, profile.id, "creator_routed_changes_to_editor", {
+      editor_id: editor.id,
+      deadline: data.deadline,
+      note: data.note || null,
+      previous_stage: ad.production_stage,
+      production_stage: "ready_for_edit"
+    });
+    revalidateAdPaths(ad.id);
+    return { ok: true };
+  }
+
+  const { error: updateError } = await admin.from("ads").update({
+    ...creativeFields,
+    production_stage: "final_review",
+    approval_stage: "admin_final",
+    creator_reviewed_at: new Date().toISOString(),
+    final_approved_at: null
+  }).eq("id", ad.id);
+  if (updateError) return { ok: false, message: updateError.message };
+
+  const tagError = await syncTags(ad.id, data.tags);
+  if (tagError) return { ok: false, message: `The creative was sent for review, but tags could not be updated: ${tagError}` };
+
+  await notifyFinalReviewers(admin, ad, `${profile.name} resolved requested changes for ${ad.name}. Final review is ready.`);
+  await logActivity(ad.id, profile.id, "creator_routed_changes_to_review", {
+    note: data.note || null,
+    previous_stage: ad.production_stage,
+    production_stage: "final_review"
+  });
+  revalidateAdPaths(ad.id);
+  return { ok: true };
+}
+export async function reviewAd(adId: string, decision: "approve" | "request_changes", note: string, target?: "creator" | "editor") {
   const profile = await requireProfile();
   if (profile.role !== "admin" && profile.role !== "manager") {
     return { ok: false, message: "Only managers and admins can review ads." };
@@ -689,22 +808,34 @@ export async function reviewAd(adId: string, decision: "approve" | "request_chan
     return { ok: false, message: "This video is not waiting for final review." };
   }
 
+  const targetRequired = decision === "request_changes" && (ad.production_stage === "final_review" || isAdminReopen || isManagerReopen);
+  if (targetRequired && !target) {
+    return { ok: false, message: "Choose whether to request changes from the creator or editor." };
+  }
+
   const { error } = await admin.rpc("final_review_ad_atomic", {
     p_ad_id: adId,
     p_actor_id: profile.id,
     p_decision: decision,
-    p_note: note.trim() || null
+    p_note: note.trim() || null,
+    p_target: target ?? null
   });
   if (error) return { ok: false, message: error.message };
 
-  const nextStatus = decision === "approve" ? "approved" : "changes_requested";
+  const nextStatus = decision === "approve"
+    ? "approved"
+    : target === "creator"
+      ? "creator_changes_requested"
+      : "changes_requested";
 
-  const recipientIds = Array.from(new Set([ad.creator_id, ad.editor_id].filter((id): id is string => Boolean(id))));
+  const recipientIds = nextStatus === "creator_changes_requested"
+    ? [ad.creator_id].filter((id): id is string => Boolean(id))
+    : nextStatus === "approved"
+      ? [ad.creator_id, ad.editor_id].filter((id): id is string => Boolean(id))
+      : [ad.editor_id].filter((id): id is string => Boolean(id));
+
   const { data: recipients } = recipientIds.length
-    ? await admin
-        .from("profiles")
-        .select("*")
-        .in("id", recipientIds)
+    ? await admin.from("profiles").select("*").in("id", recipientIds)
     : { data: [] };
 
   for (const recipient of recipients ?? []) {
@@ -712,7 +843,9 @@ export async function reviewAd(adId: string, decision: "approve" | "request_chan
       recipient: recipient as Profile,
       adId,
       title: notificationTitle(decision, nextStatus),
-      body: note || `${ad.name} is now ${nextStatus.replace("_", " ")}.`
+      body: nextStatus === "creator_changes_requested"
+        ? (note || `${ad.name} needs creator updates before final review.`)
+        : (note || `${ad.name} is now changes requested.`)
     });
   }
 
