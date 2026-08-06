@@ -3,6 +3,12 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
+function extractDriveFileId(url?: string | null): string | null {
+  if (!url) return null;
+  const match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  return match ? match[1] : null;
+}
+
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createSupabaseServerClient();
@@ -11,13 +17,20 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   const { data: ad, error } = await supabase
     .from("ads")
-    .select("drive_file_id")
+    .select("drive_file_id, resolved_video_url, raw_footage_url")
     .eq("id", id)
     .maybeSingle();
-  if (error || !ad?.drive_file_id) return new Response("Thumbnail not found", { status: 404 });
+  if (error || !ad) return new Response("Thumbnail not found", { status: 404 });
+
+  const fileId =
+    extractDriveFileId(ad.resolved_video_url) ||
+    (ad.drive_file_id && !ad.drive_file_id.includes("folders") ? ad.drive_file_id : null) ||
+    extractDriveFileId(ad.raw_footage_url);
+
+  if (!fileId) return new Response("Thumbnail not found", { status: 404 });
 
   try {
-    const thumbnail = await getDriveThumbnail(ad.drive_file_id);
+    const thumbnail = await getDriveThumbnail(fileId);
     if (thumbnail) {
       return new Response(thumbnail.bytes, {
         headers: {
@@ -32,7 +45,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   // Service account unavailable — redirect to public Drive thumbnail (works for shared files)
   return Response.redirect(
-    `https://drive.google.com/thumbnail?id=${encodeURIComponent(ad.drive_file_id)}&sz=w640`,
+    `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w640`,
     302
   );
 }

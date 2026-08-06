@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/notification-email",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/ingest-clips",
+      "schedule": "0 0 * * *"
     }
   ]
 }

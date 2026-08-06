@@ -1,0 +1,42 @@
+[
+	{
+		"query": "smiling Indian woman in pink attire holding a pink Gulab incense container near a burning incense stick",
+		"expected_ad_id": "91a51f41-33d4-4378-8acb-17c2072f5f13",
+		"notes": "Matches HK 37 segment 0 exactly."
+	},
+	{
+		"query": "Satmi Gulab incense pack on a marble counter with rose petals",
+		"expected_ad_id": "5b5d40ab-24a1-4ef2-9876-5c133eb547ea",
+		"notes": "Matches HK 38 segment 0 exactly."
+	},
+	{
+		"query": "lit Oudh incense stick burns on a white pedestal next to product packaging, releasing smoke",
+		"expected_ad_id": "5aad53ba-e78d-4548-89bb-7af92538ed4f",
+		"notes": "Matches HK 33 segment 0 exactly."
+	},
+	{
+		"query": "a man in glasses sits at a desk beside an Oudh incense package and a burning incense stick",
+		"expected_ad_id": "9b60ad5f-699f-4071-bffd-4fc3c0df80ec",
+		"notes": "Matches HK 34 segment 0 exactly."
+	},
+	{
+		"query": "close-up of Satmvi Oudh incense stick container on a wooden table outdoors",
+		"expected_ad_id": "9a7e8cbb-0201-4088-bac5-555284dc6d02",
+		"notes": "Matches HK 31 segment 0 exactly."
+	},
+	{
+		"query": "man in yellow shirt sitting on bed holding Oudh incense box",
+		"expected_ad_id": "f72ca9c0-a374-4d31-9488-84be2053eb56",
+		"notes": "Matches HK 30 segment 0 exactly."
+	},
+	{
+		"query": "Indian man sitting near a home altar holding Oudh incense box while speaking",
+		"expected_ad_id": "5fa60518-792f-46be-8255-e885695a854a",
+		"notes": "Matches HK 32 segment 0 exactly."
+	},
+	{
+		"query": "burning incense stick smokes in a white holder next to a Havan refill pack on a wooden altar",
+		"expected_ad_id": "0452d0d8-0310-4f4f-86aa-43c97b146d54",
+		"notes": "Matches HK 28 segment 0 exactly."
+	}
+]

@@ -169,7 +169,6 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
             {editorHasTask ? <EditorWorkspace ad={ad} feedback={resubmissionFeedback} inProgressCount={editorInProgressCount} maxConcurrentEdits={settings.max_concurrent_edits} timeLogs={timeLogs} /> : null}
             {creatorNeedsReview ? <CreatorReviewActions adId={ad.id} /> : null}
             {creatorNeedsChanges ? <CreatorChangeRequestActions ad={ad} editors={editors} workloads={editorWorkloads} campaigns={campaigns.filter((item) => item.active)} products={products.filter((item) => item.active)} availableTags={tags} /> : null}
-
             <VersionHistory versions={versions} />
           </section>
 
@@ -233,8 +232,8 @@ function nextStepText(ad: AdWithRelations) {
     changes_requested: "The assigned editor must address the latest feedback and resubmit.",
     creator_review: "The creator may review it, or a manager/admin may approve directly.",
     final_review: "Waiting for final approval from a manager or admin.",
-    creator_changes_requested: "The creator needs to address reviewer feedback.",
-    approved: "Final approval is complete."
+    creator_changes_requested: "The creator can edit the creative and resubmit it for review or to an editor.",
+    approved: "Final approval is complete.",
   } satisfies Record<AdWithRelations["production_stage"], string>;
   return messages[ad.production_stage];
 }

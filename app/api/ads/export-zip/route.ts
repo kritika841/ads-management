@@ -11,7 +11,6 @@ export async function GET(request: NextRequest) {
   const raw = request.nextUrl.searchParams.get("ids") ?? "";
   const ids = raw.split(",").map((s) => s.trim()).filter(Boolean);
   if (!ids.length) return new NextResponse("No IDs provided", { status: 400 });
-  if (ids.length > 10) return new NextResponse("Maximum 10 creatives per download", { status: 400 });
 
   const admin = createSupabaseAdminClient();
 
@@ -37,10 +36,10 @@ export async function GET(request: NextRequest) {
 
     if (media.kind === "folder") {
       for (const [name, bytes] of Object.entries(media.files)) {
-        files[`${folder}/${name}`] = bytes;
+        files[`${folder}_${name}`] = bytes;
       }
     } else {
-      files[`${folder}/${media.name}`] = media.bytes;
+      files[`${folder}_${media.name}`] = media.bytes;
     }
   }
 

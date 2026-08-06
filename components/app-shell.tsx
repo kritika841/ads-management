@@ -7,6 +7,7 @@ import {
   BarChart2,
   BarChart3,
   Bell,
+  Clapperboard,
   House,
   LayoutDashboard,
   LogOut,
@@ -41,6 +42,7 @@ export function AppShell({
   const workspaceLinks: NavItem[] = [
     { href: "/dashboard", label: "Home", icon: House },
     { href: "/library", label: "Creative library", icon: LayoutDashboard },
+    { href: "/raw-clips-search", label: "Ad Library", icon: Clapperboard },
     ...(profile.role === "admin" || profile.role === "manager"
       ? [{ href: "/analytics", label: "Analytics", icon: BarChart3 }]
       : []),
