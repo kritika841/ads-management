@@ -1,12 +1,6 @@
-import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { embedWithGemini, groupSegmentMatchesByAd } from '@/lib/raw-clips';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 type SearchResult = {
   ad_id: string;
@@ -43,7 +37,7 @@ export async function POST(req: NextRequest) {
     // Gemini-only search — no MiniLM fallback
     console.info('Using Gemini embeddings for raw clip search');
     const queryEmbedding = await embedWithGemini(queryText);
-    const { data, error } = await supabase.rpc('match_clip_segments_gemini', {
+    const { data, error } = await supabaseServer.rpc('match_clip_segments_gemini', {
       query_embedding: queryEmbedding,
       similarity_threshold: 0.25,
       match_count: 40,
@@ -69,7 +63,7 @@ export async function POST(req: NextRequest) {
     }
 
     const adIds = rankedResults.map((result) => result.ad_id);
-    const { data: ads, error: adsError } = await supabase
+    const { data: ads, error: adsError } = await supabaseServer
       .from('ads')
       .select('id, name, raw_footage_url, resolved_video_url, thumbnail_url')
       .in('id', adIds);
