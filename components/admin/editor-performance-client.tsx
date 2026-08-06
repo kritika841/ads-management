@@ -3,7 +3,7 @@
 import { Fragment, useState } from "react";
 import { AlertCircle, ChevronDown, ChevronRight, Clock, Film, TrendingUp, User, Zap } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
-import { computeEditorStats, formatDuration, formatHours, type EditorStat } from "@/lib/editor-performance";
+import { computeEditorStats, formatDuration, type EditorStat } from "@/lib/editor-performance";
 import { productionStageLabels } from "@/lib/production-workflow";
 import type { ActivityLog, AdWithRelations, EditorTimeLog, Profile } from "@/lib/types";
 import { cn } from "@/lib/utils";

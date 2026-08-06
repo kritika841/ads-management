@@ -1,11 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 type RawClipStatus = 'pending' | 'processing' | 'done' | 'error';
 
@@ -44,18 +38,18 @@ export async function GET(req: NextRequest) {
   const statusFilter = statusParam === 'all' ? null : statusParam;
   const statusValues = statusFilter === 'pending' ? ['pending', 'processing'] : [statusFilter];
 
-  let query = supabase
+  let query = supabaseServer
     .from('ads')
     .select('id, name, raw_footage_url, resolved_video_url, thumbnail_url, raw_clip_description, segment_ingest_status, segment_ingest_error, created_at', { count: 'exact' })
     .not('raw_footage_url', 'is', null)
     .order('created_at', { ascending: false });
 
-  const totalClipsPromise = supabase
+  const totalClipsPromise = supabaseServer
     .from('ads')
     .select('id', { count: 'exact', head: true })
     .not('raw_footage_url', 'is', null);
 
-  const taggedCountPromise = supabase
+  const taggedCountPromise = supabaseServer
     .from('ads')
     .select('id', { count: 'exact', head: true })
     .not('raw_footage_url', 'is', null)
@@ -95,7 +89,7 @@ export async function GET(req: NextRequest) {
 
   const previewByAd = new Map<string, string>();
   if (doneAdIds.length > 0) {
-    const { data: previews, error: previewError } = await supabase
+    const { data: previews, error: previewError } = await supabaseServer
       .from('raw_clip_segments')
       .select('ad_id, segment_index, visual_description')
       .in('ad_id', doneAdIds)

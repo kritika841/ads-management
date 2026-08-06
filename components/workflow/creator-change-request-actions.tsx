@@ -10,7 +10,7 @@ import type { AdWithRelations, Campaign, Product, Profile } from "@/lib/types";
 
 export function CreatorChangeRequestActions({ ad, editors, workloads, campaigns, products, availableTags }: { ad: AdWithRelations; editors: Profile[]; workloads: Record<string, number>; campaigns: Campaign[]; products: Product[]; availableTags: string[] }) {
   const router = useRouter();
-  const [name, setName] = useState(ad.name);
+  const [name] = useState(ad.name);
   const [campaignId, setCampaignId] = useState(ad.campaign_id ?? "");
   const [productId, setProductId] = useState(ad.product_id ?? "");
   const [scriptText, setScriptText] = useState(ad.script_text ?? "");

@@ -206,7 +206,6 @@ export function computeEditorStats(
   }
 
   const timelines = buildTimelines(activityLogs);
-  const adById = Object.fromEntries(ads.map((ad) => [ad.id, ad]));
 
   const adsAssignedInPeriod: Record<string, Set<string>> = {};
   for (const log of activityLogs) {

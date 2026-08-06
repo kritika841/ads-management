@@ -71,10 +71,8 @@ const LABELS: Record<TimelineKind, string> = {
 
 const ASSIGNMENT_ACTIONS = new Set(["editor_assigned", "editor_reassigned", "assigned"]);
 const EDITING_STARTED_ACTIONS = new Set(["editing_started"]);
-const CHANGES_REQUESTED_ACTIONS = new Set(["creator_requested_changes", "final_changes_requested", "approved_ad_reopened", "changes_requested", "stage_changed_to_changes_requested"]);
 const RESUBMITTED_ACTIONS = new Set(["edited_video_submitted", "edited_video_resubmitted"]);
 const CREATOR_APPROVED_ACTIONS = new Set(["creator_approved_edit"]);
-const FINAL_APPROVED_ACTIONS = new Set(["final_approval_granted", "approved"]);
 
 export function buildEditorPerformanceInsights(params: {
   ads: AdWithRelations[];
