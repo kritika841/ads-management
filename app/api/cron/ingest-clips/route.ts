@@ -43,12 +43,11 @@ export async function GET(request: NextRequest) {
   }
 
   // 2. Reset all "error" clips back to "pending" so they get retried this run
-  const { count: errorCount, error: errorResetErr } = await admin
+  const { error: errorResetErr } = await admin
     .from("ads")
     .update({ segment_ingest_status: "pending", segment_ingest_error: null })
     .eq("segment_ingest_status", "error")
-    .not("raw_footage_url", "is", null)
-    .select("id", { count: "exact", head: true });
+    .not("raw_footage_url", "is", null);
 
   if (errorResetErr) {
     console.error("[ingest-clips cron] Failed to reset error rows:", errorResetErr.message);
@@ -93,13 +92,12 @@ export async function GET(request: NextRequest) {
   }, 5 * 60 * 1000); // start backfill 5 min after ingest begins
 
   console.log(
-    `[ingest-clips cron] Triggered. Stale reset: ${staleReset ?? 0}, Error→Pending reset: ${errorCount ?? 0}, Pending clips: ${pendingCount ?? 0}`
+    `[ingest-clips cron] Triggered. Stale reset: ${staleReset ?? 0}, Pending clips: ${pendingCount ?? 0}`
   );
 
   return NextResponse.json({
     ok: true,
     staleReset: staleReset ?? 0,
-    errorReset: errorCount ?? 0,
     pendingClips: pendingCount ?? 0,
     message: "Ingest and backfill scripts spawned in background.",
   });
