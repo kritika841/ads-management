@@ -219,8 +219,6 @@ export default function RawClipsSearchPage() {
   const [browseTotalClips, setBrowseTotalClips] = useState(0);
   const [browseTaggedCount, setBrowseTaggedCount] = useState(0);
   const [browseStatus, setBrowseStatus] = useState<RawClipStatusFilter>("all");
-  const [browseDateFrom, setBrowseDateFrom] = useState("");
-  const [browseDateTo, setBrowseDateTo] = useState("");
 
   useEffect(() => {
     if (activeQuery.trim()) return;
@@ -235,8 +233,6 @@ export default function RawClipsSearchPage() {
           pageSize: String(PAGE_SIZE),
           status: browseStatus,
         });
-        if (browseDateFrom) params.set("dateFrom", browseDateFrom);
-        if (browseDateTo) params.set("dateTo", browseDateTo);
         const res = await fetch(`/api/raw-clips?${params.toString()}`);
         const data = await readJsonResponse<RawClipBrowseResponse>(res);
         if (!res.ok) {
@@ -263,7 +259,7 @@ export default function RawClipsSearchPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeQuery, browsePage, browseStatus, browseDateFrom, browseDateTo]);
+  }, [activeQuery, browsePage, browseStatus]);
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -364,7 +360,7 @@ export default function RawClipsSearchPage() {
                 Showing {browseTotal} filtered results. Browse the archive or filter to see only pending or done clips.
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap gap-2">
               {statusButtonLabels.map((item) => (
                 <Button
                   key={item.value}
@@ -379,35 +375,6 @@ export default function RawClipsSearchPage() {
                   {item.label}
                 </Button>
               ))}
-              <div className="ml-1 h-5 w-px bg-border" aria-hidden />
-              <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                From
-                <input
-                  type="date"
-                  value={browseDateFrom}
-                  onChange={(e) => { setBrowseDateFrom(e.target.value); setBrowsePage(1); }}
-                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs text-foreground shadow-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"
-                />
-              </label>
-              <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                To
-                <input
-                  type="date"
-                  value={browseDateTo}
-                  onChange={(e) => { setBrowseDateTo(e.target.value); setBrowsePage(1); }}
-                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs text-foreground shadow-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"
-                />
-              </label>
-              {(browseDateFrom || browseDateTo) && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => { setBrowseDateFrom(""); setBrowseDateTo(""); setBrowsePage(1); }}
-                >
-                  Clear dates
-                </Button>
-              )}
             </div>
           </div>
 

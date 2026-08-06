@@ -42,6 +42,8 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
   const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
   const [deadline, setDeadline] = useState("all");
   const [sort, setSort] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [view, setView] = useState<DashboardView>("grid");
   const [urlInitialized, setUrlInitialized] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -133,16 +135,21 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
         if (deadline === "today") return days === 0;
         return days >= 0 && days <= 3;
       })
-      .filter((ad) => !text || `${ad.name} ${ad.script_text ?? ""} ${ad.creator?.name ?? ""} ${ad.editor?.name ?? ""} ${ad.campaign?.name ?? ""} ${ad.product?.name ?? ""} ${ad.tags.map((item) => item.name).join(" ")}`.toLowerCase().includes(text));
+      .filter((ad) => !text || `${ad.name} ${ad.script_text ?? ""} ${ad.creator?.name ?? ""} ${ad.editor?.name ?? ""} ${ad.campaign?.name ?? ""} ${ad.product?.name ?? ""} ${ad.tags.map((item) => item.name).join(" ")}`.toLowerCase().includes(text))
+      .filter((ad) => {
+        if (dateFrom && ad.created_at < `${dateFrom}T00:00:00.000Z`) return false;
+        if (dateTo && ad.created_at > `${dateTo}T23:59:59.999Z`) return false;
+        return true;
+      });
     return filtered.sort((a, b) => {
       if (sort === "deadline") return (a.deadline ?? "9999-12-31").localeCompare(b.deadline ?? "9999-12-31");
       if (sort === "waiting") return a.workflow_status_changed_at.localeCompare(b.workflow_status_changed_at);
       if (sort === "oldest") return a.created_at.localeCompare(b.created_at);
       return b.updated_at.localeCompare(a.updated_at);
     });
-  }, [ads, campaign, creator, deadline, editor, platform, product, query, queue, sort, stage, tag]);
+  }, [ads, campaign, creator, dateFrom, dateTo, deadline, editor, platform, product, query, queue, sort, stage, tag]);
 
-  const filtersActive = [stage, editor, creator, campaign, product, platform, deadline, sort].some((value) => value !== "all") || tag.length > 0;
+  const filtersActive = [stage, editor, creator, campaign, product, platform, deadline, sort].some((value) => value !== "all") || tag.length > 0 || !!dateFrom || !!dateTo;
   const gridFilterKey = [queue, query, stage, editor, creator, campaign, product, platform, ...tag, deadline, sort].join("|");
   const visibleGridAds = filteredAds.slice(0, visibleGridCount);
   const hasMoreGridAds = view === "grid" && visibleGridCount < filteredAds.length;
@@ -191,12 +198,14 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
     if (tag.length > 0) chips.push({ key: "tag", label: `Tags: ${tag.map((item) => `#${item}`).join(", ")}`, clear: () => setTag([]) });
     if (deadline !== "all") chips.push({ key: "deadline", label: `Deadline: ${deadline === "soon" ? "Due in 3 days" : deadline === "today" ? "Due today" : "Overdue"}`, clear: () => setDeadline("all") });
     if (sort !== "all") chips.push({ key: "sort", label: `Sort: ${sort === "deadline" ? "Deadline first" : sort === "waiting" ? "Waiting longest" : "Oldest created"}`, clear: () => setSort("all") });
+    if (dateFrom) chips.push({ key: "dateFrom", label: `From: ${dateFrom}`, clear: () => setDateFrom("") });
+    if (dateTo) chips.push({ key: "dateTo", label: `To: ${dateTo}`, clear: () => setDateTo("") });
     return chips;
-  }, [campaign, campaigns, creator, creators, deadline, editor, editors, platform, product, products, sort, stage, tag]);
+  }, [campaign, campaigns, creator, creators, dateFrom, dateTo, deadline, editor, editors, platform, product, products, sort, stage, tag]);
 
   function clearFilters(clearSearch = false) {
     setStage("all"); setEditor("all"); setCreator("all"); setCampaign("all"); setProduct("all");
-    setPlatform("all"); setTag([]); setDeadline("all"); setSort("all");
+    setPlatform("all"); setTag([]); setDeadline("all"); setSort("all"); setDateFrom(""); setDateTo("");
     if (clearSearch) setQuery("");
   }
 
@@ -387,7 +396,7 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
                 </div>
               </div>
             ) : null}
-          </div><FilterSelect label="Deadline" value={deadline} onChange={setDeadline} options={[{ value: "overdue", label: "Overdue" }, { value: "today", label: "Due today" }, { value: "soon", label: "Due in 3 days" }]} /><FilterSelect label="Sort" value={sort} onChange={setSort} options={[{ value: "deadline", label: "Deadline first" }, { value: "waiting", label: "Waiting longest" }, { value: "oldest", label: "Oldest created" }]} /></div></div> : null}
+          </div><FilterSelect label="Deadline" value={deadline} onChange={setDeadline} options={[{ value: "overdue", label: "Overdue" }, { value: "today", label: "Due today" }, { value: "soon", label: "Due in 3 days" }]} /><FilterSelect label="Sort" value={sort} onChange={setSort} options={[{ value: "deadline", label: "Deadline first" }, { value: "waiting", label: "Waiting longest" }, { value: "oldest", label: "Oldest created" }]} /><div><label className="space-y-1"><span className="text-xs font-medium text-muted-foreground">Created from</span><input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="flex h-10 w-full rounded-lg border border-input bg-card px-3 text-sm text-foreground transition-[border-color,box-shadow,background-color] duration-150 hover:border-ring/50 focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20" /></label></div><div><label className="space-y-1"><span className="text-xs font-medium text-muted-foreground">Created to</span><input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="flex h-10 w-full rounded-lg border border-input bg-card px-3 text-sm text-foreground transition-[border-color,box-shadow,background-color] duration-150 hover:border-ring/50 focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20" /></label></div></div></div> : null}
     </section>
 
     <div className="mt-4 flex items-center justify-between gap-3 flex-wrap">
