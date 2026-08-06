@@ -126,7 +126,7 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
       .filter((ad) => campaign === "all" || ad.campaign_id === campaign)
       .filter((ad) => product === "all" || ad.product_id === product)
       .filter((ad) => platform === "all" || ad.platforms.includes(platform as AdWithRelations["platforms"][number]))
-      .filter((ad) => tag.length === 0 || tag.every((selectedTag) => ad.tags.some((item) => item.name === selectedTag)))
+      .filter((ad) => tag.length === 0 || tag.some((selectedTag) => ad.tags.some((item) => item.name === selectedTag)))
       .filter((ad) => {
         if (deadline === "all") return true;
         if (!ad.deadline || ad.status === "approved" || ad.status === "published") return false;
@@ -137,8 +137,9 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
       })
       .filter((ad) => !text || `${ad.name} ${ad.script_text ?? ""} ${ad.creator?.name ?? ""} ${ad.editor?.name ?? ""} ${ad.campaign?.name ?? ""} ${ad.product?.name ?? ""} ${ad.tags.map((item) => item.name).join(" ")}`.toLowerCase().includes(text))
       .filter((ad) => {
-        if (dateFrom && ad.created_at < `${dateFrom}T00:00:00.000Z`) return false;
-        if (dateTo && ad.created_at > `${dateTo}T23:59:59.999Z`) return false;
+        const adDate = ad.created_at.slice(0, 10);
+        if (dateFrom && adDate < dateFrom) return false;
+        if (dateTo && adDate > dateTo) return false;
         return true;
       });
     return filtered.sort((a, b) => {

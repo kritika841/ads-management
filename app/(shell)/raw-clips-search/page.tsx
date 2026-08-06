@@ -353,9 +353,7 @@ export default function RawClipsSearchPage() {
         <section className="mt-6 space-y-5">
           <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-sm font-medium text-foreground">
-                {browseTotalClips} clips · {browseTaggedCount} tagged
-              </p>
+
               <p className="mt-1 text-xs text-muted-foreground">
                 Showing {browseTotal} filtered results. Browse the archive or filter to see only pending or done clips.
               </p>
