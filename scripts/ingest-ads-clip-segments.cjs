@@ -143,7 +143,7 @@ async function main() {
     return;
   }
 
-  const { embedRawClipText, getCurrentGeminiApiKey, rotateGeminiApiKey } = await import("../lib/raw-clips.js");
+  const { embedWithGemini, getCurrentGeminiApiKey, rotateGeminiApiKey } = await import("../lib/raw-clips.js");
   
   let ai = new GoogleGenAI({ apiKey: getCurrentGeminiApiKey() });
 
@@ -157,12 +157,7 @@ async function main() {
   console.log(`Reset ${resetCount || 0} stale segment ingest row(s).`);
 
 
-  console.log("Loading local embedding model...");
-
-  const probeEmbedding = await embedRawClipText("embedding dimension probe");
-  if (probeEmbedding && probeEmbedding.length !== 384) {
-    throw new Error(`Expected 384-dimensional embeddings, got ${probeEmbedding.length}`);
-  }
+  console.log("Ready to embed with Gemini...");
 
   if (includeDone) {
     console.log("Backfill mode enabled: already-done clips will be reprocessed once.");
@@ -252,9 +247,9 @@ async function main() {
             segment.on_screen_text,
             segment.people_description
           );
-          const embedding = await embedRawClipText(embedInput);
-          if (embedding.length !== 384) {
-            throw new Error(`Expected 384-dimensional segment embedding, got ${embedding.length}`);
+          const embedding = await embedWithGemini(embedInput);
+          if (embedding.length !== 3072) {
+            throw new Error(`Expected 3072-dimensional segment embedding, got ${embedding.length}`);
           }
 
           segmentRows.push({
@@ -267,7 +262,7 @@ async function main() {
             on_screen_text: segment.on_screen_text,
             people_description: segment.people_description,
             spoken_text: segment.spoken_text,
-            embedding,
+            embedding_gemini: embedding,
           });
         }
 
