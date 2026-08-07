@@ -1,3 +1,4 @@
+import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { embedWithGemini, groupSegmentMatchesByAd } from '@/lib/raw-clips';
@@ -23,6 +24,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
     const body = await req.json().catch(() => ({}));
     const query = body?.query;
     if (typeof query !== 'string' || !query.trim()) {
@@ -37,7 +43,7 @@ export async function POST(req: NextRequest) {
     // Gemini-only search — no MiniLM fallback
     console.info('Using Gemini embeddings for raw clip search');
     const queryEmbedding = await embedWithGemini(queryText);
-    const { data, error } = await supabaseServer.rpc('match_clip_segments_gemini', {
+    const { data, error } = await supabaseAdmin.rpc('match_clip_segments_gemini', {
       query_embedding: queryEmbedding,
       similarity_threshold: 0.25,
       match_count: 40,
