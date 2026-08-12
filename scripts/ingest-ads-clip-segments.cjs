@@ -160,6 +160,8 @@ async function main() {
   
   let ai = new GoogleGenAI({ apiKey: getCurrentGeminiApiKey() });
 
+  await syncRawClipsCatalog(supabase, drive, { targetClipName });
+
   const { data: resetCount, error: resetError } = await supabase.rpc("reset_stale_segment_ingest", {
     stale_minutes: 15,
   });
@@ -180,46 +182,49 @@ async function main() {
   while (processedAny) {
     processedAny = false;
     let query = supabase
-      .from("ads")
-      .select("id, name, raw_footage_url, created_at, segment_ingest_status, thumbnail_url")
-      .not("raw_footage_url", "is", null)
+      .from("raw_clips")
+      .select("id, ad_id, drive_file_id, source_raw_footage_url, resolved_video_url, thumbnail_url, original_name, duration_millis, created_at, ingest_status, ads:ad_id(name)")
       .order("created_at", { ascending: true })
       .limit(BATCH_SIZE);
 
     if (targetClipName) {
-      // Single-clip mode: process unconditionally by name, ignoring status
-      query = query.eq("name", targetClipName);
+      query = query.eq("ads.name", targetClipName);
     } else if (includeDone) {
-      query = query.in("segment_ingest_status", ["pending", "done"]);
+      query = query.in("ingest_status", ["pending", "done"]);
     } else {
-      query = query.eq("segment_ingest_status", "pending");
+      query = query.eq("ingest_status", "pending");
     }
 
     const { data: rows, error } = await query;
 
     if (error) {
-      console.error("Error querying ads table:", error.message);
+      console.error("Error querying raw_clips table:", error.message);
       process.exit(1);
     }
     if (!rows || rows.length === 0) break;
 
     for (const row of rows) {
-      const claimed = await claimAdForProcessing(supabase, row.id, {
+      const clipName = Array.isArray(row.ads) ? row.ads[0]?.name || row.id : row.ads?.name || row.id;
+      const claimed = await claimRawClipForProcessing(supabase, row.id, {
         force: Boolean(targetClipName),
         includeDone,
       });
       if (!claimed) {
-        console.log(`\n--- ${row.name || row.id} ---`);
+        console.log(`\n--- ${clipName} / ${row.drive_file_id || row.id} ---`);
         console.log("Skipped: another worker already claimed this clip.");
         continue;
       }
 
       processedAny = true;
-      console.log(`\n--- ${row.name || row.id} ---`);
+      console.log(`\n--- ${clipName} / ${row.drive_file_id || row.id} ---`);
 
       let tempPath;
       try {
-        const { fileId, meta, resolvedVideoUrl, thumbnailUrl } = await resolveDriveFileMeta(drive, row.raw_footage_url);
+        const { fileId, meta, resolvedVideoUrl, thumbnailUrl } = await resolveDriveFileMeta(
+          drive,
+          row.source_raw_footage_url,
+          row.drive_file_id
+        );
         if (!fileId) {
           throw new Error("Could not parse Drive file or folder ID from URL");
         }
@@ -252,7 +257,7 @@ async function main() {
         const segmentRows = [];
 
         // Unconditionally delete old segments to make insertion idempotent
-        const { error: deleteError } = await supabase.from("raw_clip_segments").delete().eq("ad_id", row.id);
+        const { error: deleteError } = await supabase.from("raw_clip_segments").delete().eq("raw_clip_id", row.id);
         if (deleteError) {
           throw new Error(`Failed to clear old segments: ${deleteError.message}`);
         }
@@ -271,7 +276,8 @@ async function main() {
           }
 
           segmentRows.push({
-            ad_id: row.id,
+            raw_clip_id: row.id,
+            ad_id: row.ad_id,
             segment_index: segment.segment_index,
             start_seconds: segment.start_seconds,
             end_seconds: segment.end_seconds,
@@ -294,53 +300,68 @@ async function main() {
         const clipCaption = deriveClipCaptionFromSegments(normalizedSegments);
 
         await supabase
-          .from("ads")
+          .from("raw_clips")
           .update({
-            segment_ingest_status: "done",
-            segment_ingest_error: null,
-            drive_file_id: fileId,
-            raw_footage_original_name: meta.originalName || null,
-            resolved_video_url: resolvedVideoUrl || row.raw_footage_url,
+            ingest_status: "done",
+            ingest_error: null,
+            original_name: meta.originalName || null,
+            resolved_video_url: resolvedVideoUrl || row.source_raw_footage_url,
             thumbnail_url: thumbnailUrl || row.thumbnail_url || null,
-            raw_clip_description: clipCaption,
+            preview_description: clipCaption,
+            duration_millis: Number(meta.durationMillis || 0) || row.duration_millis || null,
+            updated_at: new Date().toISOString(),
           })
           .eq("id", row.id);
+
+        await syncAdIngestStatus(supabase, row.ad_id, {
+          driveFileId: fileId,
+          resolvedVideoUrl: resolvedVideoUrl || row.source_raw_footage_url,
+          thumbnailUrl: thumbnailUrl || row.thumbnail_url || null,
+          originalName: meta.originalName || null,
+          clipCaption,
+        });
 
         console.log(`Saved ${segmentRows.length} segment(s).`);
       } catch (err) {
         if (err instanceof DailyQuotaError || isDailyQuotaError(err)) {
           console.error("[QUOTA] Daily limit reached, exiting cleanly, will resume next scheduled run");
           await supabase
-            .from("ads")
+            .from("raw_clips")
             .update({
-              segment_ingest_status: "pending",
-              segment_ingest_error: null,
+              ingest_status: "pending",
+              ingest_error: null,
+              updated_at: new Date().toISOString(),
             })
             .eq("id", row.id);
+          await syncAdIngestStatus(supabase, row.ad_id);
           throw new DailyQuotaError(err.message || "Daily quota exhausted");
         }
 
         if (isRetryableProcessingError(err)) {
           console.error("Transient processing error, returning clip to pending:", err.message);
           await supabase
-            .from("ads")
+            .from("raw_clips")
             .update({
-              segment_ingest_status: "pending",
-              segment_ingest_error: null,
+              ingest_status: "pending",
+              ingest_error: null,
+              updated_at: new Date().toISOString(),
             })
             .eq("id", row.id);
+          await syncAdIngestStatus(supabase, row.ad_id);
           await sleep(TRANSIENT_ERROR_BACKOFF_MS);
           continue;
         }
 
         console.error("Error processing clip:", err.message);
         await supabase
-          .from("ads")
+          .from("raw_clips")
           .update({
-            segment_ingest_status: "error",
-            segment_ingest_error: err.message,
+            ingest_status: "error",
+            ingest_error: err.message,
+            updated_at: new Date().toISOString(),
           })
           .eq("id", row.id);
+        await syncAdIngestStatus(supabase, row.ad_id);
       } finally {
         if (tempPath) await fs.promises.unlink(tempPath).catch(() => {});
       }
@@ -355,28 +376,124 @@ async function main() {
   console.log("\nDone. No more pending segment rows.");
 }
 
-async function claimAdForProcessing(supabase, adId, options = {}) {
+async function claimRawClipForProcessing(supabase, rawClipId, options = {}) {
   const { force = false, includeDone = false } = options;
 
   let query = supabase
-    .from("ads")
-    .update({ segment_ingest_status: "processing", segment_ingest_error: null })
-    .eq("id", adId)
+    .from("raw_clips")
+    .update({ ingest_status: "processing", ingest_error: null, updated_at: new Date().toISOString() })
+    .eq("id", rawClipId)
     .select("id")
     .limit(1);
 
   if (!force) {
     query = includeDone
-      ? query.in("segment_ingest_status", ["pending", "done"])
-      : query.eq("segment_ingest_status", "pending");
+      ? query.in("ingest_status", ["pending", "done"])
+      : query.eq("ingest_status", "pending");
   }
 
   const { data, error } = await query;
   if (error) {
-    throw new Error(`Failed to claim clip for processing: ${error.message}`);
+    throw new Error(`Failed to claim raw clip for processing: ${error.message}`);
   }
 
   return Array.isArray(data) && data.length > 0;
+}
+
+async function syncRawClipsCatalog(supabase, drive, options = {}) {
+  const { targetClipName = null } = options;
+  let query = supabase
+    .from("ads")
+    .select("id, name, raw_footage_url, created_at")
+    .not("raw_footage_url", "is", null)
+    .order("created_at", { ascending: true })
+    .limit(1000);
+
+  if (targetClipName) {
+    query = query.eq("name", targetClipName);
+  }
+
+  const { data: ads, error } = await query;
+  if (error) {
+    throw new Error(`Failed to load ads for raw clip sync: ${error.message}`);
+  }
+
+  for (const ad of ads || []) {
+    const clips = await resolveDriveTargets(drive, ad.raw_footage_url);
+    for (const clip of clips) {
+      const { error: upsertError } = await supabase
+        .from("raw_clips")
+        .upsert({
+          ad_id: ad.id,
+          drive_file_id: clip.fileId,
+          source_raw_footage_url: ad.raw_footage_url,
+          resolved_video_url: clip.resolvedVideoUrl,
+          thumbnail_url: clip.thumbnailUrl || null,
+          original_name: clip.meta.originalName || null,
+          duration_millis: Number(clip.meta.durationMillis || 0) || null,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "drive_file_id" });
+
+      if (upsertError) {
+        throw new Error(`Failed to upsert raw clip ${clip.fileId}: ${upsertError.message}`);
+      }
+    }
+  }
+}
+
+async function syncAdIngestStatus(supabase, adId, metadata = null) {
+  const { data: rawClips, error } = await supabase
+    .from("raw_clips")
+    .select("ingest_status, ingest_error, resolved_video_url, thumbnail_url, original_name, preview_description, drive_file_id")
+    .eq("ad_id", adId);
+
+  if (error) {
+    throw new Error(`Failed to load raw clips for ad status sync: ${error.message}`);
+  }
+
+  const clips = rawClips || [];
+  if (clips.length === 0) {
+    return;
+  }
+
+  const statuses = clips.map((clip) => clip.ingest_status);
+  let nextStatus = "pending";
+  let nextError = null;
+
+  if (statuses.every((status) => status === "done")) {
+    nextStatus = "done";
+  } else if (statuses.some((status) => status === "processing")) {
+    nextStatus = "processing";
+  } else if (statuses.some((status) => status === "pending")) {
+    nextStatus = "pending";
+  } else if (statuses.some((status) => status === "error")) {
+    nextStatus = "error";
+    nextError = clips.find((clip) => clip.ingest_error)?.ingest_error || null;
+  }
+
+  const representativeClip =
+    clips.find((clip) => clip.ingest_status === "done") ||
+    clips.find((clip) => clip.ingest_status === "processing") ||
+    clips[0];
+
+  const payload = {
+    segment_ingest_status: nextStatus,
+    segment_ingest_error: nextError,
+    drive_file_id: metadata?.driveFileId || representativeClip?.drive_file_id || null,
+    resolved_video_url: metadata?.resolvedVideoUrl || representativeClip?.resolved_video_url || null,
+    thumbnail_url: metadata?.thumbnailUrl || representativeClip?.thumbnail_url || null,
+    raw_footage_original_name: metadata?.originalName || representativeClip?.original_name || null,
+    raw_clip_description: metadata?.clipCaption || representativeClip?.preview_description || null,
+  };
+
+  const { error: updateError } = await supabase
+    .from("ads")
+    .update(payload)
+    .eq("id", adId);
+
+  if (updateError) {
+    throw new Error(`Failed to update ad ingest status: ${updateError.message}`);
+  }
 }
 
 function createDriveAuth() {
@@ -546,10 +663,18 @@ async function repairSegmentIngestState(supabase) {
   let reconciledDone = 0;
   let requeuedTransient = 0;
 
+  const { data: rawClipRows, error: rawClipRowsError } = await supabase
+    .from("raw_clips")
+    .select("id, ad_id, ingest_status, ingest_error, preview_description");
+
+  if (rawClipRowsError && !String(rawClipRowsError.message || "").includes("relation \"public.raw_clips\" does not exist")) {
+    throw new Error(`Failed to load raw clips for repair: ${rawClipRowsError.message}`);
+  }
+
   const { data: segmentRows, error: segmentError } = await supabase
     .from("raw_clip_segments")
-    .select("ad_id, segment_index, visual_description")
-    .order("ad_id", { ascending: true })
+    .select("ad_id, raw_clip_id, segment_index, visual_description")
+    .order("raw_clip_id", { ascending: true })
     .order("segment_index", { ascending: true });
 
   if (segmentError) {
@@ -557,9 +682,36 @@ async function repairSegmentIngestState(supabase) {
   }
 
   const firstSegmentByAdId = new Map();
+  const firstSegmentByRawClipId = new Map();
   for (const segment of segmentRows || []) {
     if (!firstSegmentByAdId.has(segment.ad_id) && String(segment.visual_description || "").trim()) {
       firstSegmentByAdId.set(segment.ad_id, String(segment.visual_description).trim());
+    }
+    if (segment.raw_clip_id && !firstSegmentByRawClipId.has(segment.raw_clip_id) && String(segment.visual_description || "").trim()) {
+      firstSegmentByRawClipId.set(segment.raw_clip_id, String(segment.visual_description).trim());
+    }
+  }
+
+  for (const rawClip of rawClipRows || []) {
+    const previewDescription = firstSegmentByRawClipId.get(rawClip.id);
+    if (!previewDescription) {
+      continue;
+    }
+
+    if (rawClip.ingest_status !== "done" || !rawClip.preview_description) {
+      const { error: rawClipUpdateError } = await supabase
+        .from("raw_clips")
+        .update({
+          ingest_status: "done",
+          ingest_error: null,
+          preview_description: rawClip.preview_description || previewDescription,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", rawClip.id);
+
+      if (rawClipUpdateError) {
+        throw new Error(`Failed to reconcile raw clip ${rawClip.id}: ${rawClipUpdateError.message}`);
+      }
     }
   }
 
@@ -629,8 +781,8 @@ async function repairSegmentIngestState(supabase) {
   return { reconciledDone, requeuedTransient };
 }
 
-async function resolveDriveFileMeta(drive, rawFootageUrl) {
-  const fileId = extractDriveFileId(rawFootageUrl);
+async function resolveDriveFileMeta(drive, rawFootageUrl, preferredFileId = null) {
+  const fileId = preferredFileId || extractDriveFileId(rawFootageUrl);
   if (fileId) {
     const meta = await drive.files.get({
       fileId,
@@ -672,6 +824,32 @@ async function resolveDriveFileMeta(drive, rawFootageUrl) {
   };
 }
 
+async function resolveDriveTargets(drive, rawFootageUrl) {
+  const directFileId = extractDriveFileId(rawFootageUrl);
+  if (directFileId) {
+    const clip = await resolveDriveFileMeta(drive, rawFootageUrl, directFileId);
+    return clip.fileId ? [clip] : [];
+  }
+
+  const folderId = extractDriveFolderId(rawFootageUrl);
+  if (!folderId) {
+    return [];
+  }
+
+  const files = await listVideoFilesInFolder(drive, folderId);
+  return files.map((file) => ({
+    fileId: file.id,
+    resolvedVideoUrl: `https://drive.google.com/file/d/${file.id}/view`,
+    thumbnailUrl: file.thumbnailLink || null,
+    meta: {
+      originalName: file.name,
+      mimeType: file.mimeType,
+      size: file.size,
+      durationMillis: file.videoMediaMetadata?.durationMillis,
+    },
+  }));
+}
+
 function extractDriveFileId(url) {
   if (!url) return null;
   const patterns = [/\/file\/d\/([a-zA-Z0-9_-]+)/, /[?&]id=([a-zA-Z0-9_-]+)/, /\/d\/([a-zA-Z0-9_-]+)/];
@@ -699,6 +877,17 @@ async function getFirstFileInFolder(drive, folderId) {
   const files = res.data.files || [];
   console.log(`Folder ${folderId}: query returned ${files.length} video file(s)`);
   return files[0] || null;
+}
+
+async function listVideoFilesInFolder(drive, folderId) {
+  const q = `'${folderId}' in parents and trashed = false and mimeType contains 'video/'`;
+  const res = await drive.files.list({
+    q,
+    fields: "files(id, name, mimeType, size, videoMediaMetadata(durationMillis), thumbnailLink)",
+    pageSize: 1000,
+    orderBy: "createdTime",
+  });
+  return res.data.files || [];
 }
 
 async function downloadToTemp(drive, fileId, filename, expectedSize) {

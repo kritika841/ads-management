@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { BadgeAlert, Clapperboard, Clock3, ImageOff, Search } from "lucide-react";
 
 interface ClipResult {
+  raw_clip_id: string;
   ad_id: string;
   name: string | null;
   raw_footage_url: string;
@@ -21,6 +22,7 @@ type RawClipStatusFilter = "all" | "done" | "pending" | "error";
 
 interface RawClipBrowseItem {
   id: string;
+  ad_id: string;
   name: string | null;
   raw_footage_url: string;
   resolved_video_url: string | null;
@@ -216,6 +218,8 @@ export default function RawClipsSearchPage() {
   const [browsePage, setBrowsePage] = useState(1);
   const [browseTotalPages, setBrowseTotalPages] = useState(1);
   const [browseTotal, setBrowseTotal] = useState(0);
+  const [browseTotalClips, setBrowseTotalClips] = useState(0);
+  const [browseTaggedCount, setBrowseTaggedCount] = useState(0);
   const [browseStatus, setBrowseStatus] = useState<RawClipStatusFilter>("all");
 
   useEffect(() => {
@@ -240,6 +244,8 @@ export default function RawClipsSearchPage() {
           setBrowseItems(data.items || []);
           setBrowseTotalPages(data.totalPages || 1);
           setBrowseTotal(data.total || 0);
+          setBrowseTotalClips(data.totalClips || 0);
+          setBrowseTaggedCount(data.taggedCount || 0);
         }
       } catch (err: unknown) {
         if (!cancelled) {
@@ -351,7 +357,7 @@ export default function RawClipsSearchPage() {
             <div>
 
               <p className="mt-1 text-xs text-muted-foreground">
-                Showing {browseTotal} filtered results. Browse the archive or filter to see only pending or done clips.
+                Showing {browseTotal} filtered results. Total indexed clips: {browseLoading ? "..." : browseTotalClips}. Tagged clips: {browseLoading ? "..." : browseTaggedCount}.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -392,7 +398,7 @@ export default function RawClipsSearchPage() {
                 <ClipCardShell
                   key={clip.id}
                   href={clipHref(clip)}
-                  thumbnailUrl={clip.thumbnail_url ? `/api/ads/${clip.id}/thumbnail` : null}
+                  thumbnailUrl={clip.thumbnail_url ? `/api/raw-clips/${clip.id}/thumbnail` : null}
                   title={clip.name || "Untitled clip"}
                   caption={
                     clip.segment_ingest_status === "done"
@@ -455,9 +461,9 @@ export default function RawClipsSearchPage() {
             <div className={GRID_CLASS}>
               {results.map((clip) => (
                 <ClipCardShell
-                  key={clip.ad_id}
+                  key={clip.raw_clip_id}
                   href={clipHref(clip)}
-                  thumbnailUrl={clip.thumbnail_url ? `/api/ads/${clip.ad_id}/thumbnail` : null}
+                  thumbnailUrl={clip.thumbnail_url ? `/api/raw-clips/${clip.raw_clip_id}/thumbnail` : null}
                   title={clip.name || "Untitled clip"}
                   caption={clip.visual_description}
                   meta={<span>{formatTimestamp(clip.start_seconds)}–{formatTimestamp(clip.end_seconds)}</span>}

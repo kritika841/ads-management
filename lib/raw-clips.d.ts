@@ -1,5 +1,6 @@
 export type RawClipSegmentMatch = {
   segment_id: string;
+  raw_clip_id?: string | null;
   ad_id: string;
   segment_index: number | string;
   start_seconds: number | string;
@@ -13,6 +14,7 @@ export type RawClipSegmentMatch = {
 };
 
 export type RawClipGroupedMatch = {
+  raw_clip_id?: string | null;
   ad_id: string;
   segment_id: string;
   segment_index: number;
@@ -38,5 +40,5 @@ export declare function buildSegmentEmbedInput(
   onScreenText?: string | null,
   peopleDescription?: string | null,
 ): string;
-export declare function groupSegmentMatchesByAd(matches: RawClipSegmentMatch[], limit?: number): RawClipGroupedMatch[];
+export declare function groupSegmentMatchesByClip(matches: RawClipSegmentMatch[], limit?: number): RawClipGroupedMatch[];
 export declare class DailyQuotaError extends Error {}

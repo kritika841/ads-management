@@ -5,6 +5,7 @@ type RawClipStatus = 'pending' | 'processing' | 'done' | 'error';
 
 type RawClipItem = {
   id: string;
+  ad_id: string;
   name: string | null;
   raw_footage_url: string;
   resolved_video_url: string | null;
@@ -39,30 +40,28 @@ export async function GET(req: NextRequest) {
   const statusValues = statusFilter === 'pending' ? ['pending', 'processing'] : [statusFilter];
 
   let query = supabaseServer
-    .from('ads')
-    .select('id, name, raw_footage_url, resolved_video_url, thumbnail_url, raw_clip_description, segment_ingest_status, segment_ingest_error, created_at', { count: 'exact' })
-    .not('raw_footage_url', 'is', null)
+    .from('raw_clips')
+    .select('id, ad_id, source_raw_footage_url, resolved_video_url, thumbnail_url, preview_description, ingest_status, ingest_error, created_at, ads:ad_id (name)', { count: 'exact' })
     .order('created_at', { ascending: false });
 
   const totalClipsPromise = supabaseServer
-    .from('ads')
+    .from('raw_clips')
     .select('id', { count: 'exact', head: true })
-    .not('raw_footage_url', 'is', null);
+    .neq('drive_file_id', '');
 
   const taggedCountPromise = supabaseServer
-    .from('ads')
+    .from('raw_clips')
     .select('id', { count: 'exact', head: true })
-    .not('raw_footage_url', 'is', null)
-    .eq('segment_ingest_status', 'done');
+    .eq('ingest_status', 'done');
 
   const dateFrom = searchParams.get('dateFrom');
   const dateTo = searchParams.get('dateTo');
 
   if (statusFilter) {
     if (statusFilter === 'pending') {
-      query = query.in('segment_ingest_status', statusValues as RawClipStatus[]);
+      query = query.in('ingest_status', statusValues as RawClipStatus[]);
     } else {
-      query = query.eq('segment_ingest_status', statusFilter as RawClipStatus);
+      query = query.eq('ingest_status', statusFilter as RawClipStatus);
     }
   }
 
@@ -82,18 +81,33 @@ export async function GET(req: NextRequest) {
 
   const [{ count: totalClipsCount }, { count: taggedCount }] = await Promise.all([totalClipsPromise, taggedCountPromise]);
 
-  const items = (rows || []) as RawClipItem[];
-  const doneAdIds = items
+  const items = ((rows || []).map((row) => {
+    const relatedAd = (row as { ads?: { name?: string | null } | Array<{ name?: string | null }> }).ads;
+    return ({
+    id: row.id,
+    ad_id: row.ad_id,
+    name: Array.isArray(relatedAd) ? relatedAd[0]?.name ?? null : relatedAd?.name ?? null,
+    raw_footage_url: row.source_raw_footage_url,
+    resolved_video_url: row.resolved_video_url,
+    thumbnail_url: row.thumbnail_url,
+    raw_clip_description: row.preview_description,
+    segment_ingest_status: row.ingest_status,
+    segment_ingest_error: row.ingest_error,
+    created_at: row.created_at,
+    preview_visual_description: row.preview_description,
+  });
+  })) as RawClipItem[];
+  const doneClipIds = items
     .filter((item) => item.segment_ingest_status === 'done')
     .map((item) => item.id);
 
-  const previewByAd = new Map<string, string>();
-  if (doneAdIds.length > 0) {
+  const previewByClip = new Map<string, string>();
+  if (doneClipIds.length > 0) {
     const { data: previews, error: previewError } = await supabaseServer
       .from('raw_clip_segments')
-      .select('ad_id, segment_index, visual_description')
-      .in('ad_id', doneAdIds)
-      .order('ad_id', { ascending: true })
+      .select('raw_clip_id, segment_index, visual_description')
+      .in('raw_clip_id', doneClipIds)
+      .order('raw_clip_id', { ascending: true })
       .order('segment_index', { ascending: true });
 
     if (previewError) {
@@ -101,8 +115,8 @@ export async function GET(req: NextRequest) {
     }
 
     for (const preview of previews || []) {
-      if (!previewByAd.has(preview.ad_id)) {
-        previewByAd.set(preview.ad_id, preview.visual_description);
+      if (preview.raw_clip_id && !previewByClip.has(preview.raw_clip_id)) {
+        previewByClip.set(preview.raw_clip_id, preview.visual_description);
       }
     }
   }
@@ -119,7 +133,7 @@ export async function GET(req: NextRequest) {
     taggedCount: taggedCount || 0,
     items: items.map((item) => ({
       ...item,
-      preview_visual_description: item.raw_clip_description || previewByAd.get(item.id) || null,
+      preview_visual_description: item.raw_clip_description || previewByClip.get(item.id) || null,
     })),
   });
 }

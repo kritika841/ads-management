@@ -1,9 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { embedWithGemini, groupSegmentMatchesByAd } from '@/lib/raw-clips';
+import { embedWithGemini, groupSegmentMatchesByClip } from '@/lib/raw-clips';
 
 type SearchResult = {
+  raw_clip_id: string;
   ad_id: string;
   name: string | null;
   raw_footage_url: string;
@@ -51,7 +52,16 @@ export async function POST(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    let rankedResults: SearchResult[] = groupSegmentMatchesByAd(data || [], 15).map((match) => ({
+    let rankedResults: SearchResult[] = groupSegmentMatchesByClip(data || [], 15).map((match: {
+      raw_clip_id?: string | null;
+      ad_id: string;
+      start_seconds: number | string;
+      end_seconds: number | string;
+      visual_description: string;
+      spoken_text?: string | null;
+      similarity: number | string;
+    }) => ({
+      raw_clip_id: match.raw_clip_id || match.ad_id,
       ad_id: match.ad_id,
       name: null,
       raw_footage_url: '',
@@ -68,31 +78,46 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ results: [] });
     }
 
-    const adIds = rankedResults.map((result) => result.ad_id);
-    const { data: ads, error: adsError } = await supabaseServer
-      .from('ads')
-      .select('id, name, raw_footage_url, resolved_video_url, thumbnail_url')
-      .in('id', adIds);
+    const rawClipIds = rankedResults.map((result) => result.raw_clip_id);
+    const { data: rawClips, error: rawClipsError } = await supabaseServer
+      .from('raw_clips')
+      .select('id, ad_id, resolved_video_url, source_raw_footage_url, thumbnail_url, ads:ad_id (name)')
+      .in('id', rawClipIds);
 
-    if (adsError) {
-      return NextResponse.json({ error: adsError.message }, { status: 500 });
+    if (rawClipsError) {
+      return NextResponse.json({ error: rawClipsError.message }, { status: 500 });
     }
 
-    const adsById = new Map<string, { name: string | null; raw_footage_url: string | null; resolved_video_url: string | null; thumbnail_url: string | null }>();
-    for (const ad of ads || []) {
-      adsById.set(ad.id, { name: ad.name, raw_footage_url: ad.raw_footage_url, resolved_video_url: ad.resolved_video_url, thumbnail_url: ad.thumbnail_url });
+    const rawClipsById = new Map<string, {
+      ad_id: string;
+      name: string | null;
+      raw_footage_url: string;
+      resolved_video_url: string | null;
+      thumbnail_url: string | null;
+    }>();
+    for (const rawClip of rawClips || []) {
+      const relatedAd = (rawClip as { ads?: { name?: string | null } | Array<{ name?: string | null }> }).ads;
+      const adName = Array.isArray(relatedAd) ? relatedAd[0]?.name ?? null : relatedAd?.name ?? null;
+      rawClipsById.set(rawClip.id, {
+        ad_id: rawClip.ad_id,
+        name: adName,
+        raw_footage_url: rawClip.source_raw_footage_url,
+        resolved_video_url: rawClip.resolved_video_url,
+        thumbnail_url: rawClip.thumbnail_url,
+      });
     }
 
     rankedResults = rankedResults
       .map((result) => {
-        const ad = adsById.get(result.ad_id);
-        if (!ad || !ad.raw_footage_url) return null;
+        const rawClip = rawClipsById.get(result.raw_clip_id);
+        if (!rawClip) return null;
         return {
           ...result,
-          name: ad.name,
-          raw_footage_url: ad.raw_footage_url,
-          resolved_video_url: ad.resolved_video_url,
-          thumbnail_url: ad.thumbnail_url,
+          ad_id: rawClip.ad_id,
+          name: rawClip.name,
+          raw_footage_url: rawClip.raw_footage_url,
+          resolved_video_url: rawClip.resolved_video_url,
+          thumbnail_url: rawClip.thumbnail_url,
         };
       })
       .filter((result): result is SearchResult => result !== null);
