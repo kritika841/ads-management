@@ -79,10 +79,11 @@ export async function POST(req: NextRequest) {
     }
 
     const rawClipIds = rankedResults.map((result) => result.raw_clip_id);
+    const adIds = rankedResults.map((result) => result.ad_id);
     const { data: rawClips, error: rawClipsError } = await supabaseServer
       .from('raw_clips')
-      .select('id, ad_id, resolved_video_url, source_raw_footage_url, thumbnail_url, ads:ad_id (name)')
-      .in('id', rawClipIds);
+      .select('id, ad_id, resolved_video_url, source_raw_footage_url, thumbnail_url, ingest_status, ads:ad_id (name)')
+      .or(`id.in.(${rawClipIds.join(',')}),ad_id.in.(${adIds.join(',')})`);
 
     if (rawClipsError) {
       return NextResponse.json({ error: rawClipsError.message }, { status: 500 });
@@ -95,21 +96,40 @@ export async function POST(req: NextRequest) {
       resolved_video_url: string | null;
       thumbnail_url: string | null;
     }>();
+    const preferredRawClipByAdId = new Map<string, {
+      id: string;
+      ad_id: string;
+      name: string | null;
+      raw_footage_url: string;
+      resolved_video_url: string | null;
+      thumbnail_url: string | null;
+      ingest_status: string | null;
+    }>();
     for (const rawClip of rawClips || []) {
       const relatedAd = (rawClip as { ads?: { name?: string | null } | Array<{ name?: string | null }> }).ads;
       const adName = Array.isArray(relatedAd) ? relatedAd[0]?.name ?? null : relatedAd?.name ?? null;
-      rawClipsById.set(rawClip.id, {
+      const normalized = {
         ad_id: rawClip.ad_id,
         name: adName,
         raw_footage_url: rawClip.source_raw_footage_url,
         resolved_video_url: rawClip.resolved_video_url,
         thumbnail_url: rawClip.thumbnail_url,
-      });
+      };
+      rawClipsById.set(rawClip.id, normalized);
+
+      const currentPreferred = preferredRawClipByAdId.get(rawClip.ad_id);
+      if (!currentPreferred || (currentPreferred.ingest_status !== 'done' && rawClip.ingest_status === 'done')) {
+        preferredRawClipByAdId.set(rawClip.ad_id, {
+          id: rawClip.id,
+          ingest_status: rawClip.ingest_status,
+          ...normalized,
+        });
+      }
     }
 
     rankedResults = rankedResults
       .map((result) => {
-        const rawClip = rawClipsById.get(result.raw_clip_id);
+        const rawClip = rawClipsById.get(result.raw_clip_id) || preferredRawClipByAdId.get(result.ad_id);
         if (!rawClip) return null;
         return {
           ...result,
