@@ -132,6 +132,8 @@ async function main() {
   const auth = createDriveAuth();
   const drive = google.drive({ version: "v3", auth });
 
+  await syncRawClipsCatalog(supabase, drive, { targetClipName });
+
   const repairSummary = await repairSegmentIngestState(supabase);
   if (repairSummary.reconciledDone > 0 || repairSummary.requeuedTransient > 0) {
     console.log(
@@ -159,8 +161,6 @@ async function main() {
   const { embedWithGemini, getCurrentGeminiApiKey, rotateGeminiApiKey } = await import("../lib/raw-clips.js");
   
   let ai = new GoogleGenAI({ apiKey: getCurrentGeminiApiKey() });
-
-  await syncRawClipsCatalog(supabase, drive, { targetClipName });
 
   const { data: resetCount, error: resetError } = await supabase.rpc("reset_stale_segment_ingest", {
     stale_minutes: 15,
@@ -404,7 +404,7 @@ async function syncRawClipsCatalog(supabase, drive, options = {}) {
   const { targetClipName = null } = options;
   let query = supabase
     .from("ads")
-    .select("id, name, raw_footage_url, created_at")
+    .select("id, name, raw_footage_url, created_at, segment_ingest_status, segment_ingest_error, raw_clip_description, resolved_video_url, drive_file_id")
     .not("raw_footage_url", "is", null)
     .order("created_at", { ascending: true })
     .limit(1000);
@@ -431,6 +431,9 @@ async function syncRawClipsCatalog(supabase, drive, options = {}) {
           thumbnail_url: clip.thumbnailUrl || null,
           original_name: clip.meta.originalName || null,
           duration_millis: Number(clip.meta.durationMillis || 0) || null,
+          ingest_status: normalizeLegacyAdStatus(ad, clip.fileId),
+          ingest_error: normalizeLegacyAdError(ad),
+          preview_description: ad.raw_clip_description || null,
           updated_at: new Date().toISOString(),
         }, { onConflict: "drive_file_id" });
 
@@ -439,6 +442,25 @@ async function syncRawClipsCatalog(supabase, drive, options = {}) {
       }
     }
   }
+}
+
+function normalizeLegacyAdStatus(ad, fileId) {
+  const adStatus = ad.segment_ingest_status || "pending";
+  const canonicalFileId = extractDriveFileId(ad.resolved_video_url) || ad.drive_file_id || null;
+  if (adStatus === "done" && canonicalFileId && canonicalFileId === fileId) {
+    return "done";
+  }
+  if (adStatus === "error") {
+    return "error";
+  }
+  if (adStatus === "processing") {
+    return "processing";
+  }
+  return "pending";
+}
+
+function normalizeLegacyAdError(ad) {
+  return ad.segment_ingest_status === "error" ? ad.segment_ingest_error || null : null;
 }
 
 async function syncAdIngestStatus(supabase, adId, metadata = null) {
@@ -663,12 +685,55 @@ async function repairSegmentIngestState(supabase) {
   let reconciledDone = 0;
   let requeuedTransient = 0;
 
+  const { data: adsForRepair, error: adsForRepairError } = await supabase
+    .from("ads")
+    .select("id, resolved_video_url, drive_file_id, segment_ingest_status")
+    .not("raw_footage_url", "is", null)
+    .limit(2000);
+
+  if (adsForRepairError) {
+    throw new Error(`Failed to load ads for repair: ${adsForRepairError.message}`);
+  }
+
   const { data: rawClipRows, error: rawClipRowsError } = await supabase
     .from("raw_clips")
-    .select("id, ad_id, ingest_status, ingest_error, preview_description");
+    .select("id, ad_id, drive_file_id, ingest_status, ingest_error, preview_description");
 
   if (rawClipRowsError && !String(rawClipRowsError.message || "").includes("relation \"public.raw_clips\" does not exist")) {
     throw new Error(`Failed to load raw clips for repair: ${rawClipRowsError.message}`);
+  }
+
+  const rawClipsByAdId = new Map();
+  for (const rawClip of rawClipRows || []) {
+    const items = rawClipsByAdId.get(rawClip.ad_id) || [];
+    items.push(rawClip);
+    rawClipsByAdId.set(rawClip.ad_id, items);
+  }
+
+  for (const ad of adsForRepair || []) {
+    const rawClipsForAd = rawClipsByAdId.get(ad.id) || [];
+    if (rawClipsForAd.length === 0) {
+      continue;
+    }
+
+    const canonicalFileId = extractDriveFileId(ad.resolved_video_url) || ad.drive_file_id || null;
+    const matchedRawClip =
+      rawClipsForAd.find((rawClip) => canonicalFileId && rawClip.drive_file_id === canonicalFileId) ||
+      (rawClipsForAd.length === 1 ? rawClipsForAd[0] : null);
+
+    if (!matchedRawClip) {
+      continue;
+    }
+
+    const { error: segmentBackfillError } = await supabase
+      .from("raw_clip_segments")
+      .update({ raw_clip_id: matchedRawClip.id })
+      .eq("ad_id", ad.id)
+      .is("raw_clip_id", null);
+
+    if (segmentBackfillError) {
+      throw new Error(`Failed to backfill raw_clip_id for ad ${ad.id}: ${segmentBackfillError.message}`);
+    }
   }
 
   const { data: segmentRows, error: segmentError } = await supabase

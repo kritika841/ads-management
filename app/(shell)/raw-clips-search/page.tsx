@@ -218,8 +218,6 @@ export default function RawClipsSearchPage() {
   const [browsePage, setBrowsePage] = useState(1);
   const [browseTotalPages, setBrowseTotalPages] = useState(1);
   const [browseTotal, setBrowseTotal] = useState(0);
-  const [browseTotalClips, setBrowseTotalClips] = useState(0);
-  const [browseTaggedCount, setBrowseTaggedCount] = useState(0);
   const [browseStatus, setBrowseStatus] = useState<RawClipStatusFilter>("all");
 
   useEffect(() => {
@@ -244,8 +242,6 @@ export default function RawClipsSearchPage() {
           setBrowseItems(data.items || []);
           setBrowseTotalPages(data.totalPages || 1);
           setBrowseTotal(data.total || 0);
-          setBrowseTotalClips(data.totalClips || 0);
-          setBrowseTaggedCount(data.taggedCount || 0);
         }
       } catch (err: unknown) {
         if (!cancelled) {
@@ -357,7 +353,7 @@ export default function RawClipsSearchPage() {
             <div>
 
               <p className="mt-1 text-xs text-muted-foreground">
-                Showing {browseTotal} filtered results. Total indexed clips: {browseLoading ? "..." : browseTotalClips}. Tagged clips: {browseLoading ? "..." : browseTaggedCount}.
+                Showing {browseTotal} filtered results.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
