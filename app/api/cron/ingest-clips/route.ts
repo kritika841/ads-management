@@ -1,7 +1,11 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { spawn } from "child_process";
 import path from "path";
+import { once } from "events";
+
+export const runtime = "nodejs";
+export const maxDuration = 300;
 
 /**
  * Cron job: /api/cron/ingest-clips
@@ -9,10 +13,10 @@ import path from "path";
  * Runs daily to:
  *  1. Reset clips stuck in "processing" (stale) back to "pending"
  *  2. Reset clips in "error" state back to "pending" so they are retried
- *  3. Spawn the ingest + backfill scripts as detached background processes
+ *  3. Run the ingest + backfill scripts in the request background lifecycle
  *
  * Secured with a CRON_SECRET bearer token (same as the deadlines cron).
- * In vercel.json this fires at 00:30 IST (19:00 UTC) every day.
+ * In vercel.json this fires at 05:30 IST (00:00 UTC) every day.
  */
 export async function GET(request: NextRequest) {
   const configuredSecret = process.env.CRON_SECRET;
@@ -62,34 +66,23 @@ export async function GET(request: NextRequest) {
 
   const projectRoot = path.resolve(process.cwd());
 
-  // 4. Spawn ingest script detached (fires-and-forgets — survives beyond HTTP response)
-  const ingestChild = spawn(
-    process.execPath,
-    ["-r", "dotenv/config", "scripts/ingest-ads-clip-segments.cjs", "dotenv_config_path=.env.local"],
-    {
-      cwd: projectRoot,
-      detached: true,
-      stdio: "ignore",
-      env: { ...process.env },
+  after(async () => {
+    try {
+      await runScriptInBackground(
+        "ingest-ads-clip-segments",
+        ["scripts/ingest-ads-clip-segments.cjs", "dotenv_config_path=.env.local"],
+        projectRoot
+      );
+      await runScriptInBackground(
+        "backfill-gemini-embeddings",
+        ["scripts/backfill-gemini-embeddings.cjs", "dotenv_config_path=.env.local"],
+        projectRoot
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("[ingest-clips cron] Background execution failed:", message);
     }
-  );
-  ingestChild.unref();
-
-  // 5. Spawn backfill-gemini-embeddings script detached after a short delay
-  //    (uses a wrapper so we can add the delay without blocking the response)
-  setTimeout(() => {
-    const backfillChild = spawn(
-      process.execPath,
-      ["-r", "dotenv/config", "scripts/backfill-gemini-embeddings.cjs", "dotenv_config_path=.env.local"],
-      {
-        cwd: projectRoot,
-        detached: true,
-        stdio: "ignore",
-        env: { ...process.env },
-      }
-    );
-    backfillChild.unref();
-  }, 5 * 60 * 1000); // start backfill 5 min after ingest begins
+  });
 
   console.log(
     `[ingest-clips cron] Triggered. Stale reset: ${staleReset ?? 0}, Pending clips: ${pendingCount ?? 0}`
@@ -99,6 +92,32 @@ export async function GET(request: NextRequest) {
     ok: true,
     staleReset: staleReset ?? 0,
     pendingClips: pendingCount ?? 0,
-    message: "Ingest and backfill scripts spawned in background.",
+    message: "Ingest and backfill scripts scheduled in request background lifecycle.",
   });
+}
+
+async function runScriptInBackground(
+  label: string,
+  args: string[],
+  cwd: string
+) {
+  const child = spawn(process.execPath, ["-r", "dotenv/config", ...args], {
+    cwd,
+    env: { ...process.env },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  child.stdout?.on("data", (chunk) => {
+    process.stdout.write(`[${label}] ${chunk}`);
+  });
+
+  child.stderr?.on("data", (chunk) => {
+    process.stderr.write(`[${label}] ${chunk}`);
+  });
+
+  const [code, signal] = (await once(child, "close")) as [number | null, NodeJS.Signals | null];
+
+  if (code !== 0) {
+    throw new Error(`${label} exited with code ${code ?? "null"}${signal ? ` (signal: ${signal})` : ""}`);
+  }
 }
