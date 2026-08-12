@@ -32,8 +32,10 @@ jobs:
             .next \
             public \
             scripts \
+            lib \
             package.json \
             package-lock.json \
+            deploy.sh \
             ecosystem.config.cjs \
             next.config.ts
 

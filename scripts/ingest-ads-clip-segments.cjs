@@ -8,6 +8,7 @@ const { createClient } = require("@supabase/supabase-js");
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYS;
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON;
 const GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH;
 
 const MODEL_NAME = "gemini-3.6-flash";
@@ -111,7 +112,8 @@ async function main() {
     GEMINI_API_KEY,
     SUPABASE_URL,
     SUPABASE_SERVICE_ROLE_KEY,
-    GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH,
+    GOOGLE_DRIVE_SERVICE_ACCOUNT_CREDENTIALS:
+      GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON || GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH,
   })) {
     if (!val && name !== "GEMINI_API_KEY") {
       console.error(`Missing required env var: ${name}`);
@@ -125,10 +127,7 @@ async function main() {
   }
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-  const auth = new google.auth.GoogleAuth({
-    keyFile: GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH,
-    scopes: ["https://www.googleapis.com/auth/drive.readonly"],
-  });
+  const auth = createDriveAuth();
   const drive = google.drive({ version: "v3", auth });
 
   if (resolveUrlsOnly) {
@@ -322,6 +321,44 @@ async function main() {
   }
 
   console.log("\nDone. No more pending segment rows.");
+}
+
+function createDriveAuth() {
+  const credentials = parseDriveCredentials();
+  if (credentials) {
+    return new google.auth.GoogleAuth({
+      credentials,
+      scopes: ["https://www.googleapis.com/auth/drive.readonly"],
+    });
+  }
+
+  if (GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH) {
+    return new google.auth.GoogleAuth({
+      keyFile: GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH,
+      scopes: ["https://www.googleapis.com/auth/drive.readonly"],
+    });
+  }
+
+  throw new Error(
+    "Missing Google Drive credentials. Set GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON or GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH."
+  );
+}
+
+function parseDriveCredentials() {
+  if (!GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON) return null;
+
+  try {
+    const source = GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON.trim().replace(/^"(.*)"$/, "$1");
+    const payload =
+      source.startsWith("{") || !fs.existsSync(source)
+        ? source
+        : fs.readFileSync(source, "utf8");
+    return JSON.parse(payload);
+  } catch (error) {
+    throw new Error(
+      `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON could not be parsed as JSON or read as a file path: ${error.message}`
+    );
+  }
 }
 
 async function processCaptionBackfill(supabase) {

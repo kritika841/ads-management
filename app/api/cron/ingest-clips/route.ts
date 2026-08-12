@@ -70,12 +70,12 @@ export async function GET(request: NextRequest) {
     try {
       await runScriptInBackground(
         "ingest-ads-clip-segments",
-        ["scripts/ingest-ads-clip-segments.cjs", "dotenv_config_path=.env.local"],
+        ["scripts/ingest-ads-clip-segments.cjs"],
         projectRoot
       );
       await runScriptInBackground(
         "backfill-gemini-embeddings",
-        ["scripts/backfill-gemini-embeddings.cjs", "dotenv_config_path=.env.local"],
+        ["scripts/backfill-gemini-embeddings.cjs"],
         projectRoot
       );
     } catch (error) {
@@ -101,7 +101,7 @@ async function runScriptInBackground(
   args: string[],
   cwd: string
 ) {
-  const child = spawn(process.execPath, ["-r", "dotenv/config", ...args], {
+  const child = spawn(process.execPath, args, {
     cwd,
     env: { ...process.env },
     stdio: ["ignore", "pipe", "pipe"],
