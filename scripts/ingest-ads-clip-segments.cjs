@@ -15,6 +15,7 @@ const MODEL_NAME = "gemini-3.6-flash";
 const BATCH_SIZE = 50;
 const DELAY_BETWEEN_CLIPS_MS = 4000;
 const QUOTA_EXIT_CODE = 75;
+const TRANSIENT_ERROR_BACKOFF_MS = 20_000;
 
 const TAGGING_PROMPT = `
 You are tagging a RAW, AI-generated video clip for a searchable stock/asset
@@ -104,6 +105,7 @@ class DailyQuotaError extends Error {
 async function main() {
   const resolveUrlsOnly = process.argv.includes("--resolve-urls-only");
   const backfillCaptionsOnly = process.argv.includes("--backfill-captions-only");
+  const repairStatesOnly = process.argv.includes("--repair-states");
   const includeDone = process.argv.includes("--reprocess-done");
   const clipArgIndex = process.argv.indexOf("--clip");
   const targetClipName = clipArgIndex !== -1 ? process.argv[clipArgIndex + 1] : null;
@@ -130,6 +132,13 @@ async function main() {
   const auth = createDriveAuth();
   const drive = google.drive({ version: "v3", auth });
 
+  const repairSummary = await repairSegmentIngestState(supabase);
+  if (repairSummary.reconciledDone > 0 || repairSummary.requeuedTransient > 0) {
+    console.log(
+      `Repaired state. Reconciled done: ${repairSummary.reconciledDone}, re-queued transient errors: ${repairSummary.requeuedTransient}.`
+    );
+  }
+
   if (resolveUrlsOnly) {
     console.log("Resolve-only mode enabled: backfilling resolved_video_url and thumbnail_url without Gemini tagging.");
     await processResolveOnlyBackfill(supabase, drive);
@@ -139,6 +148,11 @@ async function main() {
   if (backfillCaptionsOnly) {
     console.log("Caption backfill mode enabled: deriving raw_clip_description from the first segment only.");
     await processCaptionBackfill(supabase);
+    return;
+  }
+
+  if (repairStatesOnly) {
+    console.log("Repair-only mode enabled. Exiting after state reconciliation.");
     return;
   }
 
@@ -190,13 +204,18 @@ async function main() {
     if (!rows || rows.length === 0) break;
 
     for (const row of rows) {
+      const claimed = await claimAdForProcessing(supabase, row.id, {
+        force: Boolean(targetClipName),
+        includeDone,
+      });
+      if (!claimed) {
+        console.log(`\n--- ${row.name || row.id} ---`);
+        console.log("Skipped: another worker already claimed this clip.");
+        continue;
+      }
+
       processedAny = true;
       console.log(`\n--- ${row.name || row.id} ---`);
-
-      await supabase
-        .from("ads")
-        .update({ segment_ingest_status: "processing", segment_ingest_error: null })
-        .eq("id", row.id);
 
       let tempPath;
       try {
@@ -301,6 +320,19 @@ async function main() {
           throw new DailyQuotaError(err.message || "Daily quota exhausted");
         }
 
+        if (isRetryableProcessingError(err)) {
+          console.error("Transient processing error, returning clip to pending:", err.message);
+          await supabase
+            .from("ads")
+            .update({
+              segment_ingest_status: "pending",
+              segment_ingest_error: null,
+            })
+            .eq("id", row.id);
+          await sleep(TRANSIENT_ERROR_BACKOFF_MS);
+          continue;
+        }
+
         console.error("Error processing clip:", err.message);
         await supabase
           .from("ads")
@@ -321,6 +353,30 @@ async function main() {
   }
 
   console.log("\nDone. No more pending segment rows.");
+}
+
+async function claimAdForProcessing(supabase, adId, options = {}) {
+  const { force = false, includeDone = false } = options;
+
+  let query = supabase
+    .from("ads")
+    .update({ segment_ingest_status: "processing", segment_ingest_error: null })
+    .eq("id", adId)
+    .select("id")
+    .limit(1);
+
+  if (!force) {
+    query = includeDone
+      ? query.in("segment_ingest_status", ["pending", "done"])
+      : query.eq("segment_ingest_status", "pending");
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    throw new Error(`Failed to claim clip for processing: ${error.message}`);
+  }
+
+  return Array.isArray(data) && data.length > 0;
 }
 
 function createDriveAuth() {
@@ -486,6 +542,93 @@ async function processResolveOnlyBackfill(supabase, drive) {
   console.log("All eligible rows now have resolved_video_url and thumbnail_url.");
 }
 
+async function repairSegmentIngestState(supabase) {
+  let reconciledDone = 0;
+  let requeuedTransient = 0;
+
+  const { data: segmentRows, error: segmentError } = await supabase
+    .from("raw_clip_segments")
+    .select("ad_id, segment_index, visual_description")
+    .order("ad_id", { ascending: true })
+    .order("segment_index", { ascending: true });
+
+  if (segmentError) {
+    throw new Error(`Failed to load raw clip segments for repair: ${segmentError.message}`);
+  }
+
+  const firstSegmentByAdId = new Map();
+  for (const segment of segmentRows || []) {
+    if (!firstSegmentByAdId.has(segment.ad_id) && String(segment.visual_description || "").trim()) {
+      firstSegmentByAdId.set(segment.ad_id, String(segment.visual_description).trim());
+    }
+  }
+
+  const segmentAdIds = Array.from(firstSegmentByAdId.keys());
+  if (segmentAdIds.length > 0) {
+    for (const adId of segmentAdIds) {
+      const { data: adRows, error: adError } = await supabase
+        .from("ads")
+        .select("id, segment_ingest_status, raw_clip_description")
+        .eq("id", adId)
+        .limit(1);
+
+      if (adError) {
+        throw new Error(`Failed to load ad ${adId} during repair: ${adError.message}`);
+      }
+
+      const ad = adRows?.[0];
+      if (!ad || ad.segment_ingest_status === "done") {
+        continue;
+      }
+
+      const { error: updateError } = await supabase
+        .from("ads")
+        .update({
+          segment_ingest_status: "done",
+          segment_ingest_error: null,
+          raw_clip_description: ad.raw_clip_description || firstSegmentByAdId.get(adId) || null,
+        })
+        .eq("id", adId);
+
+      if (updateError) {
+        throw new Error(`Failed to reconcile ad ${adId} to done: ${updateError.message}`);
+      }
+
+      reconciledDone += 1;
+    }
+  }
+
+  const { data: errorRows, error: errorRowsError } = await supabase
+    .from("ads")
+    .select("id, segment_ingest_error")
+    .eq("segment_ingest_status", "error")
+    .not("raw_footage_url", "is", null)
+    .limit(1000);
+
+  if (errorRowsError) {
+    throw new Error(`Failed to load errored ads for repair: ${errorRowsError.message}`);
+  }
+
+  for (const row of errorRows || []) {
+    if (!isRetryableErrorMessage(row.segment_ingest_error)) {
+      continue;
+    }
+
+    const { error: updateError } = await supabase
+      .from("ads")
+      .update({ segment_ingest_status: "pending", segment_ingest_error: null })
+      .eq("id", row.id);
+
+    if (updateError) {
+      throw new Error(`Failed to re-queue transient error row ${row.id}: ${updateError.message}`);
+    }
+
+    requeuedTransient += 1;
+  }
+
+  return { reconciledDone, requeuedTransient };
+}
+
 async function resolveDriveFileMeta(drive, rawFootageUrl) {
   const fileId = extractDriveFileId(rawFootageUrl);
   if (fileId) {
@@ -541,7 +684,7 @@ function extractDriveFileId(url) {
 
 function extractDriveFolderId(url) {
   if (!url) return null;
-  const m = url.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+  const m = url.match(/(?:\/drive)?\/folders\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]folder=([a-zA-Z0-9_-]+)/);
   return m ? m[1] : null;
 }
 
@@ -717,9 +860,36 @@ function isRateLimitError(err) {
   return msg.includes("429") || msg.includes("resource_exhausted") || msg.includes("quota");
 }
 
+function isServiceUnavailableError(err) {
+  const msg = (err.message || "").toLowerCase();
+  return msg.includes("503") || msg.includes("unavailable") || msg.includes("high demand");
+}
+
 function isDailyQuotaError(err) {
   const msg = (err.message || "").toLowerCase();
   return msg.includes("per day") || msg.includes("daily") || msg.includes("free_tier_requests") || (msg.includes("quota exceeded") && msg.includes("free tier"));
+}
+
+function isDuplicateSegmentInsertError(err) {
+  const msg = (err.message || "").toLowerCase();
+  return msg.includes("duplicate key value violates unique constraint") && msg.includes("raw_clip_segments_ad_id_segment_index_key");
+}
+
+function isRetryableProcessingError(err) {
+  return isRateLimitError(err) || isServiceUnavailableError(err) || isDuplicateSegmentInsertError(err);
+}
+
+function isRetryableErrorMessage(message) {
+  const msg = String(message || "").toLowerCase();
+  return (
+    msg.includes("429") ||
+    msg.includes("quota") ||
+    msg.includes("503") ||
+    msg.includes("unavailable") ||
+    msg.includes("high demand") ||
+    (msg.includes("duplicate key value violates unique constraint") &&
+      msg.includes("raw_clip_segments_ad_id_segment_index_key"))
+  );
 }
 
 function sleep(ms) {
