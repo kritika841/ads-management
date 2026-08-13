@@ -30,6 +30,7 @@ jobs:
         run: |
           tar -czf release.tar.gz \
             .next \
+            ops \
             public \
             scripts \
             lib \

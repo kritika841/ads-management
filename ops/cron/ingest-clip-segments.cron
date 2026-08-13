@@ -1,1 +1,1 @@
-*/20 * * * * /usr/bin/flock -n /tmp/ingest-clip-segments.lock /usr/bin/node -r dotenv/config /home/deployer/apps/satmi-ads/scripts/ingest-ads-clip-segments.cjs dotenv_config_path=/home/deployer/apps/satmi-ads/.env >> /var/log/ingest-clip-segments.log 2>&1
+*/10 * * * * /usr/bin/flock -n /tmp/ingest-clip-segments.lock /bin/bash /home/deployer/apps/satmi-ads/scripts/run-ingest-cron.sh >> /var/log/ingest-clip-segments.log 2>&1
