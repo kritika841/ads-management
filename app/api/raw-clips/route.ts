@@ -38,10 +38,13 @@ export async function GET(req: NextRequest) {
 
   const statusFilter = statusParam === 'all' ? null : statusParam;
   const statusValues = statusFilter === 'pending' ? ['pending', 'processing'] : [statusFilter];
+  const resolveRawClipName = (row: { title: string | null; original_name?: string | null }) => {
+    return row.title || row.original_name || null;
+  };
 
   let query = supabaseServer
     .from('raw_clips')
-    .select('id, ad_id, title, source_raw_footage_url, resolved_video_url, thumbnail_url, preview_description, ingest_status, ingest_error, created_at', { count: 'exact' })
+    .select('id, ad_id, title, original_name, source_raw_footage_url, resolved_video_url, thumbnail_url, preview_description, ingest_status, ingest_error, created_at', { count: 'exact' })
     .order('created_at', { ascending: false });
 
   const totalClipsPromise = supabaseServer
@@ -85,7 +88,7 @@ export async function GET(req: NextRequest) {
     return ({
     id: row.id,
     ad_id: row.ad_id,
-    name: row.title || null,
+    name: resolveRawClipName(row),
     raw_footage_url: row.source_raw_footage_url,
     resolved_video_url: row.resolved_video_url,
     thumbnail_url: row.thumbnail_url,

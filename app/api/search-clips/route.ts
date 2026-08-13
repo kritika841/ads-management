@@ -78,11 +78,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ results: [] });
     }
 
+    const resolveRawClipName = (rawClip: { title: string | null; original_name?: string | null }) => {
+      return rawClip.title || rawClip.original_name || null;
+    };
+
     const rawClipIds = rankedResults.map((result) => result.raw_clip_id);
     const adIds = rankedResults.map((result) => result.ad_id);
     const { data: rawClips, error: rawClipsError } = await supabaseServer
       .from('raw_clips')
-      .select('id, ad_id, title, resolved_video_url, source_raw_footage_url, thumbnail_url, ingest_status')
+      .select('id, ad_id, title, original_name, resolved_video_url, source_raw_footage_url, thumbnail_url, ingest_status')
       .or(`id.in.(${rawClipIds.join(',')}),ad_id.in.(${adIds.join(',')})`);
 
     if (rawClipsError) {
@@ -108,7 +112,7 @@ export async function POST(req: NextRequest) {
     for (const rawClip of rawClips || []) {
       const normalized = {
         ad_id: rawClip.ad_id,
-        name: rawClip.title || null,
+        name: resolveRawClipName(rawClip),
         raw_footage_url: rawClip.source_raw_footage_url,
         resolved_video_url: rawClip.resolved_video_url,
         thumbnail_url: rawClip.thumbnail_url,

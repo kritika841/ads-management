@@ -220,7 +220,7 @@ async function main() {
 
       let tempPath;
       try {
-        const { fileId, meta, resolvedVideoUrl, thumbnailUrl } = await resolveDriveFileMeta(
+        const { fileId, folderName, meta, resolvedVideoUrl, thumbnailUrl } = await resolveDriveFileMeta(
           drive,
           row.source_raw_footage_url,
           row.drive_file_id
@@ -302,6 +302,7 @@ async function main() {
         await supabase
           .from("raw_clips")
           .update({
+            title: buildRawClipTitle({ fileId, folderName, meta }, clipName),
             ingest_status: "done",
             ingest_error: null,
             original_name: meta.originalName || null,
@@ -414,7 +415,7 @@ async function syncRawClipsCatalog(supabase, drive, options = {}) {
         .from("raw_clips")
         .upsert({
           ad_id: ad.id,
-          title: buildRawClipTitle(clip),
+          title: buildRawClipTitle(clip, ad.name),
           drive_file_id: clip.fileId,
           source_raw_footage_url: ad.raw_footage_url,
           resolved_video_url: clip.resolvedVideoUrl,
@@ -434,8 +435,8 @@ async function syncRawClipsCatalog(supabase, drive, options = {}) {
   }
 }
 
-function buildRawClipTitle(clip) {
-  const folderName = String(clip.folderName || "").trim();
+function buildRawClipTitle(clip, fallbackFolderName = null) {
+  const folderName = String(clip.folderName || fallbackFolderName || "").trim();
   const clipName = String(clip.meta?.originalName || clip.fileId || "").trim();
   if (folderName && clipName) {
     return `${folderName} - ${clipName}`;
@@ -732,10 +733,12 @@ async function resolveDriveFileMeta(drive, rawFootageUrl, preferredFileId = null
   if (fileId) {
     const meta = await drive.files.get({
       fileId,
-      fields: "name, mimeType, size, videoMediaMetadata(durationMillis), thumbnailLink",
+      fields: "name, mimeType, size, parents, videoMediaMetadata(durationMillis), thumbnailLink",
     });
+    const folderName = await resolveFolderName(drive, rawFootageUrl, meta.data.parents || []);
     return {
       fileId,
+      folderName,
       resolvedVideoUrl: `https://drive.google.com/file/d/${fileId}/view`,
       thumbnailUrl: meta.data.thumbnailLink || null,
       meta: {
@@ -749,16 +752,17 @@ async function resolveDriveFileMeta(drive, rawFootageUrl, preferredFileId = null
 
   const folderId = extractDriveFolderId(rawFootageUrl);
   if (!folderId) {
-    return { fileId: null, meta: {} };
+    return { fileId: null, folderName: null, meta: {} };
   }
 
   const found = await getFirstFileInFolder(drive, folderId);
   if (!found) {
-    return { fileId: null, meta: {} };
+    return { fileId: null, folderName: null, meta: {} };
   }
 
   return {
     fileId: found.id,
+    folderName: await resolveFolderName(drive, rawFootageUrl, [folderId]),
     resolvedVideoUrl: `https://drive.google.com/file/d/${found.id}/view`,
     thumbnailUrl: found.thumbnailLink || null,
     meta: {
@@ -768,6 +772,29 @@ async function resolveDriveFileMeta(drive, rawFootageUrl, preferredFileId = null
       durationMillis: found.videoMediaMetadata?.durationMillis,
     },
   };
+}
+
+async function resolveFolderName(drive, rawFootageUrl, parentIds = []) {
+  const explicitFolderId = extractDriveFolderId(rawFootageUrl);
+  const parentFolderId = explicitFolderId || parentIds[0] || null;
+  if (!parentFolderId) {
+    return null;
+  }
+
+  try {
+    const folderMeta = await drive.files.get({
+      fileId: parentFolderId,
+      fields: "name",
+    });
+
+    return folderMeta.data.name || null;
+  } catch (error) {
+    const status = error?.status || error?.code || error?.response?.status;
+    if (status === 404) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 async function resolveDriveTargets(drive, rawFootageUrl) {
@@ -782,11 +809,7 @@ async function resolveDriveTargets(drive, rawFootageUrl) {
     return [];
   }
 
-  const folderMeta = await drive.files.get({
-    fileId: folderId,
-    fields: "name",
-  });
-  const folderName = folderMeta.data.name || null;
+  const folderName = await resolveFolderName(drive, rawFootageUrl, [folderId]);
   const files = await listVideoFilesInFolder(drive, folderId);
   return files.map((file) => ({
     fileId: file.id,
