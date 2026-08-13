@@ -313,14 +313,6 @@ async function main() {
           })
           .eq("id", row.id);
 
-        await syncAdIngestStatus(supabase, row.ad_id, {
-          driveFileId: fileId,
-          resolvedVideoUrl: resolvedVideoUrl || row.source_raw_footage_url,
-          thumbnailUrl: thumbnailUrl || row.thumbnail_url || null,
-          originalName: meta.originalName || null,
-          clipCaption,
-        });
-
         console.log(`Saved ${segmentRows.length} segment(s).`);
       } catch (err) {
         if (err instanceof DailyQuotaError || isDailyQuotaError(err)) {
@@ -333,7 +325,6 @@ async function main() {
               updated_at: new Date().toISOString(),
             })
             .eq("id", row.id);
-          await syncAdIngestStatus(supabase, row.ad_id);
           throw new DailyQuotaError(err.message || "Daily quota exhausted");
         }
 
@@ -347,7 +338,6 @@ async function main() {
               updated_at: new Date().toISOString(),
             })
             .eq("id", row.id);
-          await syncAdIngestStatus(supabase, row.ad_id);
           await sleep(TRANSIENT_ERROR_BACKOFF_MS);
           continue;
         }
@@ -361,7 +351,6 @@ async function main() {
             updated_at: new Date().toISOString(),
           })
           .eq("id", row.id);
-        await syncAdIngestStatus(supabase, row.ad_id);
       } finally {
         if (tempPath) await fs.promises.unlink(tempPath).catch(() => {});
       }
@@ -425,6 +414,7 @@ async function syncRawClipsCatalog(supabase, drive, options = {}) {
         .from("raw_clips")
         .upsert({
           ad_id: ad.id,
+          title: buildRawClipTitle(clip),
           drive_file_id: clip.fileId,
           source_raw_footage_url: ad.raw_footage_url,
           resolved_video_url: clip.resolvedVideoUrl,
@@ -444,6 +434,15 @@ async function syncRawClipsCatalog(supabase, drive, options = {}) {
   }
 }
 
+function buildRawClipTitle(clip) {
+  const folderName = String(clip.folderName || "").trim();
+  const clipName = String(clip.meta?.originalName || clip.fileId || "").trim();
+  if (folderName && clipName) {
+    return `${folderName} - ${clipName}`;
+  }
+  return clipName || folderName || null;
+}
+
 function normalizeLegacyAdStatus(ad, fileId) {
   const adStatus = ad.segment_ingest_status || "pending";
   const canonicalFileId = extractDriveFileId(ad.resolved_video_url) || ad.drive_file_id || null;
@@ -461,61 +460,6 @@ function normalizeLegacyAdStatus(ad, fileId) {
 
 function normalizeLegacyAdError(ad) {
   return ad.segment_ingest_status === "error" ? ad.segment_ingest_error || null : null;
-}
-
-async function syncAdIngestStatus(supabase, adId, metadata = null) {
-  const { data: rawClips, error } = await supabase
-    .from("raw_clips")
-    .select("ingest_status, ingest_error, resolved_video_url, thumbnail_url, original_name, preview_description, drive_file_id")
-    .eq("ad_id", adId);
-
-  if (error) {
-    throw new Error(`Failed to load raw clips for ad status sync: ${error.message}`);
-  }
-
-  const clips = rawClips || [];
-  if (clips.length === 0) {
-    return;
-  }
-
-  const statuses = clips.map((clip) => clip.ingest_status);
-  let nextStatus = "pending";
-  let nextError = null;
-
-  if (statuses.every((status) => status === "done")) {
-    nextStatus = "done";
-  } else if (statuses.some((status) => status === "processing")) {
-    nextStatus = "processing";
-  } else if (statuses.some((status) => status === "pending")) {
-    nextStatus = "pending";
-  } else if (statuses.some((status) => status === "error")) {
-    nextStatus = "error";
-    nextError = clips.find((clip) => clip.ingest_error)?.ingest_error || null;
-  }
-
-  const representativeClip =
-    clips.find((clip) => clip.ingest_status === "done") ||
-    clips.find((clip) => clip.ingest_status === "processing") ||
-    clips[0];
-
-  const payload = {
-    segment_ingest_status: nextStatus,
-    segment_ingest_error: nextError,
-    drive_file_id: metadata?.driveFileId || representativeClip?.drive_file_id || null,
-    resolved_video_url: metadata?.resolvedVideoUrl || representativeClip?.resolved_video_url || null,
-    thumbnail_url: metadata?.thumbnailUrl || representativeClip?.thumbnail_url || null,
-    raw_footage_original_name: metadata?.originalName || representativeClip?.original_name || null,
-    raw_clip_description: metadata?.clipCaption || representativeClip?.preview_description || null,
-  };
-
-  const { error: updateError } = await supabase
-    .from("ads")
-    .update(payload)
-    .eq("id", adId);
-
-  if (updateError) {
-    throw new Error(`Failed to update ad ingest status: ${updateError.message}`);
-  }
 }
 
 function createDriveAuth() {
@@ -780,69 +724,6 @@ async function repairSegmentIngestState(supabase) {
     }
   }
 
-  const segmentAdIds = Array.from(firstSegmentByAdId.keys());
-  if (segmentAdIds.length > 0) {
-    for (const adId of segmentAdIds) {
-      const { data: adRows, error: adError } = await supabase
-        .from("ads")
-        .select("id, segment_ingest_status, raw_clip_description")
-        .eq("id", adId)
-        .limit(1);
-
-      if (adError) {
-        throw new Error(`Failed to load ad ${adId} during repair: ${adError.message}`);
-      }
-
-      const ad = adRows?.[0];
-      if (!ad || ad.segment_ingest_status === "done") {
-        continue;
-      }
-
-      const { error: updateError } = await supabase
-        .from("ads")
-        .update({
-          segment_ingest_status: "done",
-          segment_ingest_error: null,
-          raw_clip_description: ad.raw_clip_description || firstSegmentByAdId.get(adId) || null,
-        })
-        .eq("id", adId);
-
-      if (updateError) {
-        throw new Error(`Failed to reconcile ad ${adId} to done: ${updateError.message}`);
-      }
-
-      reconciledDone += 1;
-    }
-  }
-
-  const { data: errorRows, error: errorRowsError } = await supabase
-    .from("ads")
-    .select("id, segment_ingest_error")
-    .eq("segment_ingest_status", "error")
-    .not("raw_footage_url", "is", null)
-    .limit(1000);
-
-  if (errorRowsError) {
-    throw new Error(`Failed to load errored ads for repair: ${errorRowsError.message}`);
-  }
-
-  for (const row of errorRows || []) {
-    if (!isRetryableErrorMessage(row.segment_ingest_error)) {
-      continue;
-    }
-
-    const { error: updateError } = await supabase
-      .from("ads")
-      .update({ segment_ingest_status: "pending", segment_ingest_error: null })
-      .eq("id", row.id);
-
-    if (updateError) {
-      throw new Error(`Failed to re-queue transient error row ${row.id}: ${updateError.message}`);
-    }
-
-    requeuedTransient += 1;
-  }
-
   return { reconciledDone, requeuedTransient };
 }
 
@@ -893,7 +774,7 @@ async function resolveDriveTargets(drive, rawFootageUrl) {
   const directFileId = extractDriveFileId(rawFootageUrl);
   if (directFileId) {
     const clip = await resolveDriveFileMeta(drive, rawFootageUrl, directFileId);
-    return clip.fileId ? [clip] : [];
+    return clip.fileId ? [{ ...clip, folderName: null }] : [];
   }
 
   const folderId = extractDriveFolderId(rawFootageUrl);
@@ -901,11 +782,17 @@ async function resolveDriveTargets(drive, rawFootageUrl) {
     return [];
   }
 
+  const folderMeta = await drive.files.get({
+    fileId: folderId,
+    fields: "name",
+  });
+  const folderName = folderMeta.data.name || null;
   const files = await listVideoFilesInFolder(drive, folderId);
   return files.map((file) => ({
     fileId: file.id,
     resolvedVideoUrl: `https://drive.google.com/file/d/${file.id}/view`,
     thumbnailUrl: file.thumbnailLink || null,
+    folderName,
     meta: {
       originalName: file.name,
       mimeType: file.mimeType,

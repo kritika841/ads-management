@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
     const adIds = rankedResults.map((result) => result.ad_id);
     const { data: rawClips, error: rawClipsError } = await supabaseServer
       .from('raw_clips')
-      .select('id, ad_id, resolved_video_url, source_raw_footage_url, thumbnail_url, ingest_status, ads:ad_id (name)')
+      .select('id, ad_id, title, resolved_video_url, source_raw_footage_url, thumbnail_url, ingest_status')
       .or(`id.in.(${rawClipIds.join(',')}),ad_id.in.(${adIds.join(',')})`);
 
     if (rawClipsError) {
@@ -106,11 +106,9 @@ export async function POST(req: NextRequest) {
       ingest_status: string | null;
     }>();
     for (const rawClip of rawClips || []) {
-      const relatedAd = (rawClip as { ads?: { name?: string | null } | Array<{ name?: string | null }> }).ads;
-      const adName = Array.isArray(relatedAd) ? relatedAd[0]?.name ?? null : relatedAd?.name ?? null;
       const normalized = {
         ad_id: rawClip.ad_id,
-        name: adName,
+        name: rawClip.title || null,
         raw_footage_url: rawClip.source_raw_footage_url,
         resolved_video_url: rawClip.resolved_video_url,
         thumbnail_url: rawClip.thumbnail_url,

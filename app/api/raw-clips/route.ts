@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabaseServer
     .from('raw_clips')
-    .select('id, ad_id, source_raw_footage_url, resolved_video_url, thumbnail_url, preview_description, ingest_status, ingest_error, created_at, ads:ad_id (name)', { count: 'exact' })
+    .select('id, ad_id, title, source_raw_footage_url, resolved_video_url, thumbnail_url, preview_description, ingest_status, ingest_error, created_at', { count: 'exact' })
     .order('created_at', { ascending: false });
 
   const totalClipsPromise = supabaseServer
@@ -82,11 +82,10 @@ export async function GET(req: NextRequest) {
   const [{ count: totalClipsCount }, { count: taggedCount }] = await Promise.all([totalClipsPromise, taggedCountPromise]);
 
   const items = ((rows || []).map((row) => {
-    const relatedAd = (row as { ads?: { name?: string | null } | Array<{ name?: string | null }> }).ads;
     return ({
     id: row.id,
     ad_id: row.ad_id,
-    name: Array.isArray(relatedAd) ? relatedAd[0]?.name ?? null : relatedAd?.name ?? null,
+    name: row.title || null,
     raw_footage_url: row.source_raw_footage_url,
     resolved_video_url: row.resolved_video_url,
     thumbnail_url: row.thumbnail_url,
