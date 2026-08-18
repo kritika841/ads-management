@@ -5,18 +5,14 @@ APP_DIR="/home/deployer/apps/satmi-ads"
 
 cd "$APP_DIR"
 
+# Load configuration with dotenv instead of sourcing it as shell code. This handles
+# JSON service-account values correctly and matches how local/manual runs behave.
 if [ -f ".env" ]; then
-  set -a
-  . ".env"
-  set +a
+  export DOTENV_CONFIG_PATH="$APP_DIR/.env"
 elif [ -f ".env.production" ]; then
-  set -a
-  . ".env.production"
-  set +a
+  export DOTENV_CONFIG_PATH="$APP_DIR/.env.production"
 elif [ -f ".env.local" ]; then
-  set -a
-  . ".env.local"
-  set +a
+  export DOTENV_CONFIG_PATH="$APP_DIR/.env.local"
 fi
 
-exec /usr/bin/node scripts/ingest-ads-clip-segments.cjs
+exec /usr/bin/node -r dotenv/config scripts/ingest-ads-clip-segments.cjs

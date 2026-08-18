@@ -5,11 +5,26 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { resolveAdMedia } from "@/lib/ad-media-export";
 
 export async function GET(request: NextRequest) {
+  const ids = request.nextUrl.searchParams.get("ids")?.split(",").map((s) => s.trim()).filter(Boolean) ?? [];
+  return exportZip(request, ids);
+}
+
+export async function POST(request: NextRequest) {
+  let ids: string[];
+  try {
+    const body = await request.json();
+    ids = Array.isArray(body?.ids) ? body.ids.filter((id: unknown): id is string => typeof id === "string" && id.trim().length > 0) : [];
+  } catch {
+    return new NextResponse("Invalid JSON body", { status: 400 });
+  }
+
+  return exportZip(request, ids);
+}
+
+async function exportZip(request: NextRequest, ids: string[]) {
   const profile = await getCurrentProfile();
   if (!profile) return new NextResponse("Unauthorized", { status: 401 });
 
-  const raw = request.nextUrl.searchParams.get("ids") ?? "";
-  const ids = raw.split(",").map((s) => s.trim()).filter(Boolean);
   if (!ids.length) return new NextResponse("No IDs provided", { status: 400 });
 
   const admin = createSupabaseAdminClient();

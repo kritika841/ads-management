@@ -46,23 +46,21 @@ export async function GET(request: NextRequest) {
     console.error("[ingest-clips cron] Failed to reset stale rows:", staleError.message);
   }
 
-  // 2. Reset all "error" clips back to "pending" so they get retried this run
+  // 2. Reset all raw clips in "error" back to "pending" so they get retried this run
   const { error: errorResetErr } = await admin
-    .from("ads")
-    .update({ segment_ingest_status: "pending", segment_ingest_error: null })
-    .eq("segment_ingest_status", "error")
-    .not("raw_footage_url", "is", null);
+    .from("raw_clips")
+    .update({ ingest_status: "pending", ingest_error: null, updated_at: new Date().toISOString() })
+    .eq("ingest_status", "error");
 
   if (errorResetErr) {
     console.error("[ingest-clips cron] Failed to reset error rows:", errorResetErr.message);
   }
 
-  // 3. Count how many pending clips we have
+  // 3. Count how many pending raw clips we have
   const { count: pendingCount } = await admin
-    .from("ads")
+    .from("raw_clips")
     .select("id", { count: "exact", head: true })
-    .eq("segment_ingest_status", "pending")
-    .not("raw_footage_url", "is", null);
+    .eq("ingest_status", "pending");
 
   const projectRoot = path.resolve(process.cwd());
 

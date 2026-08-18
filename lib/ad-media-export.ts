@@ -15,12 +15,18 @@ export async function resolveAdMedia(driveFileId: string, fallbackName: string):
     if (meta?.mimeType === FOLDER_MIME) {
       const children = await getDriveFolderContents(driveFileId);
       const files: Record<string, Uint8Array> = {};
-      for (const child of children) {
-        if (!child.id || child.mimeType === FOLDER_MIME) continue;
+      const downloadableChildren = children.filter((child): child is typeof child & { id: string } => Boolean(child.id) && child.mimeType !== FOLDER_MIME);
+      const downloaded = await mapWithConcurrency(downloadableChildren, 4, async (child) => {
         const safeName = (child.name ?? child.id).replace(/[^a-zA-Z0-9._\- ]/g, "_");
         const bytes = await fetchFileBytes(child.id);
-        if (bytes) files[safeName] = bytes;
-        else console.error(`Could not fetch Drive child ${child.id} (${safeName}) via service account or public fallback`);
+        if (!bytes) {
+          console.error(`Could not fetch Drive child ${child.id} (${safeName}) via service account or public fallback`);
+          return null;
+        }
+        return [safeName, bytes] as const;
+      });
+      for (const item of downloaded) {
+        if (item) files[item[0]] = item[1];
       }
       return { kind: "folder", files };
     }
@@ -41,6 +47,19 @@ export async function resolveAdMedia(driveFileId: string, fallbackName: string):
   const bytes = await fetchPublicFallback(driveFileId);
   if (!bytes) return null;
   return { kind: "file", name: `${fallbackName.replace(/[^a-zA-Z0-9._\- ]/g, "_")}.mp4`, contentType: "video/mp4", bytes };
+}
+
+async function mapWithConcurrency<T, R>(items: T[], limit: number, mapper: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor++;
+      results[index] = await mapper(items[index]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
 }
 
 /** Downloaded videos should be named after the creative, not the raw Drive filename —

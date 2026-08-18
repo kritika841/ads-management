@@ -299,8 +299,11 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
     if (!selectedIds.size || isDownloading) return;
     setIsDownloading(true);
     try {
-      const ids = Array.from(selectedIds).join(",");
-      const res = await fetch(`/api/ads/export-zip?ids=${encodeURIComponent(ids)}`);
+      const res = await fetch("/api/ads/export-zip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      });
       if (!res.ok) { toast({ title: "Download failed", description: "Could not create ZIP. Try again.", tone: "error" }); return; }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);

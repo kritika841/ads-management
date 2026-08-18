@@ -409,7 +409,15 @@ async function syncRawClipsCatalog(supabase, drive, options = {}) {
   }
 
   for (const ad of ads || []) {
-    const clips = await resolveDriveTargets(drive, ad.raw_footage_url);
+    let clips;
+    try {
+      clips = await resolveDriveTargets(drive, ad.raw_footage_url);
+    } catch (error) {
+      // A deleted or unshared legacy Drive folder must not prevent the worker from
+      // processing already-catalogued clips or newer folders later in the queue.
+      console.error(`Skipping inaccessible raw footage for ${ad.name || ad.id}: ${error.message || error}`);
+      continue;
+    }
     for (const clip of clips) {
       const { error: upsertError } = await supabase
         .from("raw_clips")
@@ -422,9 +430,6 @@ async function syncRawClipsCatalog(supabase, drive, options = {}) {
           thumbnail_url: clip.thumbnailUrl || null,
           original_name: clip.meta.originalName || null,
           duration_millis: Number(clip.meta.durationMillis || 0) || null,
-          ingest_status: normalizeLegacyAdStatus(ad, clip.fileId),
-          ingest_error: normalizeLegacyAdError(ad),
-          preview_description: ad.raw_clip_description || null,
           updated_at: new Date().toISOString(),
         }, { onConflict: "drive_file_id" });
 
@@ -442,25 +447,6 @@ function buildRawClipTitle(clip, fallbackFolderName = null) {
     return `${folderName} - ${clipName}`;
   }
   return clipName || folderName || null;
-}
-
-function normalizeLegacyAdStatus(ad, fileId) {
-  const adStatus = ad.segment_ingest_status || "pending";
-  const canonicalFileId = extractDriveFileId(ad.resolved_video_url) || ad.drive_file_id || null;
-  if (adStatus === "done" && canonicalFileId && canonicalFileId === fileId) {
-    return "done";
-  }
-  if (adStatus === "error") {
-    return "error";
-  }
-  if (adStatus === "processing") {
-    return "processing";
-  }
-  return "pending";
-}
-
-function normalizeLegacyAdError(ad) {
-  return ad.segment_ingest_status === "error" ? ad.segment_ingest_error || null : null;
 }
 
 function createDriveAuth() {
