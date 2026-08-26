@@ -257,6 +257,11 @@ async function main() {
           throw new Error(`Failed to clear old segments: ${deleteError.message}`);
         }
 
+        // Older production databases still enforce unique(ad_id, segment_index).
+        // Allocate this clip a non-overlapping range within its ad so every video
+        // in the same Drive folder can be stored until that legacy key is removed.
+        const segmentIndexOffset = await getNextSegmentIndexForAd(supabase, row.ad_id);
+
         for (const segment of normalizedSegments) {
           const embedInput = buildSegmentEmbedInput(
             segment.visual_description,
@@ -273,7 +278,7 @@ async function main() {
           segmentRows.push({
             raw_clip_id: row.id,
             ad_id: row.ad_id,
-            segment_index: segment.segment_index,
+            segment_index: segmentIndexOffset + segment.segment_index,
             start_seconds: segment.start_seconds,
             end_seconds: segment.end_seconds,
             visual_description: segment.visual_description,
@@ -361,6 +366,17 @@ async function main() {
   }
 
   console.log("\nDone. No more pending segment rows.");
+}
+
+async function getNextSegmentIndexForAd(supabase, adId) {
+  const { data, error } = await supabase
+    .from("raw_clip_segments")
+    .select("segment_index")
+    .eq("ad_id", adId)
+    .order("segment_index", { ascending: false })
+    .limit(1);
+  if (error) throw new Error(`Failed to allocate segment indexes: ${error.message}`);
+  return Number(data?.[0]?.segment_index ?? -1) + 1;
 }
 
 async function claimRawClipForProcessing(supabase, rawClipId, options = {}) {
