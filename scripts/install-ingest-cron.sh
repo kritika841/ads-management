@@ -8,6 +8,6 @@ TMP_CRON="$(mktemp)"
 
 trap 'rm -f "$TMP_CRON"' EXIT
 
-crontab -l 2>/dev/null | grep -v "$MANAGED_COMMAND" > "$TMP_CRON" || true
+crontab -l 2>/dev/null | grep -v "$MANAGED_COMMAND" | grep -v '^CRON_TZ=Asia/Kolkata$' > "$TMP_CRON" || true
 cat "$CRON_FILE" >> "$TMP_CRON"
 crontab "$TMP_CRON"

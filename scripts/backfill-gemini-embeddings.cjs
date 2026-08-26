@@ -38,6 +38,7 @@ async function main() {
   const limit = Number.isInteger(args.limit) && args.limit > 0 ? args.limit : DEFAULT_LIMIT;
   let processed = 0;
   let updated = 0;
+  let failed = 0;
   let lastProcessedSegmentId = null;
 
   while (true) {
@@ -101,6 +102,7 @@ async function main() {
         }
 
         console.error(`Failed to embed segment ${row.id}: ${err.message}`);
+        failed += 1;
       }
 
       if (processed % PROGRESS_EVERY === 0 || processed === totalToProcess) {
@@ -111,6 +113,10 @@ async function main() {
     if (limit && processed >= limit) {
       break;
     }
+  }
+
+  if (failed > 0) {
+    throw new Error(`Gemini embedding backfill left ${failed} segment(s) unprocessed.`);
   }
 
   console.log(`Backfill finished. Updated ${updated}/${totalToProcess} segment(s).`);

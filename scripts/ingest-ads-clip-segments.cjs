@@ -13,9 +13,9 @@ const GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH = process.env.GOOGLE_DRIVE_SERVICE_ACCOU
 
 const MODEL_NAME = "gemini-3.6-flash";
 const BATCH_SIZE = 50;
+const CATALOG_PAGE_SIZE = 200;
 const DELAY_BETWEEN_CLIPS_MS = 4000;
 const QUOTA_EXIT_CODE = 75;
-const TRANSIENT_ERROR_BACKOFF_MS = 20_000;
 
 const TAGGING_PROMPT = `
 You are tagging a RAW, AI-generated video clip for a searchable stock/asset
@@ -132,6 +132,11 @@ async function main() {
   const auth = createDriveAuth();
   const drive = google.drive({ version: "v3", auth });
 
+  const recoverySummary = await recoverRawClipQueue(supabase);
+  if (recoverySummary.staleReset || recoverySummary.errorRequeued) {
+    console.log(`Recovered queue. Stale reset: ${recoverySummary.staleReset}, errors re-queued: ${recoverySummary.errorRequeued}.`);
+  }
+
   await syncRawClipsCatalog(supabase, drive, { targetClipName });
 
   const repairSummary = await repairSegmentIngestState(supabase);
@@ -161,16 +166,6 @@ async function main() {
   const { embedWithGemini, getCurrentGeminiApiKey, rotateGeminiApiKey } = await import("../lib/raw-clips.js");
   
   let ai = new GoogleGenAI({ apiKey: getCurrentGeminiApiKey() });
-
-  const { data: resetCount, error: resetError } = await supabase.rpc("reset_stale_segment_ingest", {
-    stale_minutes: 15,
-  });
-  if (resetError) {
-    console.error("Failed to reset stale segment ingest rows:", resetError.message);
-    process.exit(1);
-  }
-  console.log(`Reset ${resetCount || 0} stale segment ingest row(s).`);
-
 
   console.log("Ready to embed with Gemini...");
 
@@ -330,16 +325,18 @@ async function main() {
         }
 
         if (isRetryableProcessingError(err)) {
-          console.error("Transient processing error, returning clip to pending:", err.message);
+          // Do not retry this clip inside the same process: an unavailable Drive
+          // file would otherwise keep the worker pinned to one oldest row forever.
+          // The next scheduled pass re-queues errors after the rest of the batch runs.
+          console.error("Transient processing error, deferring to the next scheduled run:", err.message);
           await supabase
             .from("raw_clips")
             .update({
-              ingest_status: "pending",
-              ingest_error: null,
+              ingest_status: "error",
+              ingest_error: err.message || "Transient processing error",
               updated_at: new Date().toISOString(),
             })
             .eq("id", row.id);
-          await sleep(TRANSIENT_ERROR_BACKOFF_MS);
           continue;
         }
 
@@ -392,52 +389,78 @@ async function claimRawClipForProcessing(supabase, rawClipId, options = {}) {
 
 async function syncRawClipsCatalog(supabase, drive, options = {}) {
   const { targetClipName = null } = options;
-  let query = supabase
-    .from("ads")
-    .select("id, name, raw_footage_url, created_at, segment_ingest_status, segment_ingest_error, raw_clip_description, resolved_video_url, drive_file_id")
-    .not("raw_footage_url", "is", null)
-    .order("created_at", { ascending: true })
-    .limit(1000);
+  let offset = 0;
+  let processed = 0;
+  while (true) {
+    let query = supabase
+      .from("ads")
+      .select("id, name, raw_footage_url")
+      .not("raw_footage_url", "is", null)
+      .order("created_at", { ascending: true })
+      .range(offset, offset + CATALOG_PAGE_SIZE - 1);
 
-  if (targetClipName) {
-    query = query.eq("name", targetClipName);
-  }
+    if (targetClipName) query = query.eq("name", targetClipName);
+    const { data: ads, error } = await query;
+    if (error) throw new Error(`Failed to load ads for raw clip sync: ${error.message}`);
+    if (!ads?.length) break;
 
-  const { data: ads, error } = await query;
-  if (error) {
-    throw new Error(`Failed to load ads for raw clip sync: ${error.message}`);
-  }
-
-  for (const ad of ads || []) {
-    let clips;
-    try {
-      clips = await resolveDriveTargets(drive, ad.raw_footage_url);
-    } catch (error) {
-      // A deleted or unshared legacy Drive folder must not prevent the worker from
-      // processing already-catalogued clips or newer folders later in the queue.
-      console.error(`Skipping inaccessible raw footage for ${ad.name || ad.id}: ${error.message || error}`);
-      continue;
-    }
-    for (const clip of clips) {
-      const { error: upsertError } = await supabase
-        .from("raw_clips")
-        .upsert({
-          ad_id: ad.id,
-          title: buildRawClipTitle(clip, ad.name),
-          drive_file_id: clip.fileId,
-          source_raw_footage_url: ad.raw_footage_url,
-          resolved_video_url: clip.resolvedVideoUrl,
-          thumbnail_url: clip.thumbnailUrl || null,
-          original_name: clip.meta.originalName || null,
-          duration_millis: Number(clip.meta.durationMillis || 0) || null,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: "drive_file_id" });
-
-      if (upsertError) {
-        throw new Error(`Failed to upsert raw clip ${clip.fileId}: ${upsertError.message}`);
+    for (const ad of ads) {
+      let clips;
+      try {
+        clips = await resolveDriveTargets(drive, ad.raw_footage_url);
+      } catch (error) {
+        // A deleted or unshared legacy Drive folder must not prevent the worker from
+        // processing already-catalogued clips or newer folders later in the queue.
+        console.error(`Skipping inaccessible raw footage for ${ad.name || ad.id}: ${error.message || error}`);
+        continue;
       }
+      for (const clip of clips) {
+        const { error: upsertError } = await supabase
+          .from("raw_clips")
+          .upsert({
+            ad_id: ad.id,
+            title: buildRawClipTitle(clip, ad.name),
+            drive_file_id: clip.fileId,
+            source_raw_footage_url: ad.raw_footage_url,
+            resolved_video_url: clip.resolvedVideoUrl,
+            thumbnail_url: clip.thumbnailUrl || null,
+            original_name: clip.meta.originalName || null,
+            duration_millis: Number(clip.meta.durationMillis || 0) || null,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "drive_file_id" });
+
+        if (upsertError) {
+          throw new Error(`Failed to upsert raw clip ${clip.fileId}: ${upsertError.message}`);
+        }
+      }
+      processed += 1;
     }
+
+    if (targetClipName || ads.length < CATALOG_PAGE_SIZE) break;
+    offset += ads.length;
   }
+  console.log(`Catalog sync checked ${processed} raw-footage ad(s).`);
+}
+
+async function recoverRawClipQueue(supabase) {
+  const staleBefore = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  const now = new Date().toISOString();
+  const { data: staleRows, error: staleError } = await supabase
+    .from("raw_clips")
+    .update({ ingest_status: "pending", ingest_error: null, updated_at: now })
+    .eq("ingest_status", "processing")
+    .lt("updated_at", staleBefore)
+    .select("id");
+  if (staleError) throw new Error(`Failed to reset stale raw clips: ${staleError.message}`);
+
+  const { data: errorRows, error: errorRequeueError } = await supabase
+    .from("raw_clips")
+    .update({ ingest_status: "pending", ingest_error: null, updated_at: now })
+    .eq("ingest_status", "error")
+    .select("id");
+  if (errorRequeueError) throw new Error(`Failed to re-queue failed raw clips: ${errorRequeueError.message}`);
+
+  return { staleReset: staleRows?.length || 0, errorRequeued: errorRows?.length || 0 };
 }
 
 function buildRawClipTitle(clip, fallbackFolderName = null) {

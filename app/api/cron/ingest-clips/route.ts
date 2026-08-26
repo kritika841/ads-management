@@ -37,11 +37,16 @@ export async function GET(request: NextRequest) {
 
   const admin = createSupabaseAdminClient();
 
-  // 1. Reset stale "processing" rows (stuck > 15 min)
-  const { data: staleReset, error: staleError } = await admin.rpc(
-    "reset_stale_segment_ingest",
-    { stale_minutes: 15 }
-  );
+  // 1. Reset stale raw clips. The legacy RPC only covers ads.segment_ingest_status,
+  // which is no longer the source of truth for the raw-clips library.
+  const staleBefore = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  const { data: staleRows, error: staleError } = await admin
+    .from("raw_clips")
+    .update({ ingest_status: "pending", ingest_error: null, updated_at: new Date().toISOString() })
+    .eq("ingest_status", "processing")
+    .lt("updated_at", staleBefore)
+    .select("id");
+  const staleReset = staleRows?.length ?? 0;
   if (staleError) {
     console.error("[ingest-clips cron] Failed to reset stale rows:", staleError.message);
   }
