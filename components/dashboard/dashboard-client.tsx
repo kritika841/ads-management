@@ -529,6 +529,11 @@ function WorkflowCard({ ad, mediaToken, profile, editors, editorWorkloads, pendi
   const canFinalReview = reviewer && (ad.production_stage === "creator_review" || ad.production_stage === "final_review");
   const canAssignEditor = ad.production_stage === "shoot_complete" && (reviewer || (profile.role === "content_creator" && ad.creator_id === profile.id));
   const activeEditors = editors.filter((item) => item.active);
+  // Keep this operational marker visible even when a creative already has
+  // several ordinary tags; a simple slice of the tag list can otherwise hide
+  // it on the card.
+  const downloaded = ad.tags.some((tag) => tag.name.toLowerCase() === "downloaded");
+  const visibleTags = ad.tags.filter((tag) => tag.name.toLowerCase() !== "downloaded").slice(0, profile.role === "admin" && downloaded ? 2 : 3);
   const creatorChangeRequested = profile.role === "content_creator" && ad.creator_id === profile.id && ad.production_stage === "creator_changes_requested";
   const creatorEditable = creatorEditableStages.includes(ad.production_stage as (typeof creatorEditableStages)[number]) && (reviewer || (profile.role === "content_creator" && ad.creator_id === profile.id));
   const actionLabel = creatorChangeRequested ? "Resubmit creative" : creatorEditable ? "Update" : profile.role === "editor" && ad.production_stage === "ready_for_edit" ? "Open assignment" : profile.role === "editor" && (ad.production_stage === "editing" || ad.production_stage === "changes_requested") ? "Submit video" : profile.role === "content_creator" && ad.production_stage === "creator_review" ? "Review edit" : "Open";
@@ -556,7 +561,8 @@ function WorkflowCard({ ad, mediaToken, profile, editors, editorWorkloads, pendi
             <p className="mt-0.5 truncate text-xs text-muted-foreground">{ad.campaign?.name ?? "No campaign"}</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {ad.product?.name ? <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">Product · {ad.product.name}</span> : null}
-              {ad.tags.slice(0, 3).map((tag) => <span key={tag.id} className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">#{tag.name}</span>)}
+              {profile.role === "admin" && downloaded ? <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400"><Download className="size-2.5" aria-hidden />Downloaded</span> : null}
+              {visibleTags.map((tag) => <span key={tag.id} className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">#{tag.name}</span>)}
             </div>
           </div>
           <div className="flex gap-0.5">{canDeleteAd(profile.role) ? <DeleteAdButton adId={ad.id} adName={ad.name} compact /> : null}{canPreview ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-50" title="Download video" disabled={downloading} onClick={(e) => { e.stopPropagation(); onDownload(); }}>{downloading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Download className="size-4" aria-hidden />}</button> : null}{canPreview ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" title="Quick preview" aria-label={`Quick preview ${ad.name}`} onClick={onQuickPreview}><Maximize2 className="size-4" aria-hidden /></button> : null}{canOpenInDrive ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" title="Open final video in Google Drive" aria-label={`Open ${ad.name} in Google Drive`} onClick={onOpenDrive}><Eye className="size-4" aria-hidden /></button> : null}</div>
