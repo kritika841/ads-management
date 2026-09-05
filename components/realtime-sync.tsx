@@ -36,6 +36,7 @@ export function RealtimeSync({ userId, role }: { userId: string; role: UserRole 
       if (statusTimer.current) clearTimeout(statusTimer.current);
       statusTimer.current = setTimeout(() => setState(realtimeConnected.current ? "live" : "fallback"), 4_000);
     };
+    const refreshDailyTargets = () => { if (!active) return; markUpdated(); queueRefresh(); };
 
     const checkForUpdates = async (eventOrForce?: unknown) => {
       if (!active || checking.current || !navigator.onLine) return;
@@ -73,6 +74,7 @@ export function RealtimeSync({ userId, role }: { userId: string; role: UserRole 
       .on("postgres_changes", { event: "*", schema: "public", table: "review_actions" }, checkForUpdates)
       .on("postgres_changes", { event: "*", schema: "public", table: "annotations" }, checkForUpdates)
       .on("postgres_changes", { event: "*", schema: "public", table: "activity_logs" }, checkForUpdates)
+      .on("postgres_changes", { event: "*", schema: "public", table: "daily_team_targets" }, refreshDailyTargets)
       .on("postgres_changes", { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` }, checkForUpdates)
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {

@@ -18,7 +18,7 @@ export async function getDriveMetadata(fileId: string) {
   const drive = google.drive({ version: "v3", auth });
   const response = await drive.files.get({
     fileId,
-    fields: "id,name,mimeType,thumbnailLink,webViewLink,webContentLink"
+    fields: "id,name,mimeType,size,thumbnailLink,webViewLink,webContentLink"
   });
 
   return response.data;
@@ -72,14 +72,14 @@ export async function getDriveMedia(fileId: string, range?: string | null) {
 function createDriveAuth() {
   if (cachedDriveAuth !== undefined) return cachedDriveAuth;
 
-  const serviceAccountJson = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON;
-  if (!serviceAccountJson) {
+  const serviceAccountSource = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH;
+  if (!serviceAccountSource) {
     cachedDriveAuth = null;
     return cachedDriveAuth;
   }
 
   try {
-    const credentialsSource = serviceAccountJson.trim().replace(/^"(.*)"$/, "$1");
+    const credentialsSource = serviceAccountSource.trim().replace(/^"(.*)"$/, "$1");
     const credentials = JSON.parse(
       credentialsSource.startsWith("{") || !existsSync(credentialsSource)
         ? credentialsSource
@@ -91,7 +91,7 @@ function createDriveAuth() {
     });
   } catch (err) {
     console.error(
-      "GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON is set but could not be parsed as JSON or read as a file path. " +
+      "Google Drive service-account credentials could not be parsed as JSON or read as a file path. " +
         "It must contain the full service account key JSON (or a path that exists on this machine).",
       err
     );

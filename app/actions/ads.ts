@@ -139,7 +139,9 @@ export async function saveCreatorItem(payload: z.input<typeof creatorItemSchema>
     rawFootageUrl = data.rawFootageUrl!.trim();
   }
 
-  let editorId: string | null = null;
+  // Creator-form saves never clear an existing editor. Clearing is a privileged,
+  // explicitly reasoned operation handled by the dedicated assignment RPC.
+  let editorId: string | null = currentAd?.editor_id ?? null;
   if (data.editorId) {
     if (!data.deadline) return { ok: false, message: "Choose a deadline before assigning an editor." };
     const { data: editor, error: editorError } = await admin

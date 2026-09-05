@@ -8,6 +8,7 @@ import {
   BarChart3,
   Bell,
   Clapperboard,
+  ClipboardCheck,
   House,
   LayoutDashboard,
   LogOut,
@@ -41,6 +42,7 @@ export function AppShell({
   const [mobileOpen, setMobileOpen] = useState(false);
   const workspaceLinks: NavItem[] = [
     { href: "/dashboard", label: "Home", icon: House },
+    { href: "/targets", label: "Daily targets", icon: ClipboardCheck },
     { href: "/library", label: "Creative library", icon: LayoutDashboard },
     { href: "/raw-clips-search", label: "Ad Library", icon: Clapperboard },
     ...(profile.role === "admin" || profile.role === "manager"

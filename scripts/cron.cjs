@@ -4,16 +4,22 @@ const { spawn } = require("child_process");
 const dotenv = require("dotenv");
 
 const RUN_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+let running = false;
 
 console.log("Starting background cron scheduler for auto-tagging...");
 bootstrapEnv();
 
 function runIngest() {
+  if (running) {
+    console.log("[cron] Previous scheduler request is still active; skipping this interval.");
+    return;
+  }
+  running = true;
   console.log(`[cron] Triggering ingest script at ${new Date().toISOString()}`);
 
   const child = spawn(
-    process.execPath,
-    ["scripts/ingest-ads-clip-segments.cjs"],
+    "/bin/bash",
+    ["scripts/run-ingest-cron.sh"],
     {
       cwd: path.resolve(process.cwd()),
       stdio: "inherit",
@@ -22,10 +28,13 @@ function runIngest() {
   );
 
   child.on('close', (code) => {
-    console.log(`[cron] Ingest finished with code ${code}`);
+    running = false;
+    if (code === 73) console.log("[cron] Another scheduler owns the ingest lock; this run was safely skipped.");
+    else console.log(`[cron] Tagging and embedding pipeline finished with code ${code}`);
   });
   
   child.on('error', (err) => {
+    running = false;
     console.error(`[cron] Failed to start ingest script:`, err);
   });
 }

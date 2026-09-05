@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ArrowDown, ArrowRight, ArrowUp, CalendarClock, Check, ChevronsUpDown, Download, Eye, Filter, Grid2X2, ListFilter, Loader2, Play, Plus, Search, Square, SquareCheck, Table2, Tags, UserCheck, Video, X } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, CalendarClock, Check, ChevronsUpDown, Download, Eye, Filter, Grid2X2, ListFilter, Loader2, Maximize2, Play, Plus, Search, Square, SquareCheck, Table2, Tags, UserCheck, Video, X } from "lucide-react";
 import { assignEditor, bulkAddTags, reviewAd } from "@/app/actions/ads";
 import { AdPreviewModal } from "@/components/dashboard/ad-preview-modal";
 import { DeleteAdButton } from "@/components/dashboard/delete-ad-button";
@@ -17,6 +17,8 @@ import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { platforms } from "@/lib/constants";
 import { runServerAction } from "@/lib/client-action";
+import { downloadProgressLabel, downloadWithProgress, type DownloadProgress } from "@/lib/client-download";
+import type { ExportJobSnapshot } from "@/lib/export-job-types";
 import { canDeleteAd } from "@/lib/permissions";
 import { readDashboardFilters, writeDashboardFilters, type DashboardView } from "@/lib/dashboard-filter-state";
 import { creatorEditableStages, isFinalMediaVisible, productionStageLabels, productionStages, workflowStageAgeLabel } from "@/lib/production-workflow";
@@ -59,7 +61,12 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
   const [visibleGridCount, setVisibleGridCount] = useState(gridPageSize);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isDownloading, setIsDownloading] = useState(false);
+  const [bulkDownloadProgress, setBulkDownloadProgress] = useState<DownloadProgress | null>(null);
+  const [bulkExportJob, setBulkExportJob] = useState<ExportJobSnapshot | null>(null);
+  const [bulkDownloadComplete, setBulkDownloadComplete] = useState(false);
+  const [bulkDownloadCount, setBulkDownloadCount] = useState(0);
   const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
+  const [downloadProgress, setDownloadProgress] = useState<Record<string, DownloadProgress>>({});
   const [bulkTagModalOpen, setBulkTagModalOpen] = useState(false);
   const [isBulkTagging, setIsBulkTagging] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -297,26 +304,41 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
 
   async function downloadZip() {
     if (!selectedIds.size || isDownloading) return;
+    const selectedCount = selectedIds.size;
     setIsDownloading(true);
+    setBulkDownloadCount(selectedCount);
+    setBulkDownloadProgress(null);
+    setBulkExportJob(null);
+    setBulkDownloadComplete(false);
+    const filename = `creatives-${new Date().toISOString().slice(0, 10)}.zip`;
     try {
-      const res = await fetch("/api/ads/export-zip", {
+      const created = await fetch("/api/ads/export-jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids: Array.from(selectedIds) }),
       });
-      if (!res.ok) { toast({ title: "Download failed", description: "Could not create ZIP. Try again.", tone: "error" }); return; }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `creatives-${new Date().toISOString().slice(0, 10)}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast({ title: `${selectedIds.size} creative${selectedIds.size > 1 ? "s" : ""} downloaded`, tone: "success" });
-    } catch {
-      toast({ title: "Download failed", description: "Network error — please try again.", tone: "error" });
+      if (!created.ok) throw new Error(await created.text());
+      let job = await created.json() as ExportJobSnapshot;
+      setBulkExportJob(job);
+      while (job.phase === "preparing" || job.phase === "building") {
+        await new Promise((resolve) => window.setTimeout(resolve, 500));
+        const response = await fetch(`/api/ads/export-jobs/${job.id}`, { cache: "no-store" });
+        if (!response.ok) throw new Error(await response.text());
+        job = await response.json() as ExportJobSnapshot;
+        setBulkExportJob(job);
+      }
+      if (job.phase !== "ready") throw new Error(job.error || "The ZIP could not be prepared.");
+      // A save-file picker is only permitted while the original click is still
+      // active. ZIP preparation is asynchronous, so opening one here can hang
+      // indefinitely. Fetch and save the completed archive directly instead.
+      await downloadWithProgress(`/api/ads/export-jobs/${job.id}/download`, filename, setBulkDownloadProgress);
+      try { await markDownloaded(job.files.filter((file) => file.state === "included" && file.adId).map((file) => file.adId!)); }
+      catch (cause) { toast({ title: "ZIP downloaded", description: cause instanceof Error ? cause.message : "The Downloaded tag could not be saved.", tone: "error" }); }
+      setBulkDownloadComplete(true);
+      const included = job.files.filter((file) => file.state === "included").length;
+      toast({ title: `${included} video${included === 1 ? "" : "s"} downloaded`, tone: "success" });
+    } catch (cause) {
+      toast({ title: "Download failed", description: cause instanceof Error ? cause.message : "Network error — please try again.", tone: "error" });
     } finally {
       setIsDownloading(false);
     }
@@ -325,26 +347,28 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
   async function downloadOne(ad: AdWithRelations) {
     if (downloadingIds.has(ad.id)) return;
     setDownloadingIds((current) => new Set(current).add(ad.id));
+    setDownloadProgress((current) => ({ ...current, [ad.id]: { receivedBytes: 0, totalBytes: null, percent: null, etaSeconds: null } }));
     try {
-      const res = await fetch(`/api/ads/${ad.id}/download`);
-      if (!res.ok) { toast({ title: "Download failed", description: `Could not download ${ad.name}. Try again.`, tone: "error" }); return; }
-      const blob = await res.blob();
-      const disposition = res.headers.get("content-disposition") ?? "";
-      const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? `${ad.name}.mp4`;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      await downloadWithProgress(`/api/ads/${ad.id}/download`, `${ad.name}.mp4`, (progress) => setDownloadProgress((current) => ({ ...current, [ad.id]: progress })));
+      try { await markDownloaded([ad.id]); }
+      catch (cause) { toast({ title: `${ad.name} downloaded`, description: cause instanceof Error ? cause.message : "The Downloaded tag could not be saved.", tone: "error" }); }
       toast({ title: `${ad.name} downloaded`, tone: "success" });
     } catch {
       toast({ title: "Download failed", description: "Network error — please try again.", tone: "error" });
     } finally {
       setDownloadingIds((current) => { const next = new Set(current); next.delete(ad.id); return next; });
+      window.setTimeout(() => setDownloadProgress((current) => { const next = { ...current }; delete next[ad.id]; return next; }), 1200);
     }
+  }
+
+  async function markDownloaded(adIds: string[]) {
+    const response = await fetch("/api/ads/mark-downloaded", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: adIds }),
+    });
+    if (!response.ok) throw new Error(`The file downloaded, but its Downloaded tag could not be saved: ${await response.text()}`);
+    router.refresh();
   }
 
   async function submitBulkTags(tags: string[]) {
@@ -417,7 +441,7 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
             </Button>
             <Button size="sm" disabled={isDownloading} onClick={downloadZip}>
               {isDownloading ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Download className="size-3.5" aria-hidden />}
-              Download ZIP
+              {isDownloading && bulkDownloadProgress?.percent != null ? `Downloading ${bulkDownloadProgress.percent}%` : "Download ZIP"}
             </Button>
           </>
         ) : (
@@ -428,7 +452,8 @@ export function DashboardClient({ profile, ads, campaigns, products, profiles, a
         )}
       </div>
     </div>
-    {filteredAds.length ? view === "grid" ? <><section className="mt-3 grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">{visibleGridAds.map((ad) => <WorkflowCard key={ad.id} ad={ad} mediaToken={mediaTokens[ad.id]} profile={profile} editors={editors} editorWorkloads={editorWorkloads} pending={actingAdId === ad.id} playing={playingAdId === ad.id} selected={selectedIds.has(ad.id)} downloading={downloadingIds.has(ad.id)} onToggleSelect={() => toggleSelect(ad.id)} onPlay={() => setPlayingAdId(ad.id)} onStopPlaying={() => setPlayingAdId(null)} onPlaybackError={() => { setPlayingAdId(null); toast({ title: "Video unavailable", description: `${ad.name} could not be played.`, tone: "error" }); }} onPreview={() => { if (ad.drive_url) window.open(ad.drive_url, "_blank", "noopener,noreferrer"); }} onDownload={() => downloadOne(ad)} onEdit={() => openCreatorForm(ad)} onApprove={() => decide(ad, "approve")} onRequestChanges={() => setCancelAd(ad)} onAssignEditor={(editorId, deadline) => assign(ad, editorId, deadline)} />)}</section>{hasMoreGridAds ? <div ref={loadMoreRef} className="flex h-20 items-center justify-center" role="status" aria-label="Loading more creatives"><Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden /><span className="sr-only">Loading more creatives</span></div> : null}</> : <WorkflowTable ads={filteredAds} profile={profile} pendingId={actingAdId} selectedIds={selectedIds} downloadingIds={downloadingIds} onToggleSelect={toggleSelect} onApprove={(ad) => decide(ad, "approve")} onRequestChanges={setCancelAd} onDownload={downloadOne} /> : <EmptyQueue canCreate={canCreate} onCreate={() => openCreatorForm()} />}
+    {bulkExportJob || bulkDownloadProgress ? <BulkDownloadProgress job={bulkExportJob} progress={bulkDownloadProgress} count={bulkDownloadCount} complete={bulkDownloadComplete} onDismiss={() => { setBulkExportJob(null); setBulkDownloadProgress(null); setBulkDownloadComplete(false); }} /> : null}
+    {filteredAds.length ? view === "grid" ? <><section className="mt-3 grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">{visibleGridAds.map((ad) => <WorkflowCard key={ad.id} ad={ad} mediaToken={mediaTokens[ad.id]} profile={profile} editors={editors} editorWorkloads={editorWorkloads} pending={actingAdId === ad.id} playing={playingAdId === ad.id} selected={selectedIds.has(ad.id)} downloading={downloadingIds.has(ad.id)} downloadProgress={downloadProgress[ad.id]} onToggleSelect={() => toggleSelect(ad.id)} onPlay={() => setPlayingAdId(ad.id)} onStopPlaying={() => setPlayingAdId(null)} onPlaybackError={() => { setPlayingAdId(null); toast({ title: "Video unavailable", description: `${ad.name} could not be played.`, tone: "error" }); }} onQuickPreview={() => setPreviewAd(ad)} onOpenDrive={() => { if (ad.drive_url) window.open(ad.drive_url, "_blank", "noopener,noreferrer"); }} onDownload={() => downloadOne(ad)} onEdit={() => openCreatorForm(ad)} onApprove={() => decide(ad, "approve")} onRequestChanges={() => setCancelAd(ad)} onAssignEditor={(editorId, deadline) => assign(ad, editorId, deadline)} />)}</section>{hasMoreGridAds ? <div ref={loadMoreRef} className="flex h-20 items-center justify-center" role="status" aria-label="Loading more creatives"><Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden /><span className="sr-only">Loading more creatives</span></div> : null}</> : <WorkflowTable ads={filteredAds} profile={profile} pendingId={actingAdId} selectedIds={selectedIds} downloadingIds={downloadingIds} downloadProgress={downloadProgress} onToggleSelect={toggleSelect} onApprove={(ad) => decide(ad, "approve")} onRequestChanges={setCancelAd} onDownload={downloadOne} /> : <EmptyQueue canCreate={canCreate} onCreate={() => openCreatorForm()} />}
 
     {formOpen ? <Modal open labelledBy="creator-form-title" onClose={() => { setFormOpen(false); setEditingAd(null); }} className="p-0 sm:p-6"><section className="mx-auto min-h-full w-full bg-card shadow-float sm:min-h-0 sm:max-w-5xl sm:rounded-xl"><div className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-border bg-card px-5 sm:rounded-t-lg"><div><h2 id="creator-form-title" className="text-lg font-semibold text-foreground">{editingAd ? (editingAd && !creatorEditableStages.includes(editingAd.production_stage as (typeof creatorEditableStages)[number]) && (profile.role === "admin" || profile.role === "manager") ? "Override edit creative" : "Update creative") : "Add creative"}</h2><p className="text-xs text-muted-foreground">{editingAd && !creatorEditableStages.includes(editingAd.production_stage as (typeof creatorEditableStages)[number]) && (profile.role === "admin" || profile.role === "manager") ? "Admin/manager override — all fields editable." : "Set the current preparation status and save."}</p></div><Button size="icon" variant="ghost" title="Close" onClick={() => { setFormOpen(false); setEditingAd(null); }}><X className="size-5" aria-hidden /></Button></div><div className="p-5"><CreatorItemForm profile={profile} creators={creators} editors={editors} campaigns={campaigns.filter((item) => item.active)} products={products.filter((item) => item.active)} initialAd={editingAd} availableTags={availableTags} editorWorkloads={editorWorkloads} overrideMode={Boolean(editingAd && !creatorEditableStages.includes(editingAd.production_stage as (typeof creatorEditableStages)[number]) && (profile.role === "admin" || profile.role === "manager"))} onSaved={() => { setFormOpen(false); setEditingAd(null); router.refresh(); }} /></div></section></Modal> : null}
 
@@ -493,7 +518,7 @@ function BulkTagModal({ count, availableTags, pending, onClose, onSubmit }: { co
   );
 }
 
-function WorkflowCard({ ad, mediaToken, profile, editors, editorWorkloads, pending, playing, selected, downloading, onToggleSelect, onPlay, onStopPlaying, onPlaybackError, onPreview, onDownload, onEdit, onApprove, onRequestChanges, onAssignEditor }: { ad: AdWithRelations; mediaToken?: string; profile: Profile; editors: Profile[]; editorWorkloads: Record<string, number>; pending: boolean; playing: boolean; selected: boolean; downloading: boolean; onToggleSelect: () => void; onPlay: () => void; onStopPlaying: () => void; onPlaybackError: () => void; onPreview: () => void; onDownload: () => void; onEdit: () => void; onApprove: () => void; onRequestChanges: () => void; onAssignEditor: (editorId: string, deadline: string) => void }) {
+function WorkflowCard({ ad, mediaToken, profile, editors, editorWorkloads, pending, playing, selected, downloading, downloadProgress, onToggleSelect, onPlay, onStopPlaying, onPlaybackError, onQuickPreview, onOpenDrive, onDownload, onEdit, onApprove, onRequestChanges, onAssignEditor }: { ad: AdWithRelations; mediaToken?: string; profile: Profile; editors: Profile[]; editorWorkloads: Record<string, number>; pending: boolean; playing: boolean; selected: boolean; downloading: boolean; downloadProgress?: DownloadProgress; onToggleSelect: () => void; onPlay: () => void; onStopPlaying: () => void; onPlaybackError: () => void; onQuickPreview: () => void; onOpenDrive: () => void; onDownload: () => void; onEdit: () => void; onApprove: () => void; onRequestChanges: () => void; onAssignEditor: (editorId: string, deadline: string) => void }) {
   const [selectedEditor, setSelectedEditor] = useState("");
   const [selectedDeadline, setSelectedDeadline] = useState(ad.deadline ?? "");
   const mediaVisible = isFinalMediaVisible(ad.production_stage);
@@ -534,8 +559,9 @@ function WorkflowCard({ ad, mediaToken, profile, editors, editorWorkloads, pendi
               {ad.tags.slice(0, 3).map((tag) => <span key={tag.id} className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">#{tag.name}</span>)}
             </div>
           </div>
-          <div className="flex gap-0.5">{canDeleteAd(profile.role) ? <DeleteAdButton adId={ad.id} adName={ad.name} compact /> : null}{canPreview ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-50" title="Download video" disabled={downloading} onClick={(e) => { e.stopPropagation(); onDownload(); }}>{downloading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Download className="size-4" aria-hidden />}</button> : null}{canOpenInDrive ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" title="Open final video in Google Drive" aria-label={`Open ${ad.name} in Google Drive`} onClick={onPreview}><Eye className="size-4" aria-hidden /></button> : null}</div>
+          <div className="flex gap-0.5">{canDeleteAd(profile.role) ? <DeleteAdButton adId={ad.id} adName={ad.name} compact /> : null}{canPreview ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-50" title="Download video" disabled={downloading} onClick={(e) => { e.stopPropagation(); onDownload(); }}>{downloading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Download className="size-4" aria-hidden />}</button> : null}{canPreview ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" title="Quick preview" aria-label={`Quick preview ${ad.name}`} onClick={onQuickPreview}><Maximize2 className="size-4" aria-hidden /></button> : null}{canOpenInDrive ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" title="Open final video in Google Drive" aria-label={`Open ${ad.name} in Google Drive`} onClick={onOpenDrive}><Eye className="size-4" aria-hidden /></button> : null}</div>
         </div>
+        {downloadProgress ? <DownloadProgressBar progress={downloadProgress} /> : null}
         <div className="mt-4 grid grid-cols-2 gap-3 border-y border-border py-3"><Person label="Creator" person={ad.creator} /><Person label="Editor" person={ad.editor} /></div>
         <div className="mt-3 flex items-center justify-between gap-3 text-xs"><span className="font-medium text-muted-foreground" suppressHydrationWarning>{workflowStageAgeLabel(ad.production_stage, ad.workflow_status_changed_at)}</span><Deadline deadline={ad.deadline} status={ad.status} /></div>
         {canFinalReview ? (
@@ -589,7 +615,7 @@ function MediaPlaceholder({ label }: { label: string }) {
 type TableSortKey = "name" | "status" | "creator" | "editor" | "waiting";
 type TableSort = { key: TableSortKey; direction: "asc" | "desc" };
 
-function WorkflowTable({ ads, profile, pendingId, selectedIds, downloadingIds, onToggleSelect, onApprove, onRequestChanges, onDownload }: { ads: AdWithRelations[]; profile: Profile; pendingId: string | null; selectedIds: Set<string>; downloadingIds: Set<string>; onToggleSelect: (id: string) => void; onApprove: (ad: AdWithRelations) => void; onRequestChanges: (ad: AdWithRelations) => void; onDownload: (ad: AdWithRelations) => void }) {
+function WorkflowTable({ ads, profile, pendingId, selectedIds, downloadingIds, downloadProgress, onToggleSelect, onApprove, onRequestChanges, onDownload }: { ads: AdWithRelations[]; profile: Profile; pendingId: string | null; selectedIds: Set<string>; downloadingIds: Set<string>; downloadProgress: Record<string, DownloadProgress>; onToggleSelect: (id: string) => void; onApprove: (ad: AdWithRelations) => void; onRequestChanges: (ad: AdWithRelations) => void; onDownload: (ad: AdWithRelations) => void }) {
   const router = useRouter();
   const reviewer = profile.role === "admin" || profile.role === "manager";
   const [tableSort, setTableSort] = useState<TableSort>({ key: "waiting", direction: "asc" });
@@ -606,8 +632,42 @@ function WorkflowTable({ ads, profile, pendingId, selectedIds, downloadingIds, o
   }), [ads, tableSort]);
   const changeSort = (key: TableSortKey) => setTableSort((current) => current.key === key ? { key, direction: current.direction === "asc" ? "desc" : "asc" } : { key, direction: "asc" });
 
-  return <section className="panel mt-3 overflow-x-auto"><table className="w-full min-w-[960px] text-left text-sm"><thead className="border-b border-border bg-muted text-xs uppercase text-muted-foreground"><tr><th className="w-10 px-3 py-3" /><SortHeader label="Creative" sortKey="name" sort={tableSort} onSort={changeSort} /><SortHeader label="Status" sortKey="status" sort={tableSort} onSort={changeSort} /><SortHeader label="Creator" sortKey="creator" sort={tableSort} onSort={changeSort} /><SortHeader label="Editor" sortKey="editor" sort={tableSort} onSort={changeSort} /><SortHeader label="Time in status" sortKey="waiting" sort={tableSort} onSort={changeSort} /><th className="px-4 py-3" /></tr></thead><tbody className="divide-y divide-border">{sortedAds.map((ad) => { const reviewable = reviewer && (ad.production_stage === "creator_review" || ad.production_stage === "final_review"); const isSelected = selectedIds.has(ad.id); const canDownload = isFinalMediaVisible(ad.production_stage) && Boolean(ad.drive_file_id); const isDownloadingRow = downloadingIds.has(ad.id); const open = () => router.push(`/ads/${ad.id}`); return <tr key={ad.id} className={`cursor-pointer transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${isSelected ? "bg-accent/40" : ""}`} role="link" tabIndex={0} onClick={open} onKeyDown={(event) => { if (event.key === "Enter") open(); }}><td className="px-3 py-3" onClick={(e) => { e.stopPropagation(); onToggleSelect(ad.id); }}><button type="button" aria-label={isSelected ? "Deselect" : "Select"} aria-pressed={isSelected} className={`flex size-7 items-center justify-center rounded-md border transition-colors ${isSelected ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:border-ring"}`}>{isSelected ? <SquareCheck className="size-4" aria-hidden /> : <Square className="size-4" aria-hidden />}</button></td><td className="px-4 py-3"><p className="font-medium text-foreground">{ad.name}</p><p className="text-xs text-muted-foreground">{ad.campaign?.name}</p><div className="mt-1 flex flex-wrap gap-1.5">{ad.product?.name ? <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">Product · {ad.product.name}</span> : null}{ad.tags.slice(0, 2).map((tag) => <span key={tag.id} className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">#{tag.name}</span>)}</div></td><td className="px-4 py-3"><ProductionStageBadge stage={ad.production_stage} className="bg-muted text-muted-foreground shadow-none" /></td><td className="px-4 py-3">{ad.creator?.name ?? "Unassigned"}</td><td className="px-4 py-3">{ad.editor?.name ?? "Unassigned"}</td><td className="px-4 py-3 text-muted-foreground normal-case" suppressHydrationWarning>{workflowStageAgeLabel(ad.production_stage, ad.workflow_status_changed_at)}</td><td className="px-4 py-3"><div className="flex justify-end gap-2" onClick={(event) => event.stopPropagation()}>{reviewable ? <><Button size="sm" disabled={pendingId === ad.id} onClick={() => onApprove(ad)}>Approve</Button><Button size="sm" variant="secondary" onClick={() => onRequestChanges(ad)}>Changes</Button></> : <Button size="sm" variant="secondary" onClick={open}>Open<ArrowRight className="size-3.5" aria-hidden /></Button>}{canDownload ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-50" title="Download video" disabled={isDownloadingRow} onClick={() => onDownload(ad)}>{isDownloadingRow ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Download className="size-4" aria-hidden />}</button> : null}{canDeleteAd(profile.role) ? <DeleteAdButton adId={ad.id} adName={ad.name} compact /> : null}</div></td></tr>; })}</tbody></table></section>;
+  return <section className="panel mt-3 overflow-x-auto"><table className="w-full min-w-[960px] text-left text-sm"><thead className="border-b border-border bg-muted text-xs uppercase text-muted-foreground"><tr><th className="w-10 px-3 py-3" /><SortHeader label="Creative" sortKey="name" sort={tableSort} onSort={changeSort} /><SortHeader label="Status" sortKey="status" sort={tableSort} onSort={changeSort} /><SortHeader label="Creator" sortKey="creator" sort={tableSort} onSort={changeSort} /><SortHeader label="Editor" sortKey="editor" sort={tableSort} onSort={changeSort} /><SortHeader label="Time in status" sortKey="waiting" sort={tableSort} onSort={changeSort} /><th className="px-4 py-3" /></tr></thead><tbody className="divide-y divide-border">{sortedAds.map((ad) => { const reviewable = reviewer && (ad.production_stage === "creator_review" || ad.production_stage === "final_review"); const isSelected = selectedIds.has(ad.id); const canDownload = isFinalMediaVisible(ad.production_stage) && Boolean(ad.drive_file_id); const isDownloadingRow = downloadingIds.has(ad.id); const progress = downloadProgress[ad.id]; const open = () => router.push(`/ads/${ad.id}`); return <tr key={ad.id} className={`cursor-pointer transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${isSelected ? "bg-accent/40" : ""}`} role="link" tabIndex={0} onClick={open} onKeyDown={(event) => { if (event.key === "Enter") open(); }}><td className="px-3 py-3" onClick={(e) => { e.stopPropagation(); onToggleSelect(ad.id); }}><button type="button" aria-label={isSelected ? "Deselect" : "Select"} aria-pressed={isSelected} className={`flex size-7 items-center justify-center rounded-md border transition-colors ${isSelected ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:border-ring"}`}>{isSelected ? <SquareCheck className="size-4" aria-hidden /> : <Square className="size-4" aria-hidden />}</button></td><td className="px-4 py-3"><p className="font-medium text-foreground">{ad.name}</p><p className="text-xs text-muted-foreground">{ad.campaign?.name}</p>{progress ? <DownloadProgressBar progress={progress} compact /> : <div className="mt-1 flex flex-wrap gap-1.5">{ad.product?.name ? <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">Product · {ad.product.name}</span> : null}{ad.tags.slice(0, 2).map((tag) => <span key={tag.id} className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">#{tag.name}</span>)}</div>}</td><td className="px-4 py-3"><ProductionStageBadge stage={ad.production_stage} className="bg-muted text-muted-foreground shadow-none" /></td><td className="px-4 py-3">{ad.creator?.name ?? "Unassigned"}</td><td className="px-4 py-3">{ad.editor?.name ?? "Unassigned"}</td><td className="px-4 py-3 text-muted-foreground normal-case" suppressHydrationWarning>{workflowStageAgeLabel(ad.production_stage, ad.workflow_status_changed_at)}</td><td className="px-4 py-3"><div className="flex justify-end gap-2" onClick={(event) => event.stopPropagation()}>{reviewable ? <><Button size="sm" disabled={pendingId === ad.id} onClick={() => onApprove(ad)}>Approve</Button><Button size="sm" variant="secondary" onClick={() => onRequestChanges(ad)}>Changes</Button></> : <Button size="sm" variant="secondary" onClick={open}>Open<ArrowRight className="size-3.5" aria-hidden /></Button>}{canDownload ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-50" title="Download video" disabled={isDownloadingRow} onClick={() => onDownload(ad)}>{isDownloadingRow ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Download className="size-4" aria-hidden />}</button> : null}{canDeleteAd(profile.role) ? <DeleteAdButton adId={ad.id} adName={ad.name} compact /> : null}</div></td></tr>; })}</tbody></table></section>;
 }
+
+function DownloadProgressBar({ progress, compact = false }: { progress: DownloadProgress; compact?: boolean }) {
+  const percent = progress.percent ?? 0;
+  return <div className={compact ? "mt-2 min-w-48" : "mt-3"} role="progressbar" aria-label="Video download progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.percent ?? undefined}>
+    <div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className={cn("h-full rounded-full bg-primary transition-[width] duration-200", progress.percent === null && "w-1/3 animate-pulse")} style={progress.percent === null ? undefined : { width: `${percent}%` }} /></div>
+    <p className="mt-1 text-[10px] font-medium text-muted-foreground">{downloadProgressLabel(progress)}</p>
+  </div>;
+}
+
+function BulkDownloadProgress({ job, progress, count, complete, onDismiss }: { job: ExportJobSnapshot | null; progress: DownloadProgress | null; count: number; complete: boolean; onDismiss: () => void }) {
+  const preparing = !progress && (job?.phase === "preparing" || job?.phase === "building");
+  const readyToDownload = !progress && job?.phase === "ready";
+  const failed = job?.phase === "failed";
+  const included = job?.files.filter((file) => file.state === "included").length ?? 0;
+  const skipped = job?.files.filter((file) => file.state === "skipped" || file.state === "failed").length ?? 0;
+  // There is deliberately no preparation progress bar. The only visible bar
+  // measures bytes of the finished ZIP as they arrive in the browser, so its
+  // fraction always equals downloaded ZIP bytes ÷ exact final ZIP bytes.
+  const percent = progress?.percent ?? 0;
+  const title = complete ? "ZIP download complete" : failed ? "ZIP preparation failed" : progress ? `Downloading final ZIP · ${included} video${included === 1 ? "" : "s"}` : readyToDownload ? "Final ZIP ready" : "Preparing final ZIP";
+  const detail = progress ? downloadProgressLabel(progress) : readyToDownload ? "Starting your browser download…" : preparing ? `Preparing ${job?.requestedCount ?? count} selected creatives. The download meter starts once the exact ZIP size is ready.` : job?.error ?? "Starting…";
+  return <section className="mt-3 rounded-xl border border-primary/30 bg-primary/5 p-4 shadow-soft" role="status" aria-live="polite">
+    <div className="flex items-start justify-between gap-4">
+      <div className="flex min-w-0 items-start gap-3">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">{complete ? <Check className="size-4" aria-hidden /> : <Loader2 className="size-4 animate-spin" aria-hidden />}</span>
+        <div><p className="text-sm font-semibold text-foreground">{title}</p><p className="mt-0.5 text-xs text-muted-foreground">{detail}</p>{job?.zipSizeBytes ? <p className="mt-1 text-xs font-medium text-foreground">Final ZIP size: {formatDownloadBytes(job.zipSizeBytes)} · {included} included{skipped ? ` · ${skipped} skipped/failed` : ""}</p> : null}</div>
+      </div>
+      <div className="flex items-center gap-2">{progress || complete ? <span className="shrink-0 text-sm font-semibold text-primary">{`${percent}%`}</span> : null}{complete || failed ? <button type="button" className="rounded p-1 text-muted-foreground hover:bg-muted" onClick={onDismiss} aria-label="Dismiss download status"><X className="size-4" /></button> : null}</div>
+    </div>
+    {progress || complete ? <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="ZIP progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><div className="h-full rounded-full bg-primary transition-[width] duration-200" style={{ width: `${percent}%` }} /></div> : null}
+  </section>;
+}
+
+function formatDownloadBytes(bytes: number) { if (bytes < 1024) return `${bytes} B`; if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`; if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`; return `${(bytes / 1024 ** 3).toFixed(1)} GB`; }
 
 function SortHeader({ label, sortKey, sort, onSort }: { label: string; sortKey: TableSortKey; sort: TableSort; onSort: (key: TableSortKey) => void }) {
   const active = sort.key === sortKey;

@@ -11,6 +11,7 @@ import type {
   AuditLog,
   Campaign,
   Comment,
+  DailyTarget,
   EditorTimeLog,
   Notification,
   Product,
@@ -75,6 +76,13 @@ export async function getProfiles() {
   }
 
   return (data ?? []) as Profile[];
+}
+
+export async function getDailyTargets(startDate: string, endDate: string) {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.from("daily_team_targets").select("*").gte("target_date", startDate).lte("target_date", endDate).order("target_date");
+  if (error) throw error;
+  return (data ?? []) as DailyTarget[];
 }
 
 export async function getTags() {

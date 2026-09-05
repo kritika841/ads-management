@@ -109,6 +109,13 @@ async function main() {
   const includeDone = process.argv.includes("--reprocess-done");
   const clipArgIndex = process.argv.indexOf("--clip");
   const targetClipName = clipArgIndex !== -1 ? process.argv[clipArgIndex + 1] : null;
+  const createdSinceArgIndex = process.argv.indexOf("--created-since");
+  const createdSince = createdSinceArgIndex !== -1 ? process.argv[createdSinceArgIndex + 1] : null;
+
+  if (createdSinceArgIndex !== -1 && (!createdSince || Number.isNaN(Date.parse(createdSince)))) {
+    console.error("--created-since requires a valid ISO date/time value.");
+    process.exit(1);
+  }
 
   for (const [name, val] of Object.entries({
     GEMINI_API_KEY,
@@ -132,7 +139,7 @@ async function main() {
   const auth = createDriveAuth();
   const drive = google.drive({ version: "v3", auth });
 
-  const recoverySummary = await recoverRawClipQueue(supabase);
+  const recoverySummary = await recoverRawClipQueue(supabase, { createdSince });
   if (recoverySummary.staleReset || recoverySummary.errorRequeued) {
     console.log(`Recovered queue. Stale reset: ${recoverySummary.staleReset}, errors re-queued: ${recoverySummary.errorRequeued}.`);
   }
@@ -172,18 +179,25 @@ async function main() {
   if (includeDone) {
     console.log("Backfill mode enabled: already-done clips will be reprocessed once.");
   }
+  if (createdSince) {
+    console.log(`Scoped mode enabled: processing raw clips created at or after ${createdSince}.`);
+  }
 
   let processedAny = true;
   while (processedAny) {
     processedAny = false;
     let query = supabase
       .from("raw_clips")
-      .select("id, ad_id, drive_file_id, source_raw_footage_url, resolved_video_url, thumbnail_url, original_name, duration_millis, created_at, ingest_status, ads:ad_id(name)")
+      .select("id, source_id, title, drive_file_id, source_raw_footage_url, resolved_video_url, thumbnail_url, original_name, duration_millis, created_at, ingest_status")
       .order("created_at", { ascending: true })
       .limit(BATCH_SIZE);
 
+    if (createdSince) {
+      query = query.gte("created_at", createdSince);
+    }
+
     if (targetClipName) {
-      query = query.eq("ads.name", targetClipName);
+      query = query.ilike("title", `${targetClipName}%`);
     } else if (includeDone) {
       query = query.in("ingest_status", ["pending", "done"]);
     } else {
@@ -199,7 +213,7 @@ async function main() {
     if (!rows || rows.length === 0) break;
 
     for (const row of rows) {
-      const clipName = Array.isArray(row.ads) ? row.ads[0]?.name || row.id : row.ads?.name || row.id;
+      const clipName = row.title || row.id;
       const claimed = await claimRawClipForProcessing(supabase, row.id, {
         force: Boolean(targetClipName),
         includeDone,
@@ -257,11 +271,6 @@ async function main() {
           throw new Error(`Failed to clear old segments: ${deleteError.message}`);
         }
 
-        // Older production databases still enforce unique(ad_id, segment_index).
-        // Allocate this clip a non-overlapping range within its ad so every video
-        // in the same Drive folder can be stored until that legacy key is removed.
-        const segmentIndexOffset = await getNextSegmentIndexForAd(supabase, row.ad_id);
-
         for (const segment of normalizedSegments) {
           const embedInput = buildSegmentEmbedInput(
             segment.visual_description,
@@ -277,8 +286,7 @@ async function main() {
 
           segmentRows.push({
             raw_clip_id: row.id,
-            ad_id: row.ad_id,
-            segment_index: segmentIndexOffset + segment.segment_index,
+            segment_index: segment.segment_index,
             start_seconds: segment.start_seconds,
             end_seconds: segment.end_seconds,
             visual_description: segment.visual_description,
@@ -368,17 +376,6 @@ async function main() {
   console.log("\nDone. No more pending segment rows.");
 }
 
-async function getNextSegmentIndexForAd(supabase, adId) {
-  const { data, error } = await supabase
-    .from("raw_clip_segments")
-    .select("segment_index")
-    .eq("ad_id", adId)
-    .order("segment_index", { ascending: false })
-    .limit(1);
-  if (error) throw new Error(`Failed to allocate segment indexes: ${error.message}`);
-  return Number(data?.[0]?.segment_index ?? -1) + 1;
-}
-
 async function claimRawClipForProcessing(supabase, rawClipId, options = {}) {
   const { force = false, includeDone = false } = options;
 
@@ -409,35 +406,36 @@ async function syncRawClipsCatalog(supabase, drive, options = {}) {
   let processed = 0;
   while (true) {
     let query = supabase
-      .from("ads")
-      .select("id, name, raw_footage_url")
-      .not("raw_footage_url", "is", null)
+      .from("raw_asset_sources")
+      .select("id, name, drive_url, provenance_ad_id")
+      .eq("active", true)
       .order("created_at", { ascending: true })
       .range(offset, offset + CATALOG_PAGE_SIZE - 1);
 
     if (targetClipName) query = query.eq("name", targetClipName);
-    const { data: ads, error } = await query;
-    if (error) throw new Error(`Failed to load ads for raw clip sync: ${error.message}`);
-    if (!ads?.length) break;
+    const { data: sources, error } = await query;
+    if (error) throw new Error(`Failed to load Ad Library sources: ${error.message}`);
+    if (!sources?.length) break;
 
-    for (const ad of ads) {
+    for (const source of sources) {
       let clips;
       try {
-        clips = await resolveDriveTargets(drive, ad.raw_footage_url);
+        clips = await resolveDriveTargets(drive, source.drive_url);
       } catch (error) {
         // A deleted or unshared legacy Drive folder must not prevent the worker from
         // processing already-catalogued clips or newer folders later in the queue.
-        console.error(`Skipping inaccessible raw footage for ${ad.name || ad.id}: ${error.message || error}`);
+        console.error(`Skipping inaccessible raw source for ${source.name || source.id}: ${error.message || error}`);
         continue;
       }
       for (const clip of clips) {
         const { error: upsertError } = await supabase
           .from("raw_clips")
           .upsert({
-            ad_id: ad.id,
-            title: buildRawClipTitle(clip, ad.name),
+            source_id: source.id,
+            ad_id: source.provenance_ad_id,
+            title: buildRawClipTitle(clip, source.name),
             drive_file_id: clip.fileId,
-            source_raw_footage_url: ad.raw_footage_url,
+            source_raw_footage_url: source.drive_url,
             resolved_video_url: clip.resolvedVideoUrl,
             thumbnail_url: clip.thumbnailUrl || null,
             original_name: clip.meta.originalName || null,
@@ -452,28 +450,31 @@ async function syncRawClipsCatalog(supabase, drive, options = {}) {
       processed += 1;
     }
 
-    if (targetClipName || ads.length < CATALOG_PAGE_SIZE) break;
-    offset += ads.length;
+    if (targetClipName || sources.length < CATALOG_PAGE_SIZE) break;
+    offset += sources.length;
   }
-  console.log(`Catalog sync checked ${processed} raw-footage ad(s).`);
+  console.log(`Catalog sync checked ${processed} independent Ad Library source(s).`);
 }
 
-async function recoverRawClipQueue(supabase) {
+async function recoverRawClipQueue(supabase, options = {}) {
+  const { createdSince = null } = options;
   const staleBefore = new Date(Date.now() - 15 * 60 * 1000).toISOString();
   const now = new Date().toISOString();
-  const { data: staleRows, error: staleError } = await supabase
+  let staleQuery = supabase
     .from("raw_clips")
     .update({ ingest_status: "pending", ingest_error: null, updated_at: now })
     .eq("ingest_status", "processing")
-    .lt("updated_at", staleBefore)
-    .select("id");
+    .lt("updated_at", staleBefore);
+  if (createdSince) staleQuery = staleQuery.gte("created_at", createdSince);
+  const { data: staleRows, error: staleError } = await staleQuery.select("id");
   if (staleError) throw new Error(`Failed to reset stale raw clips: ${staleError.message}`);
 
-  const { data: errorRows, error: errorRequeueError } = await supabase
+  let errorQuery = supabase
     .from("raw_clips")
     .update({ ingest_status: "pending", ingest_error: null, updated_at: now })
-    .eq("ingest_status", "error")
-    .select("id");
+    .eq("ingest_status", "error");
+  if (createdSince) errorQuery = errorQuery.gte("created_at", createdSince);
+  const { data: errorRows, error: errorRequeueError } = await errorQuery.select("id");
   if (errorRequeueError) throw new Error(`Failed to re-queue failed raw clips: ${errorRequeueError.message}`);
 
   return { staleReset: staleRows?.length || 0, errorRequeued: errorRows?.length || 0 };
@@ -533,10 +534,9 @@ async function processCaptionBackfill(supabase) {
 
   while (true) {
     const { data: rows, error } = await supabase
-      .from("ads")
-      .select("id, name")
-      .eq("segment_ingest_status", "done")
-      .not("raw_footage_url", "is", null)
+      .from("raw_clips")
+      .select("id, title")
+      .eq("ingest_status", "done")
       .order("created_at", { ascending: true })
       .range(from, from + pageSize - 1);
 
@@ -553,33 +553,33 @@ async function processCaptionBackfill(supabase) {
       const { data: segments, error: segmentError } = await supabase
         .from("raw_clip_segments")
         .select("segment_index, visual_description")
-        .eq("ad_id", row.id)
+        .eq("raw_clip_id", row.id)
         .order("segment_index", { ascending: true })
         .limit(1);
 
       if (segmentError) {
-        console.error(`Failed to load segments for ${row.name || row.id}:`, segmentError.message);
+        console.error(`Failed to load segments for ${row.title || row.id}:`, segmentError.message);
         continue;
       }
 
       const firstSegmentCaption = deriveClipCaptionFromSegments(segments || []);
       if (!firstSegmentCaption) {
-        console.log(`Skipping ${row.name || row.id}: no segment caption available.`);
+        console.log(`Skipping ${row.title || row.id}: no segment caption available.`);
         continue;
       }
 
       const { error: updateError } = await supabase
-        .from("ads")
-        .update({ raw_clip_description: firstSegmentCaption })
+        .from("raw_clips")
+        .update({ preview_description: firstSegmentCaption, updated_at: new Date().toISOString() })
         .eq("id", row.id);
 
       if (updateError) {
-        console.error(`Failed to update caption for ${row.name || row.id}:`, updateError.message);
+        console.error(`Failed to update caption for ${row.title || row.id}:`, updateError.message);
         continue;
       }
 
       updatedCount += 1;
-      console.log(`Updated caption for ${row.name || row.id}`);
+      console.log(`Updated caption for ${row.title || row.id}`);
     }
 
     from += rows.length;
@@ -591,9 +591,8 @@ async function processCaptionBackfill(supabase) {
 async function processResolveOnlyBackfill(supabase, drive) {
   const failures = [];
   const { data: rows, error } = await supabase
-    .from("ads")
-    .select("id, name, raw_footage_url, resolved_video_url, thumbnail_url, created_at")
-    .not("raw_footage_url", "is", null)
+    .from("raw_clips")
+    .select("id, title, drive_file_id, source_raw_footage_url, resolved_video_url, thumbnail_url, created_at")
     .or("resolved_video_url.is.null,thumbnail_url.is.null")
     .order("created_at", { ascending: true })
     .range(0, 1000);
@@ -605,28 +604,29 @@ async function processResolveOnlyBackfill(supabase, drive) {
 
   const rowsToProcess = rows || [];
   for (const row of rowsToProcess) {
-    console.log(`\n--- ${row.name || row.id} ---`);
+    console.log(`\n--- ${row.title || row.id} ---`);
 
     try {
-      const { fileId, resolvedVideoUrl, thumbnailUrl, meta } = await resolveDriveFileMeta(drive, row.raw_footage_url);
+      const { fileId, resolvedVideoUrl, thumbnailUrl, meta } = await resolveDriveFileMeta(drive, row.source_raw_footage_url, row.drive_file_id);
       if (!fileId) {
         const reason = "Could not resolve a Drive video file from the folder or URL.";
-        failures.push({ id: row.id, name: row.name || row.id, reason });
+        failures.push({ id: row.id, name: row.title || row.id, reason });
         console.error(reason);
         continue;
       }
 
       const { error: updateError } = await supabase
-        .from("ads")
+        .from("raw_clips")
         .update({
-          resolved_video_url: resolvedVideoUrl || row.raw_footage_url,
+          resolved_video_url: resolvedVideoUrl || row.source_raw_footage_url,
           thumbnail_url: thumbnailUrl || row.thumbnail_url || null,
-          raw_footage_original_name: meta.originalName || null,
+          original_name: meta.originalName || null,
+          updated_at: new Date().toISOString(),
         })
         .eq("id", row.id);
 
       if (updateError) {
-        failures.push({ id: row.id, name: row.name || row.id, reason: updateError.message });
+        failures.push({ id: row.id, name: row.title || row.id, reason: updateError.message });
         console.error("Failed to update clip metadata:", updateError.message);
         continue;
       }
@@ -634,7 +634,7 @@ async function processResolveOnlyBackfill(supabase, drive) {
       console.log("Updated resolved_video_url and thumbnail_url.");
     } catch (err) {
       const message = err.message || String(err);
-      failures.push({ id: row.id, name: row.name || row.id, reason: message });
+      failures.push({ id: row.id, name: row.title || row.id, reason: message });
       console.error("Error resolving clip metadata:", message);
     }
   }
@@ -655,60 +655,17 @@ async function repairSegmentIngestState(supabase) {
   let reconciledDone = 0;
   let requeuedTransient = 0;
 
-  const { data: adsForRepair, error: adsForRepairError } = await supabase
-    .from("ads")
-    .select("id, resolved_video_url, drive_file_id, segment_ingest_status")
-    .not("raw_footage_url", "is", null)
-    .limit(2000);
-
-  if (adsForRepairError) {
-    throw new Error(`Failed to load ads for repair: ${adsForRepairError.message}`);
-  }
-
   const { data: rawClipRows, error: rawClipRowsError } = await supabase
     .from("raw_clips")
-    .select("id, ad_id, drive_file_id, ingest_status, ingest_error, preview_description");
+    .select("id, ingest_status, ingest_error, preview_description");
 
   if (rawClipRowsError && !String(rawClipRowsError.message || "").includes("relation \"public.raw_clips\" does not exist")) {
     throw new Error(`Failed to load raw clips for repair: ${rawClipRowsError.message}`);
   }
 
-  const rawClipsByAdId = new Map();
-  for (const rawClip of rawClipRows || []) {
-    const items = rawClipsByAdId.get(rawClip.ad_id) || [];
-    items.push(rawClip);
-    rawClipsByAdId.set(rawClip.ad_id, items);
-  }
-
-  for (const ad of adsForRepair || []) {
-    const rawClipsForAd = rawClipsByAdId.get(ad.id) || [];
-    if (rawClipsForAd.length === 0) {
-      continue;
-    }
-
-    const canonicalFileId = extractDriveFileId(ad.resolved_video_url) || ad.drive_file_id || null;
-    const matchedRawClip =
-      rawClipsForAd.find((rawClip) => canonicalFileId && rawClip.drive_file_id === canonicalFileId) ||
-      (rawClipsForAd.length === 1 ? rawClipsForAd[0] : null);
-
-    if (!matchedRawClip) {
-      continue;
-    }
-
-    const { error: segmentBackfillError } = await supabase
-      .from("raw_clip_segments")
-      .update({ raw_clip_id: matchedRawClip.id })
-      .eq("ad_id", ad.id)
-      .is("raw_clip_id", null);
-
-    if (segmentBackfillError) {
-      throw new Error(`Failed to backfill raw_clip_id for ad ${ad.id}: ${segmentBackfillError.message}`);
-    }
-  }
-
   const { data: segmentRows, error: segmentError } = await supabase
     .from("raw_clip_segments")
-    .select("ad_id, raw_clip_id, segment_index, visual_description")
+    .select("raw_clip_id, segment_index, visual_description")
     .order("raw_clip_id", { ascending: true })
     .order("segment_index", { ascending: true });
 
@@ -716,12 +673,8 @@ async function repairSegmentIngestState(supabase) {
     throw new Error(`Failed to load raw clip segments for repair: ${segmentError.message}`);
   }
 
-  const firstSegmentByAdId = new Map();
   const firstSegmentByRawClipId = new Map();
   for (const segment of segmentRows || []) {
-    if (!firstSegmentByAdId.has(segment.ad_id) && String(segment.visual_description || "").trim()) {
-      firstSegmentByAdId.set(segment.ad_id, String(segment.visual_description).trim());
-    }
     if (segment.raw_clip_id && !firstSegmentByRawClipId.has(segment.raw_clip_id) && String(segment.visual_description || "").trim()) {
       firstSegmentByRawClipId.set(segment.raw_clip_id, String(segment.visual_description).trim());
     }
@@ -747,6 +700,7 @@ async function repairSegmentIngestState(supabase) {
       if (rawClipUpdateError) {
         throw new Error(`Failed to reconcile raw clip ${rawClip.id}: ${rawClipUpdateError.message}`);
       }
+      reconciledDone += 1;
     }
   }
 
@@ -1061,7 +1015,7 @@ function isDailyQuotaError(err) {
 
 function isDuplicateSegmentInsertError(err) {
   const msg = (err.message || "").toLowerCase();
-  return msg.includes("duplicate key value violates unique constraint") && msg.includes("raw_clip_segments_ad_id_segment_index_key");
+  return msg.includes("duplicate key value violates unique constraint") && msg.includes("raw_clip_segments_raw_clip_id_segment_index_key");
 }
 
 function isRetryableProcessingError(err) {
@@ -1077,7 +1031,7 @@ function isRetryableErrorMessage(message) {
     msg.includes("unavailable") ||
     msg.includes("high demand") ||
     (msg.includes("duplicate key value violates unique constraint") &&
-      msg.includes("raw_clip_segments_ad_id_segment_index_key"))
+      msg.includes("raw_clip_segments_raw_clip_id_segment_index_key"))
   );
 }
 

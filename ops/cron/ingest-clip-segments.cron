@@ -1,7 +1,6 @@
 CRON_TZ=Asia/Kolkata
-# Frequent recovery keeps new uploads moving; timeout guarantees a crashed or hung
-# provider call cannot hold the lock forever.
-*/10 * * * * /usr/bin/flock -n /tmp/ingest-clip-segments.lock /usr/bin/timeout 55m /bin/bash /home/deployer/apps/satmi-ads/scripts/run-ingest-cron.sh >> /var/log/ingest-clip-segments.log 2>&1
-# Fixed daily audit/retry pass at 00:15 IST. It shares the same lock with the
-# frequent worker, so duplicate processing is impossible.
-15 0 * * * /usr/bin/flock -n /tmp/ingest-clip-segments.lock /usr/bin/timeout 55m /bin/bash /home/deployer/apps/satmi-ads/scripts/run-ingest-cron.sh >> /var/log/ingest-clip-segments.log 2>&1
+# The wrapper owns the shared lock and timeout so cron, PM2, manual runs, and the
+# GitHub fallback can never process the same clip concurrently.
+*/10 * * * * /bin/bash /home/deployer/apps/satmi-ads/scripts/run-ingest-cron.sh >> /home/deployer/logs/ingest-clip-segments.log 2>&1
+# Fixed daily audit/retry pass at 00:15 IST.
+15 0 * * * /bin/bash /home/deployer/apps/satmi-ads/scripts/run-ingest-cron.sh >> /home/deployer/logs/ingest-clip-segments.log 2>&1

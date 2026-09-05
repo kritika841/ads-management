@@ -2,11 +2,11 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { BadgeAlert, Clapperboard, Clock3, ImageOff, Search } from "lucide-react";
+import { BadgeAlert, Clapperboard, Clock3, ImageOff, Loader2, Plus, Search, X } from "lucide-react";
 
 interface ClipResult {
   raw_clip_id: string;
-  ad_id: string;
+  ad_id: string | null;
   name: string | null;
   raw_footage_url: string;
   resolved_video_url: string | null;
@@ -22,7 +22,7 @@ type RawClipStatusFilter = "all" | "done" | "pending" | "error";
 
 interface RawClipBrowseItem {
   id: string;
-  ad_id: string;
+  ad_id: string | null;
   name: string | null;
   raw_footage_url: string;
   resolved_video_url: string | null;
@@ -219,6 +219,16 @@ export default function RawClipsSearchPage() {
   const [browseTotalPages, setBrowseTotalPages] = useState(1);
   const [browseTotal, setBrowseTotal] = useState(0);
   const [browseStatus, setBrowseStatus] = useState<RawClipStatusFilter>("all");
+  const [canManageSources, setCanManageSources] = useState(false);
+  const [sourceOpen, setSourceOpen] = useState(false);
+  const [sourceName, setSourceName] = useState("");
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [sourceSaving, setSourceSaving] = useState(false);
+  const [sourceError, setSourceError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void fetch("/api/raw-asset-sources", { cache: "no-store" }).then((res) => res.ok ? res.json() : null).then((data) => setCanManageSources(Boolean(data?.canManage))).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (activeQuery.trim()) return;
@@ -293,6 +303,16 @@ export default function RawClipsSearchPage() {
     }
   }
 
+  async function addSource() {
+    setSourceSaving(true); setSourceError(null);
+    try {
+      const response = await fetch("/api/raw-asset-sources", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: sourceName, driveUrl: sourceUrl }) });
+      if (!response.ok) throw new Error(await response.text());
+      setSourceOpen(false); setSourceName(""); setSourceUrl("");
+    } catch (cause) { setSourceError(cause instanceof Error ? cause.message : "Could not add source."); }
+    finally { setSourceSaving(false); }
+  }
+
   const browseMode = !activeQuery.trim();
 
   return (
@@ -312,7 +332,7 @@ export default function RawClipsSearchPage() {
             </div>
           </div>
 
-          <form onSubmit={handleSearch} className="flex w-full flex-col gap-3 sm:flex-row lg:max-w-2xl">
+          <div className="flex w-full flex-col gap-3 lg:max-w-2xl"><form onSubmit={handleSearch} className="flex w-full flex-col gap-3 sm:flex-row">
             <label className="sr-only" htmlFor="raw-clips-search-input">Describe the scene you need</label>
             <div className="relative flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
@@ -336,7 +356,7 @@ export default function RawClipsSearchPage() {
             <Button type="submit" disabled={searchLoading} className="h-11 px-5 sm:w-auto">
               {searchLoading ? "Searching..." : "Search clips"}
             </Button>
-          </form>
+          </form>{canManageSources ? <Button type="button" variant="secondary" className="self-end" onClick={() => setSourceOpen(true)}><Plus className="size-4" />Add Ad Library source</Button> : null}</div>
         </div>
 
         {searchError && (
@@ -482,6 +502,7 @@ export default function RawClipsSearchPage() {
           )}
         </section>
       )}
+      {sourceOpen ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-labelledby="raw-source-title"><section className="w-full max-w-lg rounded-2xl border border-border bg-card shadow-xl"><div className="flex items-center justify-between border-b border-border px-5 py-4"><div><h2 id="raw-source-title" className="font-semibold text-foreground">Add Ad Library source</h2><p className="mt-1 text-xs text-muted-foreground">Independent from Creative Library assignments and workflow.</p></div><button type="button" className="rounded p-2 text-muted-foreground hover:bg-muted" onClick={() => setSourceOpen(false)}><X className="size-4" /></button></div><div className="space-y-4 p-5"><label className="block"><span className="mb-1 block text-xs font-medium text-muted-foreground">Source name</span><input className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm" value={sourceName} onChange={(event) => setSourceName(event.target.value)} placeholder="September raw videos" /></label><label className="block"><span className="mb-1 block text-xs font-medium text-muted-foreground">Google Drive folder or file URL</span><input className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} placeholder="https://drive.google.com/drive/folders/…" /></label>{sourceError ? <p className="text-sm text-destructive">{sourceError}</p> : null}</div><div className="flex justify-end gap-2 border-t border-border px-5 py-4"><Button variant="secondary" onClick={() => setSourceOpen(false)}>Cancel</Button><Button disabled={sourceSaving || !sourceName.trim() || !sourceUrl.trim()} onClick={addSource}>{sourceSaving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}Add source</Button></div></section></div> : null}
     </main>
   );
 }

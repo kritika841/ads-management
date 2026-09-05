@@ -5,7 +5,7 @@ type RawClipStatus = 'pending' | 'processing' | 'done' | 'error';
 
 type RawClipItem = {
   id: string;
-  ad_id: string;
+  ad_id: string | null;
   name: string | null;
   raw_footage_url: string;
   resolved_video_url: string | null;

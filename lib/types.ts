@@ -197,6 +197,21 @@ export type Assignment = {
   created_at: string;
 };
 
+export type DailyTarget = {
+  id: string;
+  user_id: string;
+  target_date: string;
+  task_name: string;
+  target_quantity: number;
+  completed_quantity: number;
+  manual_completed_quantity: number;
+  auto_completed_quantity: number;
+  notes: string | null;
+  assigned_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Tag = {
   id: string;
   name: string;
@@ -295,6 +310,11 @@ export type Database = {
         Insert: Partial<Assignment> & Pick<Assignment, "ad_id" | "assigned_to" | "assigned_by">;
         Update: Partial<Assignment>;
       };
+      daily_team_targets: {
+        Row: DailyTarget;
+        Insert: Partial<DailyTarget> & Pick<DailyTarget, "user_id" | "target_date" | "task_name">;
+        Update: Partial<DailyTarget>;
+      };
       editor_time_logs: {
         Row: EditorTimeLog;
         Insert: Partial<EditorTimeLog> & Pick<EditorTimeLog, "ad_id" | "editor_id">;
@@ -341,6 +361,18 @@ export type Database = {
       transition_editor_work_atomic: {
         Args: { p_ad_id: string; p_actor_id: string; p_action: string; p_editor_id: string | null; p_deadline: string | null; p_reason: string | null };
         Returns: Ad;
+      };
+      set_ad_editor_assignment_atomic: {
+        Args: { p_ad_id: string; p_actor_id: string; p_editor_id: string | null; p_deadline: string | null; p_reason: string | null };
+        Returns: Ad;
+      };
+      save_daily_target_batch: {
+        Args: { p_actor_id: string; p_user_id: string; p_target_date: string; p_tasks: unknown };
+        Returns: DailyTarget[];
+      };
+      save_daily_target_progress: {
+        Args: { p_actor_id: string; p_target_id: string | null; p_user_id: string; p_target_date: string; p_task_name: string; p_quantity: number };
+        Returns: DailyTarget;
       };
     };
     Enums: {

@@ -9,7 +9,7 @@ export const maxDuration = 300;
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 
-type DriveExportFile = { driveFileId: string; filename: string };
+type DriveExportFile = { driveFileId: string; filename: string; size: number | null };
 
 export async function GET(request: NextRequest) {
   const ids = request.nextUrl.searchParams.get("ids")?.split(",").map((id) => id.trim()).filter(Boolean) ?? [];
@@ -58,12 +58,16 @@ async function exportZip(request: NextRequest, ids: string[]) {
   if (!files.length) return new NextResponse("None of the selected creatives could be read from Google Drive.", { status: 502 });
 
   const filename = `creatives-${new Date().toISOString().slice(0, 10)}.zip`;
+  const sourceBytes = files.every((file) => file.size !== null) ? files.reduce((total, file) => total + (file.size ?? 0), 0) : null;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/zip",
+    "Content-Disposition": `attachment; filename="${filename}"`,
+    "Cache-Control": "no-store",
+    "X-Download-File-Count": String(files.length),
+  };
+  if (sourceBytes && sourceBytes > 0) headers["X-Download-Size"] = String(sourceBytes);
   return new NextResponse(createZipStream(files, skipped), {
-    headers: {
-      "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="${filename}"`,
-      "Cache-Control": "no-store",
-    },
+    headers,
   });
 }
 
@@ -87,13 +91,13 @@ async function loadAuthorizedAds(
 
 async function listDriveExportFiles(driveFileId: string, adName: string): Promise<DriveExportFile[]> {
   const meta = await getDriveMetadata(driveFileId);
-  if (!meta) return [{ driveFileId, filename: `${safeName(adName)}.mp4` }];
-  if (meta.mimeType !== FOLDER_MIME) return [{ driveFileId, filename: `${safeName(adName)}.${extensionFrom(meta.name, meta.mimeType)}` }];
+  if (!meta) return [{ driveFileId, filename: `${safeName(adName)}.mp4`, size: null }];
+  if (meta.mimeType !== FOLDER_MIME) return [{ driveFileId, filename: `${safeName(adName)}.${extensionFrom(meta.name, meta.mimeType)}`, size: numericSize(meta.size) }];
 
   const children = await getDriveFolderContents(driveFileId);
   return children
     .filter((child): child is typeof child & { id: string } => Boolean(child.id) && child.mimeType !== FOLDER_MIME)
-    .map((child) => ({ driveFileId: child.id, filename: `${safeName(adName)}_${safeName(child.name ?? child.id)}` }));
+    .map((child) => ({ driveFileId: child.id, filename: `${safeName(adName)}_${safeName(child.name ?? child.id)}`, size: numericSize(child.size) }));
 }
 
 function createZipStream(files: DriveExportFile[], skipped: string[]): ReadableStream<Uint8Array> {
@@ -168,6 +172,11 @@ function isMediaResponse(response: Response | null): response is Response {
 }
 
 function safeName(value: string) { return value.replace(/[^a-zA-Z0-9._\- ]/g, "_"); }
+
+function numericSize(value: string | number | null | undefined) {
+  const size = Number(value);
+  return Number.isFinite(size) && size > 0 ? size : null;
+}
 
 function extensionFrom(name: string | null | undefined, mimeType: string | null | undefined) {
   const fromName = name?.match(/\.([a-zA-Z0-9]+)$/)?.[1];

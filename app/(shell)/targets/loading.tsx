@@ -1,0 +1,1 @@
+export default function Loading() { return <main className="page-container animate-pulse"><div className="h-8 w-52 rounded bg-muted" /><div className="mt-6 h-28 rounded-xl bg-muted" /><div className="mt-5 h-96 rounded-xl bg-muted" /></main>; }

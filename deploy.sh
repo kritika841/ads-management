@@ -6,14 +6,15 @@ tar -xzf release.tar.gz
 rm release.tar.gz
 echo "Installing production dependencies..."
 npm ci --omit=dev
+command -v node > .node-path
 chmod +x scripts/run-ingest-cron.sh scripts/install-ingest-cron.sh
 echo "Installing system cron job for raw clip tagging..."
 bash scripts/install-ingest-cron.sh
 echo "Reloading PM2 processes..."
 pm2 startOrReload ecosystem.config.cjs --update-env
-if pm2 describe satmi-ads-cron >/dev/null 2>&1; then
-  pm2 delete satmi-ads-cron
-fi
+pm2 describe satmi-ads >/dev/null 2>&1 || (echo "AdFlow PM2 process is missing" && exit 1)
+pm2 describe satmi-ads-cron >/dev/null 2>&1 || (echo "Raw clip scheduler PM2 process is missing" && exit 1)
+pm2 save
 sleep 3
 curl -f http://localhost:3000/api/health > /dev/null || (echo "Health check failed!" && exit 1)
 echo "Deploy complete: $(date)"
