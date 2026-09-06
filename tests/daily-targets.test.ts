@@ -5,6 +5,7 @@ import type { DailyTarget, Profile } from "@/lib/types";
 
 const hardeningMigration = readFileSync("supabase/migrations/20260903090000_harden_daily_targets.sql", "utf8");
 const automaticProgressMigration = readFileSync("supabase/migrations/20260902090000_auto_daily_target_progress.sql", "utf8");
+const assignmentOnlyProgressMigration = readFileSync("supabase/migrations/20260907010000_require_assigned_daily_targets.sql", "utf8");
 const creator = profile("creator", "content_creator");
 
 describe("daily targets", () => {
@@ -49,6 +50,11 @@ describe("daily targets", () => {
 
   it("counts only an editor's first submission, not correction resubmissions", () => {
     expect(automaticProgressMigration).toContain("new.submitted_at is not null and (tg_op = 'INSERT' or old.submitted_at is null)");
+  });
+
+  it("never creates pre-filled completion rows before a task is assigned", () => {
+    expect(assignmentOnlyProgressMigration).toContain("if existing_id is null then return; end if;");
+    expect(assignmentOnlyProgressMigration).not.toContain("insert into public.daily_team_targets");
   });
 });
 

@@ -40,8 +40,11 @@ describe("raw clip scheduler", () => {
 
   it("has an independent GitHub watchdog using the same locked wrapper", () => {
     expect(watchdog).toContain("schedule:");
+    expect(watchdog).toContain('cron: "15 19 * * *"');
+    expect(watchdog).not.toContain('cron: "17 * * * *"');
     expect(watchdog).toContain("workflow_dispatch:");
     expect(watchdog).toContain("scripts/run-ingest-cron.sh");
+    expect(watchdog).toContain("timeout: 60s");
     expect(watchdog).toContain('if [ "$status" -eq 73 ]');
   });
 });

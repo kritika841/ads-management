@@ -39,6 +39,11 @@ describe("exact ZIP export jobs", () => {
     expect(downloadedRoute).toContain('p_tags: ["downloaded"]');
     expect(downloadedMigration).toContain("ad.created_at < now() - interval '5 days'");
   });
+
+  it("keeps the inline video source stable while live data refreshes", () => {
+    expect(dashboard).toContain("const [source] = useState(() => mediaUrl(ad, mediaToken))");
+    expect(dashboard).toContain('<video src={source}');
+  });
 });
 
 describe("Ad Library separation", () => {

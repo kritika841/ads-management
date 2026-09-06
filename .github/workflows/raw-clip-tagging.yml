@@ -2,8 +2,9 @@ name: Raw clip tagging watchdog
 
 on:
   schedule:
-    # Offset from the VPS cron so this acts as an independent recovery trigger.
-    - cron: "17 * * * *"
+    # The VPS is the primary scheduler and runs every 10 minutes. This is a
+    # once-daily recovery check at 00:45 IST, not a second continuous worker.
+    - cron: "15 19 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -22,6 +23,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT }}
+          timeout: 60s
           command_timeout: 58m
           script: |
             set +e
