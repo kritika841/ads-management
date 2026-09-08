@@ -64,7 +64,7 @@ export function CreatorItemForm({
   const [editorId, setEditorId] = useState(initialAd?.editor_id ?? "");
   const [rawFootageUrl, setRawFootageUrl] = useState(initialAd?.raw_footage_url ?? "");
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(initialAd?.platforms ?? []);
-  const [selectedTags, setSelectedTags] = useState<string[]>(initialAd?.tags.map((tag) => tag.name) ?? []);
+  const [selectedTags, setSelectedTags] = useState<string[]>(initialAd?.tags.map((tag) => tag.name).filter((tag) => tag.toLowerCase() !== "downloaded") ?? []);
   const [tagDraft, setTagDraft] = useState("");
   const [deadline, setDeadline] = useState(initialAd?.deadline ?? "");
   const [notes, setNotes] = useState(initialAd?.notes ?? "");
@@ -116,10 +116,10 @@ export function CreatorItemForm({
     finalModeReady
   );
 
-  const tagOptions = useMemo(() => Array.from(new Set([...availableTags, ...selectedTags])).filter(Boolean).sort(), [availableTags, selectedTags]);
+  const tagOptions = useMemo(() => Array.from(new Set([...availableTags, ...selectedTags])).filter((tag) => Boolean(tag) && tag.toLowerCase() !== "downloaded").sort(), [availableTags, selectedTags]);
 
   function addTag() {
-    const tags = tagDraft.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean);
+    const tags = tagDraft.split(",").map((item) => item.trim().toLowerCase()).filter((item) => Boolean(item) && item !== "downloaded");
     if (!tags.length) return;
     setSelectedTags((current) => Array.from(new Set([...current, ...tags])));
     setTagDraft("");

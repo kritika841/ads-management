@@ -3,8 +3,8 @@ import { emptyDashboardFilters, readDashboardFilters, writeDashboardFilters } fr
 
 describe("dashboard URL filter state", () => {
   it("reads every supported filter and prefers a shared view", () => {
-    const state = readDashboardFilters("?q=launch&stage=editing&editor=e1&creator=c1&campaign=ca1&product=p1&platform=Meta+Ads&tag=hook&deadline=soon&sort=waiting&view=table", "grid");
-    expect(state).toEqual({ q: "launch", stage: "editing", editor: "e1", creator: "c1", campaign: "ca1", product: "p1", platform: "Meta Ads", tag: "hook", deadline: "soon", sort: "waiting", view: "table" });
+    const state = readDashboardFilters("?q=launch&stage=editing&editor=e1&creator=c1&campaign=ca1&product=p1&platform=Meta+Ads&tag=hook&download=downloaded&deadline=soon&sort=waiting&view=table", "grid");
+    expect(state).toEqual({ q: "launch", stage: "editing", editor: "e1", creator: "c1", campaign: "ca1", product: "p1", platform: "Meta Ads", tag: "hook", download: "downloaded", deadline: "soon", sort: "waiting", view: "table" });
   });
 
   it("serializes multiple selected tags as a comma-separated value", () => {
@@ -13,6 +13,12 @@ describe("dashboard URL filter state", () => {
 
     const url = writeDashboardFilters(new URL("https://adflow.test/library"), { ...emptyDashboardFilters, tag: "hook,loop,retarget" });
     expect(url.searchParams.get("tag")).toBe("hook,loop,retarget");
+  });
+
+  it("serializes the download-state filter and rejects unknown values", () => {
+    const url = writeDashboardFilters(new URL("https://adflow.test/library"), { ...emptyDashboardFilters, download: "not_downloaded" });
+    expect(url.searchParams.get("download")).toBe("not_downloaded");
+    expect(readDashboardFilters("?download=unexpected").download).toBe("all");
   });
 
   it("omits defaults and preserves unrelated URL parameters", () => {

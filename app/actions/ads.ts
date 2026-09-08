@@ -932,6 +932,9 @@ export async function bulkAddTags(adIds: string[], tags: string[]) {
   }
 
   const normalizedTags = Array.from(new Set(parsed.data.tags.map((tag) => tag.trim().toLowerCase()).filter(Boolean)));
+  if (normalizedTags.includes("downloaded")) {
+    return { ok: false, message: "Downloaded is a system badge and cannot be added as a regular tag." };
+  }
   const { error: rpcError } = await admin.rpc("add_ad_tags_bulk", { p_ad_ids: allowedIds, p_tags: normalizedTags });
   if (rpcError) {
     return { ok: false, message: rpcError.message };

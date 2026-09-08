@@ -9,6 +9,7 @@ export type DashboardFilterState = {
   product: string;
   platform: string;
   tag: string;
+  download: string;
   deadline: string;
   sort: string;
   view: DashboardView;
@@ -23,6 +24,7 @@ export const emptyDashboardFilters: DashboardFilterState = {
   product: "all",
   platform: "all",
   tag: "",
+  download: "all",
   deadline: "all",
   sort: "all",
   view: "grid"
@@ -31,6 +33,7 @@ export const emptyDashboardFilters: DashboardFilterState = {
 export function readDashboardFilters(search: string, savedView?: string | null): DashboardFilterState {
   const params = new URLSearchParams(search);
   const requestedView = params.get("view") ?? savedView;
+  const requestedDownload = params.get("download");
   return {
     q: params.get("q") ?? "",
     stage: params.get("stage") ?? "all",
@@ -40,6 +43,7 @@ export function readDashboardFilters(search: string, savedView?: string | null):
     product: params.get("product") ?? "all",
     platform: params.get("platform") ?? "all",
     tag: params.get("tag") ?? "",
+    download: requestedDownload === "downloaded" || requestedDownload === "not_downloaded" ? requestedDownload : "all",
     deadline: params.get("deadline") ?? "all",
     sort: params.get("sort") ?? "all",
     view: requestedView === "table" ? "table" : "grid"
