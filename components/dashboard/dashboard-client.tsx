@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { ArrowDown, ArrowRight, ArrowUp, CalendarClock, Check, ChevronsUpDown, Download, Eye, Filter, Grid2X2, ListFilter, Loader2, Maximize2, Play, Plus, Search, Square, SquareCheck, Table2, Tags, UserCheck, Video, X } from "lucide-react";
-import { assignEditor, bulkAddTags, reviewAd } from "@/app/actions/ads";
+import { assignEditor, bulkAddTags, dismissDownloadedBadge, reviewAd } from "@/app/actions/ads";
 import { AdPreviewModal } from "@/components/dashboard/ad-preview-modal";
 import { DeleteAdButton } from "@/components/dashboard/delete-ad-button";
 import { CreatorItemForm } from "@/components/workflow/creator-item-form";
@@ -546,8 +546,12 @@ function BulkTagModal({ count, availableTags, pending, onClose, onSubmit }: { co
 }
 
 function WorkflowCard({ ad, mediaToken, profile, editors, editorWorkloads, pending, playing, selected, downloading, downloadProgress, onToggleSelect, onPlay, onStopPlaying, onPlaybackError, onQuickPreview, onOpenDrive, onDownload, onEdit, onApprove, onRequestChanges, onAssignEditor }: { ad: AdWithRelations; mediaToken?: string; profile: Profile; editors: Profile[]; editorWorkloads: Record<string, number>; pending: boolean; playing: boolean; selected: boolean; downloading: boolean; downloadProgress?: DownloadProgress; onToggleSelect: () => void; onPlay: () => void; onStopPlaying: () => void; onPlaybackError: () => void; onQuickPreview: () => void; onOpenDrive: () => void; onDownload: () => void; onEdit: () => void; onApprove: () => void; onRequestChanges: () => void; onAssignEditor: (editorId: string, deadline: string) => void }) {
+  const router = useRouter();
+  const { toast } = useToast();
   const [selectedEditor, setSelectedEditor] = useState("");
   const [selectedDeadline, setSelectedDeadline] = useState(ad.deadline ?? "");
+  const [dismissingDownloaded, setDismissingDownloaded] = useState(false);
+  const [downloadedDismissed, setDownloadedDismissed] = useState(false);
   const mediaVisible = isFinalMediaVisible(ad.production_stage);
   const canPreview = mediaVisible && Boolean(ad.drive_file_id);
   const canOpenInDrive = mediaVisible && Boolean(ad.drive_url);
@@ -556,11 +560,27 @@ function WorkflowCard({ ad, mediaToken, profile, editors, editorWorkloads, pendi
   const canFinalReview = reviewer && (ad.production_stage === "creator_review" || ad.production_stage === "final_review");
   const canAssignEditor = ad.production_stage === "shoot_complete" && (reviewer || (profile.role === "content_creator" && ad.creator_id === profile.id));
   const activeEditors = editors.filter((item) => item.active);
-  const downloaded = isDownloaded(ad);
+  const downloaded = isDownloaded(ad) && !downloadedDismissed;
   const visibleTags = ad.tags.filter((tag) => tag.name.toLowerCase() !== "downloaded").slice(0, 3);
   const creatorChangeRequested = profile.role === "content_creator" && ad.creator_id === profile.id && ad.production_stage === "creator_changes_requested";
   const creatorEditable = creatorEditableStages.includes(ad.production_stage as (typeof creatorEditableStages)[number]) && (reviewer || (profile.role === "content_creator" && ad.creator_id === profile.id));
   const actionLabel = creatorChangeRequested ? "Resubmit creative" : creatorEditable ? "Update" : profile.role === "editor" && ad.production_stage === "ready_for_edit" ? "Open assignment" : profile.role === "editor" && (ad.production_stage === "editing" || ad.production_stage === "changes_requested") ? "Submit video" : profile.role === "content_creator" && ad.production_stage === "creator_review" ? "Review edit" : "Open";
+
+  async function dismissDownloaded() {
+    if (dismissingDownloaded) return;
+    setDismissingDownloaded(true);
+    const response = await runServerAction(() => dismissDownloadedBadge(ad.id));
+    if (!response.ok) {
+      setDismissingDownloaded(false);
+      toast({ title: "Badge not dismissed", description: response.message ?? "Unable to update this creative.", tone: "error" });
+      return;
+    }
+    setDownloadedDismissed(true);
+    setDismissingDownloaded(false);
+    toast({ title: "Downloaded badge dismissed", description: ad.name, tone: "success" });
+    router.refresh();
+  }
+
   return (
     <article className="group/card relative overflow-hidden rounded-xl border border-border bg-card shadow-soft transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-ring/40 hover:shadow-float dark:shadow-none dark:hover:border-ring/60">
       {pending ? <div className="absolute inset-0 z-20 flex items-center justify-center bg-card/75 backdrop-blur-[1px]" role="status"><span className="inline-flex items-center gap-2 rounded-lg border border-border bg-popover px-3 py-2 text-sm font-medium text-foreground shadow-soft dark:shadow-none"><Loader2 className="size-4 animate-spin text-primary" aria-hidden />Saving...</span></div> : null}
@@ -578,7 +598,7 @@ function WorkflowCard({ ad, mediaToken, profile, editors, editorWorkloads, pendi
           </div>
         )}
         <span className="pointer-events-none absolute left-3 top-3 z-10 max-w-[60%]"><ProductionStageBadge stage={ad.production_stage} /></span>
-        {profile.role === "admin" && downloaded ? <span className="pointer-events-none absolute right-3 top-3 z-10 inline-flex items-center gap-1 rounded-full border border-success/40 bg-card/90 px-2.5 py-1 text-[10px] font-semibold text-success shadow-sm backdrop-blur-sm"><Download className="size-3" aria-hidden />Downloaded</span> : null}
+        {profile.role === "admin" && downloaded ? <button type="button" disabled={dismissingDownloaded} onClick={(event) => { event.stopPropagation(); void dismissDownloaded(); }} className="group/download absolute right-3 top-3 z-10 inline-flex items-center gap-1 rounded-full border border-success/40 bg-card/90 px-2.5 py-1 text-[10px] font-semibold text-success shadow-sm backdrop-blur-sm transition hover:bg-success/10 disabled:cursor-wait" title="Dismiss downloaded badge" aria-label={`Dismiss downloaded badge for ${ad.name}`}><Download className="size-3" aria-hidden />Downloaded{dismissingDownloaded ? <Loader2 className="size-2.5 animate-spin" aria-hidden /> : <X className="size-2.5 opacity-0 transition-opacity group-hover/download:opacity-100 group-focus-visible/download:opacity-100" aria-hidden />}</button> : null}
       </div>
       <div className="p-4">
         <div className="flex items-start justify-between gap-3">

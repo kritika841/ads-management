@@ -44,6 +44,15 @@ describe("exact ZIP export jobs", () => {
     expect(dashboard).toContain("const [source] = useState(() => mediaUrl(ad, mediaToken))");
     expect(dashboard).toContain('<video src={source}');
   });
+
+  it("lets admins dismiss the downloaded badge from its hover control", () => {
+    expect(dashboard).toContain('title="Dismiss downloaded badge"');
+    expect(dashboard).toContain("group-hover/download:opacity-100");
+    expect(dashboard).toContain("dismissDownloadedBadge(ad.id)");
+    expect(actions).toContain('profile.role !== "admin"');
+    expect(actions).toContain('action: "dismissed_downloaded_badge"');
+    expect(actions).toContain('.from("ad_tags")');
+  });
 });
 
 describe("Ad Library separation", () => {

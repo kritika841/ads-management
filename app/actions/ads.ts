@@ -950,6 +950,45 @@ export async function bulkAddTags(adIds: string[], tags: string[]) {
   return { ok: true, count: allowedIds.length };
 }
 
+export async function dismissDownloadedBadge(adId: string) {
+  const profile = await requireProfile();
+  if (profile.role !== "admin") {
+    return { ok: false, message: "Only admins can dismiss downloaded badges." };
+  }
+
+  const parsedAdId = z.string().uuid().safeParse(adId);
+  if (!parsedAdId.success) {
+    return { ok: false, message: "Invalid creative." };
+  }
+
+  const admin = createSupabaseAdminClient();
+  const { data: downloadedTag, error: tagError } = await admin
+    .from("tags")
+    .select("id")
+    .eq("name", "downloaded")
+    .maybeSingle();
+  if (tagError) return { ok: false, message: tagError.message };
+  if (!downloadedTag) return { ok: true };
+
+  const { error } = await admin
+    .from("ad_tags")
+    .delete()
+    .eq("ad_id", parsedAdId.data)
+    .eq("tag_id", downloadedTag.id);
+  if (error) return { ok: false, message: error.message };
+
+  await admin.from("audit_logs").insert({
+    actor_id: profile.id,
+    action: "dismissed_downloaded_badge",
+    target_type: "ad",
+    target_id: parsedAdId.data,
+    metadata: {}
+  });
+  revalidatePath("/dashboard");
+  revalidatePath("/library");
+  return { ok: true };
+}
+
 export async function addComment(adId: string, body: string) {
   const profile = await requireProfile();
   const parsed = z.object({ adId: z.string().uuid(), body: z.string().trim().min(1).max(4000) }).safeParse({
