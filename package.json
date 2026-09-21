@@ -15,7 +15,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
-    "meta:exchange-token": "node scripts/exchange-meta-token.mjs"
+    "meta:exchange-token": "node scripts/exchange-meta-token.mjs",
+    "mapping:export-scripts": "node scripts/export-creative-scripts.mjs",
+    "mapping:extract-transcripts": "node scripts/extract-unlinked-meta-transcripts.mjs",
+    "mapping:ai-match": "node scripts/ai-match-scripts.mjs --apply"
   },
   "dependencies": {
     "@google/genai": "^2.15.0",

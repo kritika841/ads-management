@@ -14,3 +14,4 @@ supabase/.temp
 .vercel
 .env*
 service-account-key.json
+*.cache.json
