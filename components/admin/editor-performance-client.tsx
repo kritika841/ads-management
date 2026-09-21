@@ -164,9 +164,9 @@ export function EditorPerformanceClient({
                       <span className="font-semibold text-primary">{hasPeriod ? stat.startedInPeriod : stat.started}</span>
                     </td>
                     <td className="px-2 py-3 text-center">
-                      <span className="font-semibold text-sky-600 dark:text-sky-400">{hasPeriod ? stat.submittedInPeriod : stat.submitted}</span>
+                      <span className="font-semibold text-primary">{hasPeriod ? stat.submittedInPeriod : stat.submitted}</span>
                       {hasPeriod && stat.submittedBacklog > 0 && (
-                        <p className="mt-0.5 text-[10px] font-normal text-amber-600 dark:text-amber-400">
+                        <p className="mt-0.5 text-[10px] font-normal text-warning">
                           +{stat.submittedBacklog} backlog
                         </p>
                       )}
@@ -180,14 +180,14 @@ export function EditorPerformanceClient({
                     </td>
                     {/* Avg revisions */}
                     <td className="px-4 py-3 text-center">
-                      <span className={stat.avgRevisions !== null ? "font-semibold text-amber-600 dark:text-amber-400" : "text-foreground"}>
+                      <span className={stat.avgRevisions !== null ? "font-semibold text-warning" : "text-foreground"}>
                         {stat.avgRevisions !== null ? stat.avgRevisions.toFixed(1) : "—"}
                       </span>
                     </td>
                     {/* Status */}
                     <td className="px-4 py-3 text-center">
                       {stat.idle ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2.5 py-0.5 text-[11px] font-medium text-warning">
                           <Zap className="size-3" aria-hidden />
                           Idle
                         </span>
@@ -275,7 +275,7 @@ function ExpandedEditorDetail({ stat, hasPeriod }: { stat: EditorStat; hasPeriod
                   {ad.totalSeconds > 0 ? formatDuration(ad.totalSeconds) : "—"}
                 </td>
                 <td className="px-3 py-2 text-center">
-                  <span className={ad.revisions > 0 ? "font-semibold text-amber-600 dark:text-amber-400" : "text-muted-foreground"}>
+                  <span className={ad.revisions > 0 ? "font-semibold text-warning" : "text-muted-foreground"}>
                     {ad.revisions > 0 ? ad.revisions : "—"}
                   </span>
                 </td>
@@ -305,7 +305,7 @@ function ExpandedEditorDetail({ stat, hasPeriod }: { stat: EditorStat; hasPeriod
       {hasPeriod && (
         <div className="mt-3 grid grid-cols-3 gap-3">
           <MiniStat label="Started" value={stat.startedInPeriod} color="primary" />
-          <MiniStat label="Submitted" value={stat.submittedInPeriod} color="sky" backlog={stat.submittedBacklog} />
+          <MiniStat label="Submitted" value={stat.submittedInPeriod} color="primary" backlog={stat.submittedBacklog} />
           <MiniStat label="Completed" value={stat.completedInPeriod} color="success" />
         </div>
       )}
@@ -313,18 +313,17 @@ function ExpandedEditorDetail({ stat, hasPeriod }: { stat: EditorStat; hasPeriod
   );
 }
 
-function MiniStat({ label, value, color, backlog }: { label: string; value: number; color: "primary" | "success" | "amber" | "sky"; backlog?: number }) {
+function MiniStat({ label, value, color, backlog }: { label: string; value: number; color: "primary" | "success" | "warning"; backlog?: number }) {
   const colorClass =
     color === "primary" ? "text-primary" :
     color === "success" ? "text-success" :
-    color === "sky" ? "text-sky-600 dark:text-sky-400" :
-    "text-amber-600 dark:text-amber-400";
+    "text-warning";
   return (
     <div className="rounded-md border border-border bg-card px-3 py-2">
       <p className="text-[10px] text-muted-foreground">{label}</p>
       <p className={cn("mt-0.5 text-lg font-bold", colorClass)}>{value}</p>
       {backlog !== undefined && backlog > 0 && (
-        <p className="mt-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">+{backlog} backlog</p>
+        <p className="mt-0.5 text-[10px] font-medium text-warning">+{backlog} backlog</p>
       )}
     </div>
   );
@@ -346,13 +345,13 @@ function KpiCard({
   const toneClasses: Record<string, string> = {
     default: "bg-muted/40 text-muted-foreground",
     success: "bg-success/10 text-success",
-    warning: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+    warning: "bg-warning/10 text-warning",
     error: "bg-destructive/10 text-destructive",
   };
   const iconClasses: Record<string, string> = {
     default: "bg-muted text-muted-foreground",
     success: "bg-success/15 text-success",
-    warning: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+    warning: "bg-warning/15 text-warning",
     error: "bg-destructive/15 text-destructive",
   };
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   BarChart2,
   BarChart3,
@@ -15,9 +15,11 @@ import {
   Menu,
   Package,
   Settings,
+  Trophy,
   Users,
   X
 } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Notification, Profile } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -27,7 +29,7 @@ import { RealtimeSync } from "@/components/realtime-sync";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
-type NavItem = { href: string; label: string; icon: LucideIcon };
+type NavItem = { href: string; label: string; icon: LucideIcon; children?: Array<{ href: string; label: string }> };
 
 export function AppShell({
   profile,
@@ -45,6 +47,25 @@ export function AppShell({
     { href: "/targets", label: "Daily targets", icon: ClipboardCheck },
     { href: "/library", label: "Creative library", icon: LayoutDashboard },
     { href: "/raw-clips-search", label: "Ad Library", icon: Clapperboard },
+    {
+      href: "/incentives#overview",
+      label: "Ads performance",
+      icon: Trophy,
+      children: [
+        { href: "/incentives#overview", label: "Overview" },
+        { href: "/incentives#active", label: "Active creatives" },
+        { href: "/incentives#testing", label: "Testing creatives" },
+        { href: "/incentives#winning", label: "Winning creatives" },
+        { href: "/incentives#losing", label: "Losing creatives" },
+        { href: "/incentives#paused", label: "Paused creatives" },
+        ...(profile.role === "admin" || profile.role === "manager"
+          ? [{ href: "/incentives#mapping", label: "Creative attribution" }]
+          : []),
+        ...(profile.role === "admin"
+          ? [{ href: "/incentives#settings", label: "Settings" }]
+          : [])
+      ]
+    },
     ...(profile.role === "admin" || profile.role === "manager"
       ? [{ href: "/analytics", label: "Analytics", icon: BarChart3 }]
       : []),
@@ -210,28 +231,123 @@ function NavGroup({
   pathname: string;
   onNavigate?: () => void;
 }) {
+  const [hash, setHash] = useState("");
+  useEffect(() => {
+    const syncHash = () => setHash(window.location.hash || "#overview");
+    syncHash();
+    window.addEventListener("hashchange", syncHash);
+    return () => window.removeEventListener("hashchange", syncHash);
+  }, []);
+  const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(
+      items
+        .filter((item) => item.children?.length)
+        .map((item) => [item.href, isActivePath(pathname, item.href)])
+    )
+  );
+
+  useEffect(() => {
+    setExpandedItems((current) => {
+      const next = { ...current };
+      for (const item of items) {
+        if (item.children?.length && isActivePath(pathname, item.href)) {
+          next[item.href] = true;
+        }
+      }
+      return next;
+    });
+  }, [pathname, items]);
+
   return (
     <nav aria-label={label}>
       <p className="px-3 text-[11px] font-semibold uppercase text-muted-foreground">{label}</p>
       <div className="mt-2 space-y-1">
         {items.map((item) => {
           const active = isActivePath(pathname, item.href);
+          const expanded = expandedItems[item.href] ?? false;
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onNavigate}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "group relative flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors duration-150 before:absolute before:bottom-2 before:left-0 before:top-2 before:w-0.5 before:rounded-full before:bg-primary before:opacity-0 before:transition-opacity",
-                active
-                  ? "bg-accent/80 text-accent-foreground before:opacity-100"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              )}
-            >
-              <item.icon className={cn("size-[18px]", active ? "text-primary" : "text-muted-foreground")} aria-hidden />
-              {item.label}
-            </Link>
+            <div key={item.href}>
+              <div className="flex items-center">
+                <Link
+                  href={item.href}
+                  onClick={() => {
+                    if (item.children?.length) {
+                      setExpandedItems((current) => ({
+                        ...current,
+                        [item.href]: active ? !current[item.href] : true
+                      }));
+                    }
+                    onNavigate?.();
+                  }}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "group relative flex h-10 min-w-0 flex-1 items-center justify-between rounded-lg px-3 text-sm font-medium transition-colors duration-150 before:absolute before:bottom-2 before:left-0 before:top-2 before:w-0.5 before:rounded-full before:bg-primary before:opacity-0 before:transition-opacity",
+                    active ? "bg-accent/80 text-accent-foreground before:opacity-100" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <item.icon className={cn("size-[18px] shrink-0", active ? "text-primary" : "text-muted-foreground")} aria-hidden />
+                    <span className="truncate">{item.label}</span>
+                  </div>
+                  {item.children?.length ? (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setExpandedItems((current) => ({ ...current, [item.href]: !current[item.href] }));
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setExpandedItems((current) => ({ ...current, [item.href]: !current[item.href] }));
+                        }
+                      }}
+                      className="flex size-6 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+                      aria-label={`${expanded ? "Collapse" : "Expand"} ${item.label}`}
+                    >
+                      {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+                    </span>
+                  ) : null}
+                </Link>
+              </div>
+              {item.children?.length && expanded ? (
+                <div className="ml-9 mt-1 space-y-0.5 border-l border-border pl-2">
+                  {item.children.map((child) => {
+                    const childHash = child.href.includes("#") ? `#${child.href.split("#")[1]}` : "";
+                    const activeHash = hash || "#overview";
+                    const childActive =
+                      pathname === child.href.split("#")[0] &&
+                      (childHash === activeHash || (!hash && childHash === "#overview"));
+                    return (
+                      <a
+                        key={child.href}
+                        href={child.href}
+                        onClick={(e) => {
+                          if (pathname === child.href.split("#")[0]) {
+                            e.preventDefault();
+                            window.location.hash = childHash;
+                            setHash(childHash);
+                          }
+                          onNavigate?.();
+                        }}
+                        aria-current={childActive ? "page" : undefined}
+                        className={cn(
+                          "block rounded-md px-3 py-2 text-xs transition-colors",
+                          childActive
+                            ? "bg-accent font-medium text-accent-foreground"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        )}
+                      >
+                        {child.label}
+                      </a>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
           );
         })}
       </div>
@@ -240,7 +356,8 @@ function NavGroup({
 }
 
 function isActivePath(pathname: string, href: string) {
-  return pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`));
+  const baseHref = href.split("#")[0];
+  return pathname === baseHref || (baseHref !== "/dashboard" && pathname.startsWith(`${baseHref}/`));
 }
 
 function roleLabel(role: Profile["role"]) {

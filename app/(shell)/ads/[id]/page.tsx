@@ -23,7 +23,7 @@ import { hasAdAccess } from "@/lib/ad-access";
 import { requireProfile } from "@/lib/auth";
 import { getAdDetail, getAppSettings, getCampaigns, getEditorInProgressCount, getEditorTimeLogs, getEditorWorkloads, getProducts, getProfiles, getTags } from "@/lib/data";
 import { canDeleteAd } from "@/lib/permissions";
-import { creatorEditableStages, isFinalMediaVisible, productionStageLabels, workflowWaitingLabel } from "@/lib/production-workflow";
+import { creatorEditableStages, getProductionStageLabel, isFinalMediaVisible, productionStageLabels, workflowWaitingLabel } from "@/lib/production-workflow";
 import type { ResubmissionFeedbackItem } from "@/lib/resubmission";
 import type { AdWithRelations, Profile } from "@/lib/types";
 import { formatDateOnly } from "@/lib/utils";
@@ -54,7 +54,9 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
   const mentionableUsers = profiles
     .filter((item) => item.active && item.id !== profile.id)
     .map((item) => ({ ...item, hasAccess: hasAdAccess(item, ad, collaboratorIds) }));
-  const isCreator = profile.role === "content_creator" && ad.creator_id === profile.id;
+  const isCreator =
+    (profile.role === "content_creator" || profile.role === "manager") &&
+    (ad.creator_id === profile.id || activity.some((item) => item.actor_id === profile.id && item.action === "creator_item_created"));
   const isAssignedEditor = profile.role === "editor" && ad.editor_id === profile.id;
   const creatorCanEdit = isCreator && creatorEditableStages.includes(ad.production_stage as (typeof creatorEditableStages)[number]);
   const editorHasTask = isAssignedEditor && ["ready_for_edit", "editing", "changes_requested"].includes(ad.production_stage);
@@ -97,7 +99,7 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
             </Link>
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <h1 className="text-2xl font-semibold text-foreground">{ad.name}</h1>
-              <ProductionStageBadge stage={ad.production_stage} />
+              <ProductionStageBadge stage={ad.production_stage} role={profile.role} allowManagerFinalApproval={settings.allow_manager_final_approval ?? true} />
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
               {ad.campaign?.name ?? "No campaign"} · <span suppressHydrationWarning>{workflowWaitingLabel(ad.workflow_status_changed_at)}</span>
@@ -126,12 +128,12 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
           <div className="flex min-w-0 items-start gap-3">
             <span className="mt-1 size-2.5 shrink-0 rounded-full bg-primary" aria-hidden />
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-foreground">{productionStageLabels[ad.production_stage]}</p>
-              <p className="mt-0.5 text-sm text-muted-foreground">{nextStepText(ad)}</p>
+              <p className="text-sm font-semibold text-foreground">{getProductionStageLabel(ad.production_stage, profile.role, settings.allow_manager_final_approval ?? true)}</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">{nextStepText(ad, settings.allow_manager_final_approval ?? true)}</p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-muted-foreground">Owner: <strong className="font-medium text-muted-foreground">{currentOwner(ad)}</strong></span>
+            <span className="text-xs text-muted-foreground">Owner: <strong className="font-medium text-muted-foreground">{currentOwner(ad, settings.allow_manager_final_approval ?? true)}</strong></span>
             {canReassign ? <ReassignEditorButton ad={ad} editors={editors} workloads={editorWorkloads} /> : null}
           </div>
         </section>
@@ -194,7 +196,7 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
               {ad.tags.length ? <div className="mt-4 flex flex-wrap gap-1.5 border-t border-border pt-4">{ad.tags.map((tag) => <span key={tag.id} className="rounded-md bg-accent px-2 py-1 text-[11px] font-medium text-accent-foreground">#{tag.name}</span>)}</div> : null}
             </section>
 
-            {isReviewer ? <ReviewPanel ad={ad} profile={profile} reviews={reviews} annotations={annotations} /> : null}
+            {isReviewer ? <ReviewPanel ad={ad} profile={profile} reviews={reviews} annotations={annotations} allowManagerFinalApproval={settings.allow_manager_final_approval ?? true} /> : null}
             {isReviewer && ad.editor_id ? <EditingTimeDisplay timeLogs={timeLogs} /> : null}
             <CommentThread adId={ad.id} comments={comments} mentionableUsers={mentionableUsers} canGrantAccess={isReviewer} />
           </aside>
@@ -213,16 +215,19 @@ function DetailRow({ label, value, icon }: { label: string; value: string; icon?
   return <div className="flex justify-between gap-3 py-0.5"><dt className="inline-flex items-center gap-1 text-muted-foreground">{icon}{label}</dt><dd className="text-right font-medium text-foreground">{value}</dd></div>;
 }
 
-function currentOwner(ad: AdWithRelations) {
+function currentOwner(ad: AdWithRelations, allowManager = true) {
   if (["script_writing", "ready_to_shoot", "shoot_complete"].includes(ad.production_stage)) return ad.creator?.name ?? "Content creator";
   if (["ready_for_edit", "editing", "changes_requested"].includes(ad.production_stage)) return ad.editor?.name ?? "Editor not assigned";
   if (ad.production_stage === "creator_changes_requested") return ad.creator?.name ?? "Content creator";
   if (ad.production_stage === "creator_review") return `${ad.creator?.name ?? "Content creator"} or final reviewer`;
-  if (ad.production_stage === "final_review") return "Manager or admin";
+  if (ad.production_stage === "final_review") return allowManager ? "Manager or admin" : "Admin";
   return "Complete";
 }
 
-function nextStepText(ad: AdWithRelations) {
+function nextStepText(ad: AdWithRelations, allowManager = true) {
+  if (ad.production_stage === "final_review" && !allowManager) {
+    return "Waiting for final approval from an administrator.";
+  }
   const messages = {
     script_writing: "Complete the script, then move it toward the shoot.",
     ready_to_shoot: "The script is ready and production can begin.",

@@ -99,6 +99,8 @@ export type Ad = {
   created_at: string;
 };
 
+export type ReviewSubmissionType = "new" | "editor_resubmission" | "creator_resubmission";
+
 export type AdWithRelations = Ad & {
   creator: Pick<Profile, "id" | "name" | "email" | "avatar_url" | "role"> | null;
   editor: Pick<Profile, "id" | "name" | "email" | "avatar_url" | "role"> | null;
@@ -106,6 +108,20 @@ export type AdWithRelations = Ad & {
   product: Pick<Product, "id" | "name" | "sku" | "image_url"> | null;
   tags: { id: string; name: string }[];
   version_count?: number;
+  review_submission_type?: ReviewSubmissionType;
+  latest_change_request?: {
+    id: string;
+    note: string | null;
+    created_at: string;
+    reviewer?: Pick<Profile, "id" | "name" | "role"> | null;
+  } | null;
+  activity_logs?: {
+    id: string;
+    action: string;
+    actor_id?: string | null;
+    metadata?: Record<string, unknown> | null;
+    created_at: string;
+  }[];
 };
 
 export type AdVersion = {
@@ -208,8 +224,31 @@ export type DailyTarget = {
   auto_completed_quantity: number;
   notes: string | null;
   assigned_by: string | null;
+  carried_from_target_id: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type DailyTaskRule = {
+  id: string;
+  user_id: string;
+  task_name: string;
+  target_quantity: number;
+  notes: string | null;
+  active: boolean;
+  starts_on: string;
+  ends_on: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DailyTargetDaySetting = {
+  user_id: string;
+  target_date: string;
+  mode: "append" | "auto_only";
+  created_by: string | null;
+  created_at: string;
 };
 
 export type Tag = {
@@ -243,6 +282,8 @@ export type AppSettings = {
   creator_review_sla_hours: number;
   final_review_sla_hours: number;
   revision_sla_hours: number;
+  allow_manager_final_approval?: boolean;
+  hidden_metrics_by_role?: import("@/lib/metric-visibility").HiddenMetricsByRole;
   updated_at: string;
 };
 
@@ -315,6 +356,16 @@ export type Database = {
         Insert: Partial<DailyTarget> & Pick<DailyTarget, "user_id" | "target_date" | "task_name">;
         Update: Partial<DailyTarget>;
       };
+      daily_task_rules: {
+        Row: DailyTaskRule;
+        Insert: Partial<DailyTaskRule> & Pick<DailyTaskRule, "user_id" | "task_name" | "target_quantity">;
+        Update: Partial<DailyTaskRule>;
+      };
+      daily_target_day_settings: {
+        Row: DailyTargetDaySetting;
+        Insert: Partial<DailyTargetDaySetting> & Pick<DailyTargetDaySetting, "user_id" | "target_date" | "mode">;
+        Update: Partial<DailyTargetDaySetting>;
+      };
       editor_time_logs: {
         Row: EditorTimeLog;
         Insert: Partial<EditorTimeLog> & Pick<EditorTimeLog, "ad_id" | "editor_id">;
@@ -373,6 +424,10 @@ export type Database = {
       save_daily_target_progress: {
         Args: { p_actor_id: string; p_target_id: string | null; p_user_id: string; p_target_date: string; p_task_name: string; p_quantity: number };
         Returns: DailyTarget;
+      };
+      materialize_daily_task_rules: {
+        Args: { p_start: string; p_end: string };
+        Returns: undefined;
       };
     };
     Enums: {

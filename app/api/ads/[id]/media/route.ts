@@ -25,6 +25,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const cached = range?.startsWith("bytes=0-") ? getCachedDriveMediaPrefix(fileId) : null;
     if (cached) return cachedPrefixResponse(cached);
 
+    // The browser normally starts playback with a leading byte range. Serve a
+    // sufficiently large cached prefix for that request so it can play through
+    // the first several seconds without repeatedly stalling on Drive requests.
+    if (range?.startsWith("bytes=0-")) {
+      const warmed = await warmDriveMediaPrefix(fileId);
+      if (warmed) return cachedPrefixResponse(warmed);
+    }
+
     const media = await getDriveMedia(fileId, range);
     if (media?.ok && media.body) {
       const headers = new Headers();

@@ -72,6 +72,33 @@ export async function saveCreatorItem(payload: z.input<typeof creatorItemSchema>
 
   const admin = createSupabaseAdminClient();
 
+  if (!data.id && (profile.role === "content_creator" || profile.role === "manager")) {
+    const { data: userAds } = await admin
+      .from("ads")
+      .select("id, creator_id, production_stage")
+      .in("production_stage", ["creator_changes_requested", "changes_requested"]);
+
+    if (userAds && userAds.length > 0) {
+      const directMatch = userAds.some((ad) => ad.creator_id === profile.id);
+      if (directMatch) {
+        return { ok: false, message: "You must resolve requested changes before creating another creative." };
+      }
+
+      const adIds = userAds.map((ad) => ad.id);
+      const { data: createdLogs } = await admin
+        .from("activity_logs")
+        .select("ad_id")
+        .in("ad_id", adIds)
+        .eq("actor_id", profile.id)
+        .eq("action", "creator_item_created")
+        .limit(1);
+
+      if (createdLogs && createdLogs.length > 0) {
+        return { ok: false, message: "You must resolve requested changes before creating another creative." };
+      }
+    }
+  }
+
   // Managers may assign themselves as the creator. In that case we skip the
   // content_creator role check and just verify their own active profile.
   const isManagerSelf = profile.role === "manager" && data.creatorId === profile.id;
@@ -679,8 +706,8 @@ export async function resolveCreatorChangeRequest(payload: z.input<typeof creato
   const profile = await requireProfile();
   const parsed = creatorChangeResolutionSchema.safeParse(payload);
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid change request resolution." };
-  if (profile.role !== "content_creator") {
-    return { ok: false, message: "Only the assigned content creator can resolve creator change requests." };
+  if (profile.role !== "content_creator" && profile.role !== "manager" && profile.role !== "admin") {
+    return { ok: false, message: "Only the assigned content creator or manager can resolve creator change requests." };
   }
 
   const data = parsed.data;
@@ -689,8 +716,18 @@ export async function resolveCreatorChangeRequest(payload: z.input<typeof creato
   if (error || !row) return { ok: false, message: error?.message ?? "Ad not found." };
   const ad = row as Ad;
 
-  if (ad.creator_id !== profile.id) {
-    return { ok: false, message: "You do not own this creative." };
+  if (profile.role !== "admin" && ad.creator_id !== profile.id) {
+    const { data: createdLog } = await admin
+      .from("activity_logs")
+      .select("id")
+      .eq("ad_id", ad.id)
+      .eq("actor_id", profile.id)
+      .eq("action", "creator_item_created")
+      .limit(1);
+
+    if (!createdLog || createdLog.length === 0) {
+      return { ok: false, message: "You do not own this creative." };
+    }
   }
   if (ad.production_stage !== "creator_changes_requested") {
     return { ok: false, message: "This creative is not waiting on creator changes." };
@@ -810,9 +847,16 @@ export async function reviewAd(adId: string, decision: "approve" | "request_chan
     return { ok: false, message: "This video is not waiting for final review." };
   }
 
-  const targetRequired = decision === "request_changes" && (ad.production_stage === "final_review" || isAdminReopen || isManagerReopen);
-  if (targetRequired && !target) {
-    return { ok: false, message: "Choose whether to request changes from the creator or editor." };
+  const resolvedTarget = target || (ad.production_stage === "creator_changes_requested" ? "creator" : "editor");
+
+  if (decision === "approve" && profile.role === "manager") {
+    const { data: settings } = await admin.from("app_settings").select("*").eq("id", 1).single();
+    const allowManager = (settings as { allow_manager_final_approval?: boolean; two_step_approval?: boolean } | null)?.allow_manager_final_approval !== undefined
+      ? (settings as { allow_manager_final_approval?: boolean }).allow_manager_final_approval
+      : !(settings as { two_step_approval?: boolean } | null)?.two_step_approval;
+    if (settings && allowManager === false) {
+      return { ok: false, message: "Final approval is restricted to administrators by system settings." };
+    }
   }
 
   const { error } = await admin.rpc("final_review_ad_atomic", {
@@ -820,13 +864,13 @@ export async function reviewAd(adId: string, decision: "approve" | "request_chan
     p_actor_id: profile.id,
     p_decision: decision,
     p_note: note.trim() || null,
-    p_target: target ?? null
+    p_target: resolvedTarget
   });
   if (error) return { ok: false, message: error.message };
 
   const nextStatus = decision === "approve"
     ? "approved"
-    : target === "creator"
+    : resolvedTarget === "creator"
       ? "creator_changes_requested"
       : "changes_requested";
 
@@ -987,6 +1031,76 @@ export async function dismissDownloadedBadge(adId: string) {
   revalidatePath("/dashboard");
   revalidatePath("/library");
   return { ok: true };
+}
+
+export async function bulkSetDownloadedBadge(adIds: string[], downloaded: boolean) {
+  const profile = await requireProfile();
+  if (profile.role !== "admin") {
+    return { ok: false, message: "Only admins can update downloaded badges." };
+  }
+
+  const parsed = z
+    .object({
+      adIds: z.array(z.string().uuid()).min(1, "Select at least one creative.").max(500, "Select at most 500 creatives at a time."),
+      downloaded: z.boolean()
+    })
+    .safeParse({ adIds, downloaded });
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid request." };
+  }
+
+  const uniqueAdIds = Array.from(new Set(parsed.data.adIds));
+  const admin = createSupabaseAdminClient();
+  const { data: existingAds, error: adsError } = await admin.from("ads").select("id").in("id", uniqueAdIds);
+  if (adsError) return { ok: false, message: adsError.message };
+
+  const existingAdIds = (existingAds ?? []).map((ad) => ad.id);
+  if (!existingAdIds.length) return { ok: false, message: "None of the selected creatives were found." };
+
+  let downloadedTagId: string | undefined;
+  if (parsed.data.downloaded) {
+    const { data: downloadedTag, error: tagError } = await admin
+      .from("tags")
+      .upsert({ name: "downloaded" }, { onConflict: "name" })
+      .select("id")
+      .single();
+    if (tagError || !downloadedTag) return { ok: false, message: tagError?.message ?? "Downloaded tag could not be created." };
+    downloadedTagId = downloadedTag.id;
+
+    const { error } = await admin.from("ad_tags").upsert(
+      existingAdIds.map((adId) => ({ ad_id: adId, tag_id: downloadedTag.id })),
+      { onConflict: "ad_id,tag_id", ignoreDuplicates: true }
+    );
+    if (error) return { ok: false, message: error.message };
+  } else {
+    const { data: downloadedTag, error: tagError } = await admin
+      .from("tags")
+      .select("id")
+      .eq("name", "downloaded")
+      .maybeSingle();
+    if (tagError) return { ok: false, message: tagError.message };
+    downloadedTagId = downloadedTag?.id;
+
+    if (downloadedTagId) {
+      const { error } = await admin
+        .from("ad_tags")
+        .delete()
+        .in("ad_id", existingAdIds)
+        .eq("tag_id", downloadedTagId);
+      if (error) return { ok: false, message: error.message };
+    }
+  }
+
+  await admin.from("audit_logs").insert(existingAdIds.map((adId) => ({
+    actor_id: profile.id,
+    action: parsed.data.downloaded ? "bulk_downloaded_badge_added" : "bulk_downloaded_badge_removed",
+    target_type: "ad",
+    target_id: adId,
+    metadata: { downloaded_tag_id: downloadedTagId ?? null }
+  })));
+  revalidatePath("/dashboard");
+  revalidatePath("/library");
+  return { ok: true, count: existingAdIds.length, downloaded: parsed.data.downloaded };
 }
 
 export async function addComment(adId: string, body: string) {

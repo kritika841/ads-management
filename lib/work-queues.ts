@@ -41,7 +41,8 @@ export function queuesForRole(role: UserRole): { key: QueueKey; label: string }[
     { key: "needs_review", label: "Needs review" },
     { key: "pending_editor_assign", label: "Pending editor assign" },
     { key: "in_production", label: "In production" },
-    { key: "changes", label: "Changes requested" },
+    { key: "creator_changes", label: "Changes: Creator" },
+    { key: "changes", label: "Changes: Editor" },
     { key: "approved", label: "Approved" },
     { key: "all", label: "All" }
   ];

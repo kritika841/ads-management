@@ -39,9 +39,20 @@ export const productionStageLabels: Record<ProductionStage, string> = {
   creator_review: "Creator review",
   final_review: "Final review",
   creator_changes_requested: "Changes requested to creator",
-  changes_requested: "Changes requested",
+  changes_requested: "Changes requested to editor",
   approved: "Approved"
 };
+
+export function getProductionStageLabel(
+  stage: ProductionStage,
+  role?: UserRole,
+  allowManagerFinalApproval: boolean = true
+): string {
+  if (stage === "final_review" && !allowManagerFinalApproval && role && role !== "admin") {
+    return "Admin approval pending";
+  }
+  return productionStageLabels[stage];
+}
 
 export const productionStageShortLabels: Record<ProductionStage, string> = {
   script_writing: "Script",
@@ -51,8 +62,8 @@ export const productionStageShortLabels: Record<ProductionStage, string> = {
   editing: "Editing",
   creator_review: "Creator review",
   final_review: "Final review",
-  creator_changes_requested: "Creator changes",
-  changes_requested: "Changes",
+  creator_changes_requested: "Changes: Creator",
+  changes_requested: "Changes: Editor",
   approved: "Approved"
 };
 
@@ -195,3 +206,37 @@ export function finalReviewTransition(decision: "approve" | "request_changes" | 
     approvalStage: "manager_review"
   };
 }
+
+export function isCreativeCreationBlocked({
+  role,
+  userId,
+  ads
+}: {
+  role: UserRole;
+  userId: string;
+  ads: Array<{
+    creator_id?: string | null;
+    production_stage: ProductionStage;
+    activity_logs?: Array<{ actor_id?: string | null; action: string }> | null;
+  }>;
+}): boolean {
+  if (role !== "content_creator" && role !== "manager") {
+    return false;
+  }
+
+  return ads.some((ad) => {
+    const isChangeRequested =
+      ad.production_stage === "creator_changes_requested" ||
+      ad.production_stage === "changes_requested";
+    if (!isChangeRequested) return false;
+
+    if (ad.creator_id === userId) return true;
+
+    if (ad.activity_logs?.some((log) => log.actor_id === userId && log.action === "creator_item_created")) {
+      return true;
+    }
+
+    return false;
+  });
+}
+

@@ -3,6 +3,7 @@ import {
   creatorEditableStages,
   creatorReviewTransition,
   finalReviewTransition,
+  isCreativeCreationBlocked,
   isFinalMediaVisible,
   legacyStatusForProductionStage,
   nextProductionStage,
@@ -97,4 +98,101 @@ describe("production workflow", () => {
     expect(isFinalMediaVisible("creator_review")).toBe(true);
     expect(isFinalMediaVisible("approved")).toBe(true);
   });
+
+  describe("isCreativeCreationBlocked", () => {
+    it("blocks content creators if any of their creatives has creator_changes_requested", () => {
+      const blocked = isCreativeCreationBlocked({
+        role: "content_creator",
+        userId: "creator-1",
+        ads: [
+          { creator_id: "creator-1", production_stage: "creator_changes_requested" }
+        ]
+      });
+      expect(blocked).toBe(true);
+    });
+
+    it("blocks content creators if any of their creatives has changes_requested (to editor)", () => {
+      const blocked = isCreativeCreationBlocked({
+        role: "content_creator",
+        userId: "creator-1",
+        ads: [
+          { creator_id: "creator-1", production_stage: "changes_requested" }
+        ]
+      });
+      expect(blocked).toBe(true);
+    });
+
+    it("blocks managers if they added a creative that has creator_changes_requested", () => {
+      const blocked = isCreativeCreationBlocked({
+        role: "manager",
+        userId: "manager-1",
+        ads: [
+          { creator_id: "manager-1", production_stage: "creator_changes_requested" }
+        ]
+      });
+      expect(blocked).toBe(true);
+    });
+
+    it("blocks managers if they added a creative that has changes_requested", () => {
+      const blocked = isCreativeCreationBlocked({
+        role: "manager",
+        userId: "manager-1",
+        ads: [
+          { creator_id: "manager-1", production_stage: "changes_requested" }
+        ]
+      });
+      expect(blocked).toBe(true);
+    });
+
+    it("blocks managers if an ad they created (via activity log) has changes requested", () => {
+      const blocked = isCreativeCreationBlocked({
+        role: "manager",
+        userId: "manager-1",
+        ads: [
+          {
+            creator_id: "other-creator",
+            production_stage: "creator_changes_requested",
+            activity_logs: [{ actor_id: "manager-1", action: "creator_item_created" }]
+          }
+        ]
+      });
+      expect(blocked).toBe(true);
+    });
+
+    it("does not block managers if the changes requested are on creatives added by someone else", () => {
+      const blocked = isCreativeCreationBlocked({
+        role: "manager",
+        userId: "manager-1",
+        ads: [
+          { creator_id: "creator-2", production_stage: "creator_changes_requested" }
+        ]
+      });
+      expect(blocked).toBe(false);
+    });
+
+    it("does not block managers if their creatives are in progress or approved", () => {
+      const blocked = isCreativeCreationBlocked({
+        role: "manager",
+        userId: "manager-1",
+        ads: [
+          { creator_id: "manager-1", production_stage: "ready_for_edit" },
+          { creator_id: "manager-1", production_stage: "approved" }
+        ]
+      });
+      expect(blocked).toBe(false);
+    });
+
+    it("never blocks admin users", () => {
+      const blocked = isCreativeCreationBlocked({
+        role: "admin",
+        userId: "admin-1",
+        ads: [
+          { creator_id: "admin-1", production_stage: "creator_changes_requested" },
+          { creator_id: "admin-1", production_stage: "changes_requested" }
+        ]
+      });
+      expect(blocked).toBe(false);
+    });
+  });
 });
+

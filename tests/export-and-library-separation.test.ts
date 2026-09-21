@@ -53,6 +53,15 @@ describe("exact ZIP export jobs", () => {
     expect(actions).toContain('action: "dismissed_downloaded_badge"');
     expect(actions).toContain('.from("ad_tags")');
   });
+
+  it("lets admins add or remove downloaded badges in bulk", () => {
+    expect(dashboard).toContain("bulkSetDownloadedBadge(Array.from(selectedIds), downloaded)");
+    expect(dashboard).toContain("Mark downloaded");
+    expect(dashboard).toContain("Remove downloaded");
+    expect(dashboard).toContain('profile.role === "admin"');
+    expect(actions).toContain("export async function bulkSetDownloadedBadge");
+    expect(actions).toContain('action: parsed.data.downloaded ? "bulk_downloaded_badge_added" : "bulk_downloaded_badge_removed"');
+  });
 });
 
 describe("Ad Library separation", () => {

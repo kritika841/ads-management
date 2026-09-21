@@ -16,12 +16,14 @@ export function ReviewPanel({
   ad,
   profile,
   reviews,
-  annotations
+  annotations,
+  allowManagerFinalApproval = true
 }: {
   ad: AdWithRelations;
   profile: Profile;
   reviews: ReviewAction[];
   annotations: Annotation[];
+  allowManagerFinalApproval?: boolean;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -32,9 +34,10 @@ export function ReviewPanel({
   const isReviewer = profile.role === "admin" || profile.role === "manager";
   const isAdmin = profile.role === "admin";
   const isManager = profile.role === "manager";
+  const canApprove = isAdmin || (isManager && allowManagerFinalApproval);
   const canReviewNow = isReviewer && ad.status === "pending_review" && (ad.production_stage === "creator_review" || ad.production_stage === "final_review");
   const canReopenApproved = (isAdmin || isManager) && ad.production_stage === "approved";
-  const canChooseChangeTarget = ad.production_stage === "final_review" || (ad.production_stage === "approved" && (isAdmin || isManager));
+  const canChooseChangeTarget = isReviewer && (canReviewNow || canReopenApproved);
   const permissionMessage = isReviewer && !canReviewNow && !canReopenApproved
     ? ad.production_stage === "approved"
       ? "Final approval is complete."
@@ -88,8 +91,8 @@ export function ReviewPanel({
               placeholder="Approval note or specific requested changes"
             />
           </Field> : null}
-          {canChooseChangeTarget && !canReopenApproved ? (
-            <Field label="Change target" hint="Choose whether the request goes back to the creator or the editor.">
+          {canChooseChangeTarget ? (
+            <Field label="Change target" hint={canReopenApproved ? "Choose where the reopened creative should go next." : "Choose whether the request goes back to the creator or the editor."}>
               <Select value={changeTarget} onChange={(event) => setChangeTarget(event.target.value as "creator" | "editor" | "") }>
                 <option value="">Choose target</option>
                 <option value="creator">Creator</option>
@@ -97,20 +100,21 @@ export function ReviewPanel({
               </Select>
             </Field>
           ) : null}
-          {canReopenApproved ? (
-            <Field label="Change target" hint="Choose where the reopened creative should go next.">
-              <Select value={changeTarget} onChange={(event) => setChangeTarget(event.target.value as "creator" | "editor" | "") }>
-                <option value="">Choose target</option>
-                <option value="creator">Creator</option>
-                <option value="editor">Editor</option>
-              </Select>
-            </Field>
+          {!canApprove && canReviewNow ? (
+            <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">Final approval is restricted to Administrators under current system settings. You can still request changes or add notes below.</p>
           ) : null}
           <div className="grid gap-2">
-            <Button disabled={isPending || approvalQueued || !canReviewNow} onClick={() => decide("approve")}>
-              {isPending || approvalQueued ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" aria-hidden />}
-              Final approve
-            </Button>
+            {canApprove ? (
+              <Button disabled={isPending || approvalQueued || !canReviewNow} onClick={() => decide("approve")}>
+                {isPending || approvalQueued ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" aria-hidden />}
+                Final approve
+              </Button>
+            ) : (
+              <Button disabled variant="secondary" title="Final approval is restricted to Administrators by system settings">
+                <Check className="size-4" aria-hidden />
+                Requires Admin approval
+              </Button>
+            )}
             <Button
               variant="secondary"
               disabled={isPending || approvalQueued || !canReviewNow || !note.trim() || (canChooseChangeTarget && !changeTarget) || (canReopenApproved && !changeTarget)}
@@ -122,7 +126,7 @@ export function ReviewPanel({
           </div>
 
           {canReopenApproved ? (
-            <div className="space-y-3 rounded-md border border-warning/30 bg-warning/15/60 p-4">
+            <div className="space-y-3 rounded-md border border-warning/30 bg-warning/15 p-4">
               <p className="text-sm text-warning">This ad is already approved. As an admin, you can reopen it and send it back for changes.</p>
               <Field label="What needs to change?">
                 <Textarea

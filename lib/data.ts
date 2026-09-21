@@ -2,6 +2,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { activeEditorStages, inProgressEditingStages } from "@/lib/production-workflow";
 import { sanitizeScriptHtml } from "@/lib/sanitize";
+import { DEFAULT_HIDDEN_METRICS, type HiddenMetricsByRole } from "@/lib/metric-visibility";
+import { readMetricVisibilityFile } from "@/lib/metric-visibility-server";
 import type {
   ActivityLog,
   AdVersion,
@@ -12,11 +14,14 @@ import type {
   Campaign,
   Comment,
   DailyTarget,
+  DailyTaskRule,
+  DailyTargetDaySetting,
   EditorTimeLog,
   Notification,
   Product,
   Profile,
-  ReviewAction
+  ReviewAction,
+  ReviewSubmissionType
 } from "@/lib/types";
 
 export async function getNotifications(userId: string) {
@@ -80,9 +85,46 @@ export async function getProfiles() {
 
 export async function getDailyTargets(startDate: string, endDate: string) {
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase.from("daily_team_targets").select("*").gte("target_date", startDate).lte("target_date", endDate).order("target_date");
+  await supabase.rpc("materialize_daily_task_rules", { p_start: startDate, p_end: endDate });
+  const [{ data, error }, { data: settings, error: settingsError }] = await Promise.all([
+    supabase.from("daily_team_targets").select("*").gte("target_date", startDate).lte("target_date", endDate).order("target_date"),
+    supabase.from("daily_target_day_settings").select("user_id,target_date,mode").gte("target_date", startDate).lte("target_date", endDate),
+  ]);
   if (error) throw error;
-  return (data ?? []) as DailyTarget[];
+  // “Automatic tasks only” is a view of the day, not a destructive update.
+  // Keep appended targets in the database so changing back to append restores them.
+  if (settingsError?.code === "PGRST205") return (data ?? []) as DailyTarget[];
+  if (settingsError) throw settingsError;
+  const isSunday = (dateStr: string) => {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, d)).getUTCDay() === 0;
+  };
+  const automaticOnly = new Set((settings ?? []).filter((setting) => setting.mode === "auto_only").map((setting) => `${setting.user_id}:${setting.target_date}`));
+  return (data ?? []).filter((target) => {
+    if (target.assigned_by && automaticOnly.has(`${target.user_id}:${target.target_date}`)) return false;
+    if (isSunday(target.target_date) && (target.carried_from_target_id || target.task_name.toLowerCase().includes("(carried forward)") || !target.assigned_by)) {
+      return false;
+    }
+    return true;
+  }) as DailyTarget[];
+}
+
+export async function getDailyTaskRules() {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.from("daily_task_rules").select("*").order("active", { ascending: false }).order("task_name");
+  // Keep the existing target sheet usable while a deployment is waiting for
+  // the optional auto-delegator migration to be applied.
+  if (error?.code === "PGRST205") return [];
+  if (error) throw error;
+  return (data ?? []) as DailyTaskRule[];
+}
+
+export async function getDailyTargetDaySettings(startDate: string, endDate: string) {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.from("daily_target_day_settings").select("*").gte("target_date", startDate).lte("target_date", endDate);
+  if (error?.code === "PGRST205") return [];
+  if (error) throw error;
+  return (data ?? []) as DailyTargetDaySetting[];
 }
 
 export async function getTags() {
@@ -134,7 +176,25 @@ export async function getAppSettings() {
     throw error;
   }
 
-  return data as AppSettings;
+  const fileMetrics = await readMetricVisibilityFile();
+  const record = data as AppSettings & {
+    allow_manager_final_approval?: boolean;
+    two_step_approval?: boolean;
+    hidden_metrics_by_role?: HiddenMetricsByRole;
+  };
+  const hiddenMetrics = record.hidden_metrics_by_role || fileMetrics || DEFAULT_HIDDEN_METRICS;
+
+  return {
+    ...record,
+    allow_manager_final_approval: record.allow_manager_final_approval !== undefined
+      ? record.allow_manager_final_approval
+      : !record.two_step_approval,
+    hidden_metrics_by_role: {
+      content_creator: hiddenMetrics.content_creator ?? [],
+      editor: hiddenMetrics.editor ?? [],
+      manager: hiddenMetrics.manager ?? []
+    }
+  } as AppSettings;
 }
 
 export async function getAds() {
@@ -148,7 +208,9 @@ export async function getAds() {
         editor:profiles!ads_editor_id_fkey(id,name,email,avatar_url,role),
         campaign:campaigns(id,name),
         product:products(id,name,sku,image_url),
-        ad_tags(tags(id,name))
+        ad_tags(tags(id,name)),
+        review_actions(id,decision,note,created_at,reviewer:profiles!review_actions_reviewer_id_fkey(id,name,role)),
+        activity_logs(id,action,actor_id,metadata,created_at)
       `
     )
     .order("updated_at", { ascending: false });
@@ -247,9 +309,19 @@ export async function getAdDetail(adId: string) {
   }
 
   const [versionsResult, commentsResult, annotationsResult, reviewsResult, activityResult, collaboratorsResult] = detailResults;
+  const normalizedAd = normalizeAds([{ ...ad, activity_logs: activityResult.data, review_actions: reviewsResult.data }])[0];
+  const latestChangeAction = (reviewsResult.data ?? []).find((r: { decision: string }) => r.decision === "request_changes");
+  if (latestChangeAction && !normalizedAd.latest_change_request) {
+    normalizedAd.latest_change_request = {
+      id: latestChangeAction.id,
+      note: latestChangeAction.note,
+      created_at: latestChangeAction.created_at,
+      reviewer: latestChangeAction.reviewer
+    };
+  }
 
   return {
-    ad: normalizeAds([ad])[0],
+    ad: normalizedAd,
     versions: (versionsResult.data ?? []).map((version) => ({
       ...(version as AdVersion),
       script_html: sanitizeScriptHtml(version.script_html) || null
@@ -303,12 +375,65 @@ function normalizeAds(rows: unknown[]) {
     const record = row as AdWithRelations & {
       ad_tags?: { tags?: { id: string; name: string } | null }[];
       ad_versions?: { id: string }[];
+      review_actions?: { id: string; decision: string; note: string | null; created_at: string; reviewer?: Pick<Profile, "id" | "name" | "role"> | null }[];
+      activity_logs?: { id: string; action: string; actor_id?: string | null; metadata?: Record<string, unknown> | null; created_at: string }[];
     };
+
+    const changeReviews = (record.review_actions ?? [])
+      .filter((action) => action.decision === "request_changes")
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    const latestChange = changeReviews[0] ? {
+      id: changeReviews[0].id,
+      note: changeReviews[0].note,
+      created_at: changeReviews[0].created_at,
+      reviewer: changeReviews[0].reviewer
+    } : null;
+
+    let reviewSubmissionType: ReviewSubmissionType | undefined;
+    const changeLogs = (record.activity_logs ?? [])
+      .filter((log) => {
+        const stage = (log.metadata as Record<string, unknown> | null)?.production_stage;
+        return (
+          stage === "creator_changes_requested" ||
+          stage === "changes_requested" ||
+          log.action.includes("changes_requested") ||
+          log.action.includes("requested_changes")
+        );
+      })
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    const hasAnyChangeRequested = changeReviews.length > 0 || changeLogs.length > 0;
+    if (!hasAnyChangeRequested) {
+      reviewSubmissionType = "new";
+    } else {
+      const latestLog = changeLogs[0];
+      const logStage = (latestLog?.metadata as Record<string, unknown> | null)?.production_stage;
+      if (
+        logStage === "creator_changes_requested" ||
+        latestLog?.action === "final_changes_requested_to_creator" ||
+        latestLog?.action === "creator_changes_requested"
+      ) {
+        reviewSubmissionType = "creator_resubmission";
+      } else if (
+        logStage === "changes_requested" ||
+        latestLog?.action === "final_changes_requested_to_editor" ||
+        latestLog?.action === "creator_requested_changes" ||
+        latestLog?.action === "final_changes_requested"
+      ) {
+        reviewSubmissionType = "editor_resubmission";
+      } else if (latestChange?.reviewer?.role === "content_creator") {
+        reviewSubmissionType = "editor_resubmission";
+      } else {
+        reviewSubmissionType = "editor_resubmission";
+      }
+    }
 
     return {
       ...record,
       script_html: sanitizeScriptHtml(record.script_html) || null,
       version_count: record.ad_versions?.length ?? record.version_count,
+      latest_change_request: latestChange,
+      review_submission_type: reviewSubmissionType,
       tags: (record.ad_tags ?? [])
         .map((item) => item.tags)
         .filter(Boolean) as { id: string; name: string }[]

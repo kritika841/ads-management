@@ -1,0 +1,30 @@
+{
+  "120249742823600128": {
+    "campaignId": "120249742823600128",
+    "campaignName": "Pack of 3 Incense Sticks | ABO",
+    "destination": "testing",
+    "updatedAt": "2026-09-19T12:22:54.761Z",
+    "updatedBy": "4a206a68-c5a4-4d12-be76-90468ea3df44"
+  },
+  "120249817915090128": {
+    "campaignId": "120249817915090128",
+    "campaignName": "Pack of 3 Incense Scale | CBO",
+    "destination": "winner",
+    "updatedAt": "2026-09-19T12:25:23.479Z",
+    "updatedBy": "4a206a68-c5a4-4d12-be76-90468ea3df44"
+  },
+  "120241694162330128": {
+    "campaignId": "120241694162330128",
+    "campaignName": "Mix Product | CBO",
+    "destination": "default",
+    "updatedAt": "2026-09-19T12:26:34.960Z",
+    "updatedBy": "4a206a68-c5a4-4d12-be76-90468ea3df44"
+  },
+  "120250356632220128": {
+    "campaignId": "120250356632220128",
+    "campaignName": "Festival Pack of 3 Incense Scale | CBO",
+    "destination": "winner",
+    "updatedAt": "2026-09-21T05:45:57.063Z",
+    "updatedBy": "4a206a68-c5a4-4d12-be76-90468ea3df44"
+  }
+}

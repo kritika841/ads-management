@@ -201,11 +201,11 @@ export function CreatorItemForm({
     <div className="space-y-6">
       {/* Override mode banner */}
       {overrideMode ? (
-        <div className="flex items-start gap-3 rounded-xl border-2 border-amber-400/50 bg-amber-500/10 px-4 py-3">
-          <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-amber-500 text-[11px] font-bold text-white">!</span>
+        <div className="flex items-start gap-3 rounded-xl border-2 border-warning/50 bg-warning/10 px-4 py-3">
+          <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-warning text-[11px] font-bold text-warning-foreground">!</span>
           <div>
-            <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Override edit mode</p>
-            <p className="mt-0.5 text-xs text-amber-600 dark:text-amber-500">All fields are editable regardless of stage. The original creator cannot be changed.</p>
+            <p className="text-sm font-semibold text-warning">Override edit mode</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">All fields are editable regardless of stage. The original creator cannot be changed.</p>
           </div>
         </div>
       ) : null}

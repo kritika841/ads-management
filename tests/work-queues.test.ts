@@ -32,6 +32,15 @@ describe("role work queues", () => {
   });
 
   it("gives reviewers a final-review queue and a production overview", () => {
+    expect(queuesForRole("admin").map((q) => q.label)).toEqual([
+      "Needs review",
+      "Pending editor assign",
+      "In production",
+      "Changes: Creator",
+      "Changes: Editor",
+      "Approved",
+      "All"
+    ]);
     expect(matchesQueue(item("creator_review"), "needs_review")).toBe(true);
     expect(matchesQueue(item("final_review"), "needs_review")).toBe(true);
     expect(matchesQueue(item("ready_for_edit"), "in_production")).toBe(true);

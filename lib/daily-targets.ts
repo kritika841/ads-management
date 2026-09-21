@@ -35,16 +35,25 @@ export function dailyStatus(target: number, completed: number, date: string, tod
   return "in_progress";
 }
 
+export function isCarriedTarget(item: DailyTarget): boolean {
+  return Boolean(item.carried_from_target_id) || item.task_name.toLowerCase().includes("(carried forward)");
+}
+
 export function summarizeTargets(profiles: Profile[], targets: DailyTarget[], month: string, today = dateInTargetTimeZone()) {
   const bounds = monthBounds(month);
   const currentMonth = today.slice(0, 7);
   return profiles.map((profile) => {
     const records = targets.filter((target) => target.user_id === profile.id);
-    const target = records.reduce((sum, item) => sum + item.target_quantity, 0);
+    const target = records.filter((item) => !isCarriedTarget(item)).reduce((sum, item) => sum + item.target_quantity, 0);
     const completed = records.reduce((sum, item) => sum + item.completed_quantity, 0);
-    const due = records.filter((item) => item.target_date <= today).reduce((sum, item) => sum + item.target_quantity, 0);
+    // Today remains open until the target timezone rolls over. Only closed days
+    // count toward whether someone is below target, so an in-progress task never
+    // makes a creator or editor look behind during the day.
+    const due = records.filter((item) => item.target_date < today && !isCarriedTarget(item)).reduce((sum, item) => sum + item.target_quantity, 0);
+    const dueCompleted = records.filter((item) => item.target_date < today).reduce((sum, item) => sum + item.completed_quantity, 0);
     const benchmark = bounds.month < currentMonth ? target : bounds.month === currentMonth ? due : 0;
-    const status = target === 0 ? "unassigned" : bounds.month > currentMonth ? "scheduled" : completed >= benchmark ? "on_target" : "below_target";
+    const completedBenchmark = bounds.month < currentMonth ? completed : bounds.month === currentMonth ? dueCompleted : 0;
+    const status = target === 0 ? "unassigned" : bounds.month > currentMonth ? "scheduled" : completedBenchmark >= benchmark ? "on_target" : "below_target";
     const cells = Object.fromEntries(bounds.days.map((date) => {
       const daily = records.filter((item) => item.target_date === date);
       const dailyTarget = daily.reduce((sum, item) => sum + item.target_quantity, 0);

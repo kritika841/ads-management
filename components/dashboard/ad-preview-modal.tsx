@@ -69,6 +69,23 @@ export function AdPreviewModal({
             )}
           </div>
           <aside className="min-h-0 border-t border-border p-5 lg:overflow-y-auto lg:border-l lg:border-t-0 lg:p-6">
+            {(ad.production_stage === "creator_changes_requested" || ad.production_stage === "changes_requested") ? (
+              <div className="mb-4 rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs">
+                <p className="font-semibold text-warning">
+                  {ad.production_stage === "creator_changes_requested"
+                    ? `Changes requested to Content Creator (${ad.creator?.name ?? "Creator"})`
+                    : `Changes requested to Video Editor (${ad.editor?.name ?? "Editor"})`}
+                </p>
+                {ad.latest_change_request?.note ? (
+                  <p className="mt-1 text-foreground">&ldquo;{ad.latest_change_request.note}&rdquo;</p>
+                ) : null}
+                {ad.latest_change_request?.reviewer?.name ? (
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Requested by {ad.latest_change_request.reviewer.name}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             <div className="flex items-center justify-between gap-3"><h3 className="section-heading">Script</h3><span className="text-xs text-muted-foreground">{ad.script_text?.split(/\s+/).filter(Boolean).length ?? 0} words</span></div>
             <div
               className="prose-script mt-4 text-sm"

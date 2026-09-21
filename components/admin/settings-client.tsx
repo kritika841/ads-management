@@ -7,7 +7,7 @@ import { runServerAction } from "@/lib/client-action";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import type { AppSettings, AuditLog, Campaign } from "@/lib/types";
-import { formatDateTime } from "@/lib/utils";
+import { cn, formatDateTime } from "@/lib/utils";
 
 export function SettingsClient({
   settings,
@@ -20,6 +20,7 @@ export function SettingsClient({
 }) {
   const [deadlineReminderDays, setDeadlineReminderDays] = useState(settings.deadline_reminder_days);
   const [maxConcurrentEdits, setMaxConcurrentEdits] = useState(settings.max_concurrent_edits);
+  const [allowManagerFinalApproval, setAllowManagerFinalApproval] = useState(settings.allow_manager_final_approval ?? true);
   const [campaignName, setCampaignName] = useState("");
   const [campaignDescription, setCampaignDescription] = useState("");
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
@@ -32,7 +33,8 @@ export function SettingsClient({
       const response = await runServerAction(() => updateSettings({
         twoStepApproval: false,
         deadlineReminderDays,
-        maxConcurrentEdits
+        maxConcurrentEdits,
+        allowManagerFinalApproval
       }));
       setMessage(response.ok ? "Settings saved." : response.message ?? "Unable to save settings.");
     });
@@ -88,7 +90,6 @@ export function SettingsClient({
       setMessage(response.ok ? `${campaign.name} deleted.` : response.message ?? "Unable to delete campaign.");
     });
   }
-
   return (
     <main className="page-container">
       <div className="mb-6">
@@ -117,9 +118,51 @@ export function SettingsClient({
                 onChange={(event) => setMaxConcurrentEdits(Number(event.target.value))}
               />
             </Field>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Final approval hierarchy</label>
+              <p className="text-xs text-muted-foreground">Control who has authority to grant final approval for creatives in the Creative Library.</p>
+              <div className="mt-2 grid gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAllowManagerFinalApproval(true)}
+                  className={cn(
+                    "flex flex-col items-start rounded-lg border p-3 text-left transition-colors",
+                    allowManagerFinalApproval
+                      ? "border-primary bg-primary/10 text-foreground"
+                      : "border-border bg-card text-muted-foreground hover:bg-muted"
+                  )}
+                >
+                  <span className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                    <span className={cn("size-2 rounded-full", allowManagerFinalApproval ? "bg-primary" : "bg-border")} />
+                    Admin &amp; Manager
+                  </span>
+                  <span className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                    Both administrators and managers can give final approval to creatives.
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAllowManagerFinalApproval(false)}
+                  className={cn(
+                    "flex flex-col items-start rounded-lg border p-3 text-left transition-colors",
+                    !allowManagerFinalApproval
+                      ? "border-primary bg-primary/10 text-foreground"
+                      : "border-border bg-card text-muted-foreground hover:bg-muted"
+                  )}
+                >
+                  <span className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                    <span className={cn("size-2 rounded-full", !allowManagerFinalApproval ? "bg-primary" : "bg-border")} />
+                    Admin Only
+                  </span>
+                  <span className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                    Only administrators can grant final approval. Managers can review and request changes.
+                  </span>
+                </button>
+              </div>
+            </div>
             <Button className="w-full" disabled={isPending} onClick={persistSettings}>
               {isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-              Save reminder settings
+              Save workflow settings
             </Button>
           </div>
         </section>
@@ -152,6 +195,7 @@ export function SettingsClient({
         </section>
       </div>
       {message ? <p className="mt-4 rounded-md border border-border bg-card px-3 py-2 text-sm text-muted-foreground shadow-soft">{message}</p> : null}
+
 
       <section className="panel mt-5 overflow-hidden">
         <div className="border-b border-border p-5">

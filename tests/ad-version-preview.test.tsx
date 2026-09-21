@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { AdVersionPreview } from "@/components/review/ad-version-preview";
+import { ToastProvider } from "@/components/ui/toast";
 import { formatVideoTime, VideoTimestampProvider } from "@/components/review/video-timestamp-context";
 import type { AdVersion, AdWithRelations } from "@/lib/types";
 
@@ -22,7 +23,7 @@ const versions = [
 
 describe("AdVersionPreview", () => {
   it("switches the preview URL and script for every saved version", () => {
-    render(<VideoTimestampProvider><AdVersionPreview ad={ad} versions={versions} /></VideoTimestampProvider>);
+    render(<ToastProvider><VideoTimestampProvider><AdVersionPreview ad={ad} versions={versions} /></VideoTimestampProvider></ToastProvider>);
 
     expect(screen.getByTitle("Version test Current")).toHaveAttribute(
       "src",
@@ -46,7 +47,7 @@ describe("AdVersionPreview", () => {
   });
 
   it("falls back to the Drive preview when native playback is unavailable", () => {
-    render(<VideoTimestampProvider><AdVersionPreview ad={ad} versions={versions} /></VideoTimestampProvider>);
+    render(<ToastProvider><VideoTimestampProvider><AdVersionPreview ad={ad} versions={versions} /></VideoTimestampProvider></ToastProvider>);
     fireEvent.error(screen.getByTitle("Version test Current"));
     expect(screen.getByTitle("Version test Current").tagName).toBe("IFRAME");
     expect(screen.getByTitle("Version test Current")).toHaveAttribute("src", ad.preview_url);

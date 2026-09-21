@@ -1,6 +1,9 @@
 import { getDriveMedia } from "@/lib/drive";
 
-const prefixSize = 1024 * 1024;
+// One megabyte is enough to read metadata but not enough to sustain playback.
+// Keeping a larger leading range locally lets the browser fill a meaningful
+// buffer before it has to make a second round-trip to Drive.
+const prefixSize = 8 * 1024 * 1024;
 const cacheLifetimeMs = 10 * 60 * 1000;
 const maxEntries = 12;
 

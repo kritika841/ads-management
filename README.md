@@ -37,6 +37,19 @@ AdFlow is an internal ad creative management and approval system for marketing t
    npm run dev
    ```
 
+## Scheduled Meta sync
+
+Production runs the Meta incentive sync at the start of every hour through the
+`/api/incentives/sync` Vercel Cron entry. Set a non-empty `CRON_SECRET` in the
+deployment environment; Vercel sends it as the job's bearer token. The same
+secret is used by the other protected cron routes.
+
+Creative-level reporting preserves Meta's attribution grain: a single-creative
+ad can use its exact ad total, while multi-creative ads only show metrics where
+Meta returned an asset-level breakdown. The app never divides an ad total among
+multiple creative variants. The Incentives screen opens on today's media-level
+expanded view; broader ranges remain available through the date controls.
+
 ## Verification
 
 ```bash
