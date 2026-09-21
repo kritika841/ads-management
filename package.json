@@ -7,7 +7,7 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3000",
     "build": "NODE_OPTIONS='--max_old_space_size=4096' next build",
     "start": "next start",
     "lint": "eslint .",
@@ -17,8 +17,9 @@
     "e2e": "playwright test",
     "meta:exchange-token": "node scripts/exchange-meta-token.mjs",
     "mapping:export-scripts": "node scripts/export-creative-scripts.mjs",
-    "mapping:extract-transcripts": "node scripts/extract-unlinked-meta-transcripts.mjs",
-    "mapping:ai-match": "node scripts/ai-match-scripts.mjs --apply"
+    "mapping:extract-transcripts": "node scripts/extract-unlinked-meta-transcripts.mjs --transcribe --limit=500",
+    "mapping:ai-match": "node scripts/ai-match-scripts.mjs --apply",
+    "mapping:all": "node scripts/export-creative-scripts.mjs && node scripts/extract-unlinked-meta-transcripts.mjs --transcribe --limit=500 && node scripts/ai-match-scripts.mjs --apply"
   },
   "dependencies": {
     "@google/genai": "^2.15.0",

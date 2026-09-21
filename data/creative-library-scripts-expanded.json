@@ -8921,7 +8921,7 @@
     "campaign": "Satmi",
     "creator": "ishika",
     "editor": "Kunal",
-    "production_stage": "editing",
+    "production_stage": "creator_review",
     "ad_type": "video",
     "platforms": [
       "Meta Ads",
@@ -8932,8 +8932,8 @@
     "script_text": "Navratri ke woh 9 din…\nMaa ki aarti, diye ki roshni,\naur har kone mein pooja ki sugandh.\n\nIss Navratri, apni har pooja ko banaiye aur bhi khaas\nSatmi ke bamboo-less, charcoal-free incense sticks ke saath.\n\nAur festive season ke liye, Satmi lekar aaya hai\nspecial Pack of 3.\n\nTeen khushbuyaan…\nsubah ki pooja se lekar shaam ki aarti tak,\nhar pal ke liye ek alag ehsaas.\n\nKyuki Navratri sirf ek tyohar nahi…\nMaa ke ghar aane ka ehsaas hai.",
     "word_count": 80,
     "has_script": true,
-    "drive_url": null,
-    "preview_url": null,
+    "drive_url": "https://drive.google.com/file/d/1lw3nayY0isibjAiO5PiU7I_0cOZSK_ig/view?usp=sharing",
+    "preview_url": "https://drive.google.com/file/d/1lw3nayY0isibjAiO5PiU7I_0cOZSK_ig/preview",
     "created_at": "2026-09-19T12:44:38.592659+00:00"
   },
   {
@@ -8943,7 +8943,7 @@
     "campaign": "Satmi",
     "creator": "ishika",
     "editor": "Kunal",
-    "production_stage": "ready_for_edit",
+    "production_stage": "editing",
     "ad_type": "video",
     "platforms": [
       "Meta Ads",

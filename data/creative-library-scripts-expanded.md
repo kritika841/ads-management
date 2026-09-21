@@ -1,5 +1,5 @@
 # Creative Library Ad Scripts Catalog (Expanded Format)
-Generated on: 2026-09-21T09:11:04.301Z
+Generated on: 2026-09-21T10:26:29.014Z
 Total Creatives: 634
 Creatives with Scripts: 564
 Creatives missing Scripts: 70
@@ -9518,7 +9518,7 @@ Toh maine socha, ek baar achhi wali le hi leti hoon. Navratri ke baad bhi kaafi 
 ### Creative: ISH0212 (1106b31f-cf8c-4fbe-b2ee-e29fc764c6a0)
 - **Campaign**: Satmi
 - **Creator**: ishika | **Editor**: Kunal
-- **Stage**: editing | **Type**: video
+- **Stage**: creator_review | **Type**: video
 - **Hook**: "Navratri ke woh 9 din… Maa ki aarti, diye ki roshni,"
 - **Word Count**: 80
 
@@ -9547,7 +9547,7 @@ Maa ke ghar aane ka ehsaas hai.
 ### Creative: ISH0213 (5bc6ba7e-106b-440d-bd9a-3be88b190964)
 - **Campaign**: Satmi
 - **Creator**: ishika | **Editor**: Kunal
-- **Stage**: ready_for_edit | **Type**: video
+- **Stage**: editing | **Type**: video
 - **Hook**: "Navratri ki subah, Maa ka naam, diye ki roshni, pooja ki shaam."
 - **Word Count**: 53
 

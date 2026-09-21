@@ -1,8 +1,8 @@
 # Unlinked Meta Ads Transcripts Catalog (Multilingual Deepgram)
-Generated on: 2026-09-21T09:13:31.854Z
+Generated on: 2026-09-21T10:26:21.688Z
 Total Unlinked Meta Ads: 623
-Ads with Multilingual Transcripts: 142
-Ads without Transcript / Non-Video / Silent: 481
+Ads with Multilingual Transcripts: 312
+Ads without Transcript / Non-Video / Silent: 311
 
 ---
 ### Meta Ad: 2 (ID: 120250806511870128)
@@ -2191,20 +2191,22 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120240287140600128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: multi
+- **Word Count**: 59
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+दिल से इस pendant को धारण करता है, उसके रुके हुए काम बनने लगते हैं. शुद्ध silver से बना यह pendant हर दिन मानसिक शांति का एहसास कराता है. पहनिए श्याम बाबा के इस pendant को अपने दिल के क़रीब ताकि हर कदम पर बाबा का आशीर्वाद आपके साथ रहे और order करिए और भक्ति को बनाइए अपनी ताकत.
 ```
 
 ---
 
 ### Meta Ad: 7 (ID: 120240286914290128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2215,20 +2217,22 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 4 (ID: 120240287198910128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 13
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+बोलखातू नरेश की. मतिलब्धि ऐसा दुनिया से मुझको तो नपे रत्ते हैं. औसा
 ```
 
 ---
 
 ### Meta Ad: 5 (ID: 120240287198920128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Deepgram returned an empty transcript.
 
 **Multilingual Transcript**:
 ```
@@ -2239,8 +2243,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 2 (ID: 120240286914300128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2251,8 +2256,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 3 (ID: 120240287014160128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Deepgram returned an empty transcript.
 
 **Multilingual Transcript**:
 ```
@@ -2263,20 +2269,22 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120240286957930128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 103
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+एक ख़रीदो एक free सोना था. एक ख़रीदो छह free, यह कुछ ज़्यादा नहीं हो गया. हां भाई हां साथ मिलाया है शुभ मंगल sale जहां मिल रहा है six detachable pendants एक करूंगाली माला के साथ. वह भी proper government and private lab certification के साथ. ऊपर से पांच मुखे रुद्राक्ष free वात rupees four ninety nine free home delivery and and and fifty one percent off prepaid order पर और यह सब मिलेगा आपको साथ में कि यह premium gift packaging में. पर एक catch है यह offer stock last करें तक ही valid है. So देर ना करें अभी ख़रीदें.
 ```
 
 ---
 
 ### Meta Ad: 3 (ID: 120240286914310128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2287,8 +2295,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120240286758750128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2299,8 +2308,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 4 (ID: 120240286914260128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2311,8 +2321,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 6 (ID: 120240286914280128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2323,8 +2334,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 5 (ID: 120240286914270128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2335,32 +2347,35 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 2 (ID: 120240287014150128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 83
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+एक नहीं, दो नहीं, तीन भी नहीं. पूरे छह detachable pendants मिल रहे हैं करोंगली माला के साथ, सत्वी की शुभ मंगल sale में. हां भाई, वही करोंगली जो आपने धनुष रजनी खात और कई celebs और businessman को पहने हुए देखा है. सब government and private lab certified premium packaging और home delivery बिल्कुल free. साथ में पांच रुखी रुद्राक्ष free worth rupees four ninety nine. पर यह offer stock last करने तक ही valid है. So देर ना करें अभी ख़रीदें.
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120240243954770128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi,en
+- **Word Count**: 69
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Free free free. Seven ninety nine में एक करुंगुरी के साथ दूसरी करुंगुरी वाला बिल्कुल free और उसके साथ चार सौ निन्यानवे का पंचमुखी रुद्राक्ष जो कि original और lab certified है बिल्कुल free. अगर आप prepaid orders करते हैं तो अलग से fifty one rupees का off. वह भी सदमी के premium और quality packaging के साथ. All in one. So waiting for what? Shop now from सदमी.
 ```
 
 ---
 
 ### Meta Ad: 9 (ID: 120240243614670128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2371,32 +2386,35 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 5 (ID: 120240244138480128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 31
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+इनमें से कोई भी दो मारा उठा लें. आप अपनी पसंद का सटनी के सात सौ निन्यानवे बार बार get one offer के अंदर. Go and shop now, come सकते हैं.
 ```
 
 ---
 
 ### Meta Ad: 2 (ID: 120240244138450128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 100
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+सिर्फ़ seven ninety nine rupees में से कोई भी दो कारुंगली माला. हां, सही सुना सत्मी लाया है. शुभ मंगल sale जहां मिल रही एक खरीदने पर एक मारा वह भी आपके पसंद से कोई भी बिल्कुल मुफ्त. वह भी government love certified and private love certified तो authenticity की कोई tension ही नहीं. ऊपर से five मुखी रुद्राक्ष worth rupees four ninety nine मुफ्त. Prepaid order पर fifty one rupees off free home delivery and यह सब कुछ आएगा सत्मी की यह premium packaging में. But but but offer is valid only till the stock last. So sharp fast.
 ```
 
 ---
 
 ### Meta Ad: 3 (ID: 120240243614610128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2407,8 +2425,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 5 (ID: 120240243614630128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2419,8 +2438,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 10 (ID: 120240243614680128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2431,8 +2451,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 2 (ID: 120240243614600128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2443,8 +2464,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 8 (ID: 120240243614660128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2455,8 +2477,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 11 (ID: 120240243614690128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2467,8 +2490,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 7 (ID: 120240243614650128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2479,8 +2503,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 6 (ID: 120240243614640128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2491,8 +2516,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120240243487890128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2503,8 +2529,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 4 (ID: 120240243614620128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2515,8 +2542,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 12 (ID: 120240243614590128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2527,8 +2555,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 – kannada (ID: 120240236630830128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Deepgram returned an empty transcript.
 
 **Multilingual Transcript**:
 ```
@@ -2539,32 +2568,35 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 – telugu (ID: 120240236630820128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: multi
+- **Word Count**: 19
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Home delivery premium packaging लेते. कानी नारुकमंद ना तुम्हें तुम्हें दिरुपाइला offer परमित्य stock मात्र में. दरवादा चिंति झिखंडे.
 ```
 
 ---
 
 ### Meta Ad: 1 – tamil (ID: 120240236630840128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 31
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+बेरुम लानूती पोनूत रोपदुरुपैरकर, असल करंगाली माला, अदुमुन, आरस्य, आई बदल सांझे दोनों. आम सबोज़ते मुच्छिगमुन में. इदित तादुष, रजनीकांत पोनूर ब्रबलंगढ़, मच्छुक पला तोड़ी लड़ी बर्बेड अणियों आदि करंगाली. नागढ़,
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120240236280960128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2575,8 +2607,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 5 (ID: 120240236320720128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2587,8 +2620,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 2 (ID: 120240236320690128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2599,8 +2633,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 4 (ID: 120240236320710128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2611,8 +2646,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 3 (ID: 120240236320700128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2623,8 +2659,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 3 (ID: 120240235761850128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2635,8 +2672,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 8 (ID: 120240235761810128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2647,8 +2685,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 10 (ID: 120240235761830128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2659,8 +2698,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120240234274350128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2671,8 +2711,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 6 (ID: 120240235761790128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2683,8 +2724,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 2 (ID: 120240235761840128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2695,8 +2737,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 4 (ID: 120240235761860128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2707,8 +2750,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 7 (ID: 120240235761800128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2719,8 +2763,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 9 (ID: 120240235761820128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2731,8 +2776,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 5 (ID: 120240235761780128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2743,8 +2789,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 6 (ID: 120240168934150128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2755,8 +2802,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 2 (ID: 120240168934110128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2767,8 +2815,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 9 (ID: 120240168934180128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2779,8 +2828,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 5 (ID: 120240168934140128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2791,8 +2841,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 3 (ID: 120240168934120128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2803,8 +2854,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 10 (ID: 120240168934190128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2815,20 +2867,22 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120240168975490128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 121
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+सिर्फ़ four ninety nine rupees में original करूंगाली माला और वह भी government lab certified. हां भाई बिल्कुल सच. यह वही करूंगाली है जो धनुष रजनीकांत जैसे celebs और कई businessman पहनते आए हैं. हम market से उठाकर बेचने वाले नहीं हैं. करूंगाली हम ख़ुद source करते हैं, ख़ुद process करते हैं और ख़ुद माला बनाते हैं. इसलिए originality में कोई doubt ही नहीं. But proof के लिए फिर भी हमारी सारी करूंगाली government and private lab दोनों से certified होते हैं. हर order के साथ आपको मिलेगा पांच मुखी रुद्राक्ष बुद्ध कुल free and free home delivery. Premium packaging तो है ही, पर four ninety nine rupees का offer सिर्फ limited stock के लिए है. बाद में regret मत करना.
 ```
 
 ---
 
 ### Meta Ad: 4 (ID: 120240168934130128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2839,8 +2893,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120240168749270128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2851,8 +2906,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 8 (ID: 120240168934170128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2863,8 +2919,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 7 (ID: 120240168934160128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2875,8 +2932,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120240159966010128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2887,20 +2945,22 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120240158492900128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 20
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+क्या है यह मज़ेरा, कुछ तो है मिलेरा, या फिर मैं ही बस मन ही मन पर से बनाने लगा.
 ```
 
 ---
 
 ### Meta Ad: New Engagement ad (ID: 120232328499550128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -2911,312 +2971,338 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 5 (ID: 120228277946430128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi,en
+- **Word Count**: 36
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+ये मोटे झारियां हटेंगी कैसे? Ordinary blades jam or fail? The sickle cutter head has forty razor sharp teeth that drip through thick stems. Perfect for farm, gardens, or wild plots. Tough weeds - game over.
 ```
 
 ---
 
 ### Meta Ad: 3 (ID: 120228277946330128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi,en
+- **Word Count**: 45
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Trimmer चलाया लेकिन घास बराबर नहीं कटी. Uneven lawns and patchy cuts ruin your garden look. This grass sickle cutter head gives smooth, level trimming in one go, even in rough terrain or wild grass. Strong grip, high precision - like a pro gardener's tool.
 ```
 
 ---
 
 ### Meta Ad: 8 (ID: 120228277946420128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi,en
+- **Word Count**: 47
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Gardener नहीं भूला पाए. अब खुद ही expert बनो. Forget expensive help. This grass sickle cutter head gives you pro level cutting at home. Powerful, precise and long lasting. Fits most brush cutters. Just fix and start trimming like a pro. अब हर season में garden perfect.
 ```
 
 ---
 
 ### Meta Ad: 11 (ID: 120228277946410128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 40
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+यह लीघास में blade फ़ंस जाता है. पर साथ के बाद tough grass भी scatter head से आसानी से कटती है. Sharp plates, smooth action, हर surface के लिए perfect. Weatherproof cutting experience पाओ. आज ही अपना order place करो.
 ```
 
 ---
 
 ### Meta Ad: 15 (ID: 120228277946180128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 38
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Blade घिस गया है. अब जलने की आवाज़ आने लगी. Old blades risk बढ़ाते हैं. यह cutter head heat resistant और heavy duty है. Safe and sharp दोनों. Cut safe, cut fast. नया cut ahead आज ही लो.
 ```
 
 ---
 
 ### Meta Ad: 7 (ID: 120228277946210128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi,en
+- **Word Count**: 48
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Blade हर दो minute में घास में अटक जाता है. Cheap blades bend, jam and slow you down. But this grass sickle cutter है steel built. Curved teeth slice through dense, wet और dry grass with ease. No jamming, no stalling. बस लगाओ और non stop cutting करो.
 ```
 
 ---
 
 ### Meta Ad: 9 (ID: 120228277946310128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 45
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+दो घंटे से लगे हुए. फिर भी आधा lawn बाकी है. Ordinary blade से ना घास कटती है, ना time बचता है. Grassycle cutter head से dense झाड़ी, मिंटों में साफ, बिना रुके, बिना थके. अब time और मेहनत, दोनों बचाओ. आज ही order करो.
 ```
 
 ---
 
 ### Meta Ad: 12 (ID: 120228277946300128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 40
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+यह लीघास में blade फ़ंस जाता है. पर साथ के बाद tough grass भी scatter head से आसानी से कटती है. Sharp plates, smooth action, हर surface के लिए perfect. Weatherproof cutting experience पाओ. आज ही अपना order place करो.
 ```
 
 ---
 
 ### Meta Ad: 21 (ID: 120228277946160128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 47
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+मैं घास कट्टी है लेकिन side में झारियां बच जाती हैं. Flat blade सिर्फ़ open area में काम करता है, लेकिन यह sickle cutter head कोनों, किनारों और झारियों को भी आराम से साफ़ करता है curved design से. हर कोना साफ चाहिए, अभी cutterhead order करें.
 ```
 
 ---
 
 ### Meta Ad: 10 (ID: 120228277946200128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 40
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Blade चलता नहीं बस कांपता है. Cheap blades vibrate करते हैं, control चला जाता है. यह cutter head देता है tight grip और smooth cutting. एकदम professional finish. Upgrade करो आज ही power और precision के लिए. अभी book करो.
 ```
 
 ---
 
 ### Meta Ad: 25 (ID: 120228279090180128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 45
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Powerful machines useless होती हैं अगर blade सही ना हो. Grass sickle cutter head से मिलता है perfect combo. Sharp teeth, better control और हर कोने तक सफाई. Professional result बिना professional के. अब हर कोई वन सकता है lawn expert. अभी का तहेड मंगाओ.
 ```
 
 ---
 
 ### Meta Ad: 23 (ID: 120228277946280128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 60
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Normal trimmer या blade dense bushes में fail हो जाते हैं. Grass sickle cutter head बना है heavy duty steel से. चौली sharp teeth से करता है मोटी घास झाड़ियों और जंगी पौधों की सफाई. बिना जांब हुए, बिना रुके. Perfect for farms, gardens and tough terrain. जंगल जैसी घास हो या खेल, cutter head अभी मंगाओ, सफाई आसान बना.
 ```
 
 ---
 
 ### Meta Ad: 13 (ID: 120228277946190128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 41
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+खेत साफ़ करते करते झाड़ियां काटना impossible लग रहा? Traditional tools fail करते हैं. Grass sickle cutter head से थोनी bushes और wild growth मिंटों में गायब. अब खेत रहे साफ़ और ready. अभी order करो और आराम से काम करो.
 ```
 
 ---
 
 ### Meta Ad: 22 (ID: 120228277946270128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 43
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Garden को नया लुप देना है पर घास हटे तब ना. Overgrown घास और weeds makeover को spoil कर देते हैं. Grassicle cutter head से मिलता है clean base, fast, easy और hatchy free. Garden को दो नया makeover color head. अभी मंगाओ.
 ```
 
 ---
 
 ### Meta Ad: 14 (ID: 120228277946290128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 86
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+दीवार के पास की घासने इकट्ठी, trimmer पहुंच ही नहीं पाता. Normal flat blades सिर्फ़ open area में काम आते हैं. लेकिन garden के किनारे, दीवारों के पास या narrow कोनों में वही सबसे ज़्यादा झाड़ियां उगती हैं और वही सबसे मुश्किल सफाई होती हैं. Grass sickle cutter head की curved teeth वहां भी पहुंचती हैं जहां दूसरों की हिम्मत नहीं, हर कोना काटू साफ सा. अभी order करो और बना लो एकदम perfect garden. अब हर कोना बने clean. अभी buy now पर click करो.
 ```
 
 ---
 
 ### Meta Ad: 17 (ID: 120228277946240128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 43
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+घास काटते काटते पूरा दिल चला गया. फिर भी कोना कोना गंदा ordinary trimmer से ना स्नीट मिलती है, ना सफाई. Grass nickel cutter है three faster काम करता है. पूरे lawn को professional touch देता है. Time बचाओ, result बढ़ाओ. अभी audible.
 ```
 
 ---
 
 ### Meta Ad: 2 (ID: 120228277946230128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi,en
+- **Word Count**: 37
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+हर बार nylon string टूट जाती है. Plastic string heads wear out fast. But this sickle style blade, it doesn't break. It bites. Thick grass, heavy weaths, all slightly. Fix once, forget ripples. Professional cutting, zero headache.
 ```
 
 ---
 
 ### Meta Ad: kajju1_physicalfitness (ID: 120227696754490128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 118
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+हर कोई जानना चाहता है मेरे इन हंसते खिलते फ़ूलों वाले पोधों का राज. इसका मेरे पास एक ही जवाब है, यह doctor green magic stick. इन stick के वजह से ही यह मेरे plants इतना grow कर पा रहे हैं. Plant में जो कुछ भी problem हो या जो कुछ nutrients plant में कम पड़ रहा हो, तो उस कमी को पूरा करेगा यह stick. Plants बिना किसी रुकावट के बढ़ते रहेंगे और healthy रहेंगे. इन stick में सभी natural ingredients ही रहते हैं, कोई chemical नहीं. इसलिए बेझिझक आप इसे इस्तेमाल कर सकते हो. अब अपने बेझान पड़े plant की हालत सुधारो इन magic stick की order करो. Order करने के लिए link नीचे मिल जाएगी.
 ```
 
 ---
 
 ### Meta Ad: kajju2_physicalfitness (ID: 120227696756500128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 41
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+अरे रो क्यों रही हो? नहीं तो क्या करूं? पौधे फिर से मुरझा गए. अरे यह लो doctor Green's magic sticks. इसे गमले में लगाओ और देखो इसका जादू. पौधे बिल्कुल नहीं मुरझाएंगे. अगर घर के पोधों को बचाना है करें.
 ```
 
 ---
 
 ### Meta Ad: kajju1_footwear (ID: 120227696750530128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 118
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+हर कोई जानना चाहता है मेरे इन हंसते खिलते फ़ूलों वाले पोधों का राज. इसका मेरे पास एक ही जवाब है, यह doctor green magic stick. इन stick के वजह से ही यह मेरे plants इतना grow कर पा रहे हैं. Plant में जो कुछ भी problem हो या जो कुछ nutrients plant में कम पड़ रहा हो, तो उस कमी को पूरा करेगा यह stick. Plants बिना किसी रुकावट के बढ़ते रहेंगे और healthy रहेंगे. इन stick में सभी natural ingredients ही रहते हैं, कोई chemical नहीं. इसलिए बेझिझक आप इसे इस्तेमाल कर सकते हो. अब अपने बेझान पड़े plant की हालत सुधारो इन magic stick की order करो. Order करने के लिए link नीचे मिल जाएगी.
 ```
 
 ---
 
 ### Meta Ad: kajju1_mensfashion (ID: 120227696746590128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 118
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+हर कोई जानना चाहता है मेरे इन हंसते खिलते फ़ूलों वाले पोधों का राज. इसका मेरे पास एक ही जवाब है, यह doctor green magic stick. इन stick के वजह से ही यह मेरे plants इतना grow कर पा रहे हैं. Plant में जो कुछ भी problem हो या जो कुछ nutrients plant में कम पड़ रहा हो, तो उस कमी को पूरा करेगा यह stick. Plants बिना किसी रुकावट के बढ़ते रहेंगे और healthy रहेंगे. इन stick में सभी natural ingredients ही रहते हैं, कोई chemical नहीं. इसलिए बेझिझक आप इसे इस्तेमाल कर सकते हो. अब अपने बेझान पड़े plant की हालत सुधारो इन magic stick की order करो. Order करने के लिए link नीचे मिल जाएगी.
 ```
 
 ---
 
 ### Meta Ad: FreshFinds_April2024 (ID: 120227644315750128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 94
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+इन्हीं stick से होगा आपके plants की असली देखभाल. Summer में बहुत सारे plants जल जाते हैं, मगर doctor green magic sticks एक बेहतरीन solution है आपके plants में एक नई जान लाने के लिए. इसकी एक ही stick आपके पौधे को पूरे एक महीने तक nutrients supply करती है और यह सौ प्रतिशत natural है तो आप इसे vegetables या fruits वाले plants के लिए भी use कर सकते हो, जिससे आपके plants की growth और production दोनों भी बढ़ जाएंगे. इन magic sticks को ख़रीदने के लिए link आपको नीचे मिल जाएगी.
 ```
 
 ---
 
 ### Meta Ad: Heritage Hide Shoe Ad - 2 (ID: 120227642423720128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 127
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+घर पर आया, हर कोई मुझसे यही पूछता है कि आपका यह aloe vera का पौधा इतना बड़ा कैसे हो गया? तो इसका जवाब है यह doctor green की magic sticks. बस इस stick को plant की मिट्टी में लगाएं और देखिए इसका magic. यह stick लगाने के बाद आपको regular पानी डालना. एक stick पूरे तीस दिन तक आपके plant को nutrition देती है और आपके plant को natural fertilizer provide करती है. साथ ही plant की roots को मज़बूत बनाती है जिससे plant बहुत जल्दी grow होता है. यह stick सौ प्रतिशत natural है और सभी तरह के plant के लिए use कर सकते हो. तो अब plant के growth की चिंता छोड़ दो. अभी इन sticks को order करो, link नीचे दी गई है.
 ```
 
 ---
 
 ### Meta Ad: Heritage Hide Shoe Ad - 1 (ID: 120227642401730128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 94
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+इन्हीं stick से होगा आपके plants की असली देखभाल. Summer में बहुत सारे plants जल जाते हैं, मगर doctor green magic sticks एक बेहतरीन solution है आपके plants में एक नई जान लाने के लिए. इसकी एक ही stick आपके पौधे को पूरे एक महीने तक nutrients supply करती है और यह सौ प्रतिशत natural है तो आप इसे vegetables या fruits वाले plants के लिए भी use कर सकते हो, जिससे आपके plants की growth और production दोनों भी बढ़ जाएंगे. इन magic sticks को ख़रीदने के लिए link आपको नीचे मिल जाएगी.
 ```
 
 ---
 
 ### Meta Ad: Heritage Hide Shoe Ad - 1 (ID: 120227642417580128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 94
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+इन्हीं stick से होगा आपके plants की असली देखभाल. Summer में बहुत सारे plants जल जाते हैं, मगर doctor green magic sticks एक बेहतरीन solution है आपके plants में एक नई जान लाने के लिए. इसकी एक ही stick आपके पौधे को पूरे एक महीने तक nutrients supply करती है और यह सौ प्रतिशत natural है तो आप इसे vegetables या fruits वाले plants के लिए भी use कर सकते हो. जिससे आपके plants की growth और production दोनों भी बढ़ जाएंगे. इन magic sticks को ख़रीदने के लिए link आपको नीचे मिल जाएगी.
 ```
 
 ---
 
 ### Meta Ad: Heritage Hide Shoe Ad - 2 (ID: 120227642402740128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 127
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+घर पर आया, हर कोई मुझसे यही पूछता है कि आपका यह aloe vera का पौधा इतना बड़ा कैसे हो गया? तो इसका जवाब है यह doctor green की magic sticks. बस इस stick को plant की मिट्टी में लगाएं और देखिए इसका magic. यह stick लगाने के बाद आपको regular पानी डालना. एक stick पूरे तीस दिन तक आपके plant को nutrition देती है और आपके plant को natural fertilizer provide करती है. साथ ही plant की roots को मज़बूत बनाती है जिससे plant बहुत जल्दी grow होता है. यह stick सौ प्रतिशत natural है और सभी तरह के plant के लिए use कर सकते हो. तो अब plant के growth की चिंता छोड़ दो. अभी इन sticks को order करो, link नीचे दी गई है.
 ```
 
 ---
@@ -3327,92 +3413,100 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Shoes Punjab - Video 1 (ID: 120227590972870128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 143
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+गर्मियों में ठंडा ठंडा नींबू शरबत पिने मिले, इसलिए मैंने terrace पर यह नींबू का पौधा लगाया था. मुझे तो विश्वास ही नहीं हो रहा इतने छोटे से पौधे पर इतने नींबू आने लग गए. यह चादू हुआ इन doctor green magic sticks की वजह से. जब से मैंने इन sticks को use करना शुरू कर दिया, मेरे plants कम से कम care में काफ़ी तेजी से grow हो रहे हैं. बस एक stick को लेकर आपको अपने plant में इस तरह से लगाना है और रोज़ की तरह पानी देना है. फिर यह stick अगले तीस दिन तक पौधे को सारे essential nutrients provide करने का काम करती है, जिससे पौधे एकदम healthy और हरे भरे हो जाते हैं. अगर आप भी घर पर फूलो फलो से भरे plants चाहते हैं, तो आपको इन sticks को ज़रूर इस्तेमाल करना चाहिए. Order now.
 ```
 
 ---
 
 ### Meta Ad: Shoes Rajasthan - Video 1 (ID: 120227590969750128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 143
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+गर्मियों में ठंडा ठंडा नींबू शरबत पिने मिले, इसलिए मैंने terrace पर यह नींबू का पौधा लगाया था. मुझे तो विश्वास ही नहीं हो रहा इतने छोटे से पौधे पर इतने नींबू आने लग गए. यह चादू हुआ इन doctor green magic sticks की वजह से. जब से मैंने इन sticks को use करना शुरू कर दिया, मेरे plants कम से कम care में काफ़ी तेजी से grow हो रहे हैं. बस एक stick को लेकर आपको अपने plant में इस तरह से लगाना है और रोज़ की तरह पानी देना है. फिर यह stick अगले तीस दिन तक पौधे को सारे essential nutrients provide करने का काम करती है, जिससे पौधे एकदम healthy और हरे भरे हो जाते हैं. अगर आप भी घर पर फूलो फलो से भरे plants चाहते हैं, तो आपको इन sticks को ज़रूर इस्तेमाल करना चाहिए. Order now.
 ```
 
 ---
 
 ### Meta Ad: Shoes Maharashtra - Video 1 (ID: 120227590995220128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 143
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+गर्मियों में ठंडा ठंडा नींबू शरबत पिने मिले, इसलिए मैंने terrace पर यह नींबू का पौधा लगाया था. मुझे तो विश्वास ही नहीं हो रहा इतने छोटे से पौधे पर इतने नींबू आने लग गए. यह चादू हुआ इन doctor green magic sticks की वजह से. जब से मैंने इन sticks को use करना शुरू कर दिया, मेरे plants कम से कम care में काफ़ी तेजी से grow हो रहे हैं. बस एक stick को लेकर आपको अपने plant में इस तरह से लगाना है और रोज़ की तरह पानी देना है. फिर यह stick अगले तीस दिन तक पौधे को सारे essential nutrients provide करने का काम करती है, जिससे पौधे एकदम healthy और हरे भरे हो जाते हैं. अगर आप भी घर पर फूलो फलो से भरे plants चाहते हैं, तो आपको इन sticks को ज़रूर इस्तेमाल करना चाहिए. Order now.
 ```
 
 ---
 
 ### Meta Ad: Shoes Rajasthan - Video 2 (ID: 120227590971410128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 112
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+आपको पता है कि आपके garden की मिट्टी में ज़रूरी पोशाक तत्वों की कमी हो सकती है. Doctor Green Magic Stick एक organic growth booster है जो आपके पौधों को ज़रूरी nutrients देता है ताकि वह healthy और तेज़ी से बढ़ सके. इस्तेमाल करना भी आसान है, बस stick को मिट्टी में लाओ. फिर देखें कैसे आपके पौधे खिलने लगते हैं और उनमें नई जान आ जाती है. इसके natural nutrients सीधे जड़ों तक पहुंचते हैं, उन्हें मज़बूत बनाते हैं और growth को naturally accelerate करते हैं. आपका garden हो जाता है lush, green और vibrant. आज ही try करें doctor green magic stick और अपने garden को दे एक नई ज़िंदगी.
 ```
 
 ---
 
 ### Meta Ad: Shoes Punjab - Video 2 (ID: 120227590973780128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 112
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+आपको पता है कि आपके garden की मिट्टी में ज़रूरी पोशाक तत्वों की कमी हो सकती है. Doctor Green Magic Stick एक organic growth booster है जो आपके पौधों को ज़रूरी nutrients देता है ताकि वह healthy और तेज़ी से बढ़ सके. इस्तेमाल करना भी आसान है, बस stick को मिट्टी में लाओ. फिर देखें कैसे आपके पौधे खिलने लगते हैं और उनमें नई जान आ जाती है. इसके natural nutrients सीधे जड़ों तक पहुंचते हैं, उन्हें मज़बूत बनाते हैं और growth को naturally accelerate करते हैं. आपका garden हो जाता है lush, green और vibrant. आज ही try करें doctor green magic stick और अपने garden को दे एक नई ज़िंदगी.
 ```
 
 ---
 
 ### Meta Ad: Shoes Video Creative 2 – Adset 2 (ID: 120227590914440128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 112
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+आपको पता है कि आपके garden की मिट्टी में ज़रूरी पोशाक तत्वों की कमी हो सकती है. Doctor Green Magic Stick एक organic growth booster है जो आपके पौधों को ज़रूरी nutrients देता है ताकि वह healthy और तेज़ी से बढ़ सके. इस्तेमाल करना भी आसान है, बस stick को मिट्टी में लाओ. फिर देखें कैसे आपके पौधे खिलने लगते हैं और उनमें नई जान आ जाती है. इसके natural nutrients सीधे जड़ों तक पहुंचते हैं, उन्हें मज़बूत बनाते हैं और growth को naturally accelerate करते हैं. आपका garden हो जाता है lush, green और vibrant. आज ही try करें doctor green magic stick और अपने garden को दे एक नई ज़िंदगी.
 ```
 
 ---
 
 ### Meta Ad: Test Ad (ID: 120227515448010128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 92
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+आपको भी घर पर अलग अलग तरह के food cook करना पसंद है? इस dual dump मेघर की मदद से momos, मोदक और different dumplings बनाएं चुटकियों में. Simply इसके flat side पर dough रखें और press करें और perfect shade dumpling skin तैयार है. फिर दूसरे side इसे अपने favorite ingredient से fill करें और सिर्फ इस liver को pull करें. आपकी dumplings cook करने के लिए ready हैं. यह parties और daily kitchen use के लिए perfect product है. Best price के लिए shop now button पर अभी click करें.
 ```
 
 ---
 
 ### Meta Ad: Test Ad (ID: 120227512997790128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3423,8 +3517,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Test Ad (ID: 120227512765640128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3435,8 +3530,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Test Ad (ID: 120227512538320128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3447,20 +3543,22 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Video Travel Content - Var 2 (ID: 120227191831410128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Lifestyle Tech Business Mix - Business Growth Solutions (Image) (ID: 120227193251410128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3471,8 +3569,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Lifestyle Tech Business Mix - Discover Amazing Content (Video) (ID: 120227193231050128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Deepgram returned an empty transcript.
 
 **Multilingual Transcript**:
 ```
@@ -3483,8 +3582,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Lifestyle Tech Business Mix - Transform Your Lifestyle (Image) (ID: 120227193242750128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3495,116 +3595,126 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Video Tech Content - Var 3 (ID: 120227191877540128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi,en
+- **Word Count**: 44
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+हम ले आए हैं आपके लिए यह शानदार two in one dumpling momos maker. इससे आप मिंटों में momos बना सकते हैं. इसे use करना बहुत आसान है. छोटा और compact, आप इसे कहीं भी store कर सकते हैं. तो आज ही order करें.
 ```
 
 ---
 
 ### Meta Ad: Video Travel Content - Var 3 (ID: 120227191833720128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Video Travel Content - Var 1 (ID: 120227191827040128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Video Tech Content - Var 4 (ID: 120227191882390128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi,en
+- **Word Count**: 44
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+हम ले आए हैं आपके लिए यह शानदार two in one dumpling momos maker. इससे आप मिंटों में momos बना सकते हैं. इसे use करना बहुत आसान है. छोटा और compact, आप इसे कहीं भी store कर सकते हैं. तो आज ही order करें.
 ```
 
 ---
 
 ### Meta Ad: Video Tech Content - Var 5 (ID: 120227191886840128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi,en
+- **Word Count**: 44
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+हम ले आए हैं आपके लिए यह शानदार two in one dumpling momos maker. इससे आप मिंटों में momos बना सकते हैं. इसे use करना बहुत आसान है. छोटा और compact, आप इसे कहीं भी store कर सकते हैं. तो आज ही order करें.
 ```
 
 ---
 
 ### Meta Ad: Video Travel Content - Var 5 (ID: 120227191839390128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Video Tech Content - Var 6 (ID: 120227191891180128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi,en
+- **Word Count**: 44
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+हम ले आए हैं आपके लिए यह शानदार two in one dumpling momos maker. इससे आप मिंटों में momos बना सकते हैं. इसे use करना बहुत आसान है. छोटा और compact, आप इसे कहीं भी store कर सकते हैं. तो आज ही order करें.
 ```
 
 ---
 
 ### Meta Ad: Video Tech Content - Var 1 (ID: 120227191870910128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi,en
+- **Word Count**: 44
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+हम ले आए हैं आपके लिए यह शानदार two in one dumpling momos maker. इससे आप मिंटों में momos बना सकते हैं. इसे use करना बहुत आसान है. छोटा और compact, आप इसे कहीं भी store कर सकते हैं. तो आज ही order करें.
 ```
 
 ---
 
 ### Meta Ad: Video Travel Content - Var 6 (ID: 120227191844710128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Image Fashion Content - Var 1 (ID: 120227191850050128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3615,8 +3725,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Tech Young Adults - Variation 2 (ID: 120227191778550128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3627,8 +3738,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Business All Genders Major Cities - Variation 4 (ID: 120227191762020128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3639,8 +3751,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Business All Genders Major Cities - Variation 3 (ID: 120227191757610128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3651,8 +3764,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Fashion Female Metro Cities - Variation 3 (ID: 120227191737120128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3663,8 +3777,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Image Fashion Content - Var 5 (ID: 120227191862750128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3675,8 +3790,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Business All Genders Major Cities - Variation 6 (ID: 120227191766770128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3687,8 +3803,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Business All Genders Major Cities - Variation 1 (ID: 120227191745540128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3699,8 +3816,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Business All Genders Major Cities - Variation 5 (ID: 120227191764300128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3711,8 +3829,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Image Fashion Content - Var 6 (ID: 120227191867300128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3723,20 +3842,22 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Video Travel Content - Var 4 (ID: 120227191836340128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Tech Young Adults - Variation 4 (ID: 120227191790830128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3747,8 +3868,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Image Fashion Content - Var 2 (ID: 120227191852590128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3759,8 +3881,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Business All Genders Major Cities - Variation 2 (ID: 120227191751230128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3771,8 +3894,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Tech Young Adults - Variation 6 (ID: 120227191796720128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3783,8 +3907,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Tech Young Adults - Variation 5 (ID: 120227191793930128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3795,8 +3920,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Tech Young Adults - Variation 3 (ID: 120227191784260128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3807,8 +3933,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Tech Young Adults - Variation 1 (ID: 120227191773660128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3819,8 +3946,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Image Fashion Content - Var 3 (ID: 120227191855630128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3831,8 +3959,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Image Fashion Content - Var 4 (ID: 120227191857790128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3843,8 +3972,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Fashion Female Metro Cities - Variation 6 (ID: 120227191742240128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3855,8 +3985,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Fashion Female Metro Cities - Variation 4 (ID: 120227191738110128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3867,8 +3998,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Fashion Female Metro Cities - Variation 1 (ID: 120227191731540128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3879,8 +4011,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Image Fashion Content - Var 4 (ID: 120227191666850128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3891,8 +4024,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Image Fashion Content - Var 2 (ID: 120227191639360128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3903,8 +4037,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Fashion Female Metro Cities - Variation 5 (ID: 120227191740320128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3915,8 +4050,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Fashion Female Metro Cities - Variation 2 (ID: 120227191733770128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3927,8 +4063,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Image Fashion Content - Var 5 (ID: 120227191674900128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3939,8 +4076,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Image Fashion Content - Var 1 (ID: 120227191624730128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3951,8 +4089,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Business All Genders Major Cities - Variation 3 (ID: 120227191459120128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3963,8 +4102,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Fashion Female Metro Cities - Variation 3 (ID: 120227191442730128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3975,8 +4115,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Business All Genders Major Cities - Variation 4 (ID: 120227191461590128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3987,8 +4128,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Tech Young Adults - Variation 4 (ID: 120227191483250128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -3999,8 +4141,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Business All Genders Major Cities - Variation 6 (ID: 120227191472860128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -4011,8 +4154,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Tech Young Adults - Variation 6 (ID: 120227191493710128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -4023,8 +4167,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Tech Young Adults - Variation 3 (ID: 120227191480220128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -4035,8 +4180,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Tech Young Adults - Variation 2 (ID: 120227191478720128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -4047,8 +4193,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Fashion Female Metro Cities - Variation 1 (ID: 120227191437010128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -4059,8 +4206,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Fashion Female Metro Cities - Variation 2 (ID: 120227191439740128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -4071,8 +4219,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Business All Genders Major Cities - Variation 2 (ID: 120227191456260128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -4083,8 +4232,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Fashion Female Metro Cities - Variation 5 (ID: 120227191448800128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -4095,8 +4245,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Fashion Female Metro Cities - Variation 4 (ID: 120227191445880128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -4107,8 +4258,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Business All Genders Major Cities - Variation 1 (ID: 120227191454190128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -4119,8 +4271,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Tech Young Adults - Variation 1 (ID: 120227191476060128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -4131,8 +4284,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Business All Genders Major Cities - Variation 5 (ID: 120227191469370128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -4143,8 +4297,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Ad - Open (ID: 120227188593210128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -4155,8 +4310,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Ad - Open (ID: 120227188415660128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -4167,8 +4323,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Ad - Open (ID: 120227187344060128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -4179,32 +4336,35 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Ad - Ad Variation 1 (ID: 120227186550230128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi,en
+- **Word Count**: 44
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+हम ले आए हैं आपके लिए यह शानदार two in one dumpling momos maker. इससे आप मिंटों में momos बना सकते हैं. इसे use करना बहुत आसान है. छोटा और compact, आप इसे कहीं भी store कर सकते हैं. तो आज ही order करें.
 ```
 
 ---
 
 ### Meta Ad: Ad - Open (ID: 120227186536850128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Ad - Ad Variation 2 (ID: 120227186555590128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -4215,8 +4375,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Ad - Video 2 - Lifestyle Headlines (ID: 120227185884160128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Deepgram returned an empty transcript.
 
 **Multilingual Transcript**:
 ```
@@ -4227,20 +4388,22 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Ad - Video 1 - Product Focus Headlines (ID: 120227185716130128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi,en
+- **Word Count**: 44
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+हम ले आए हैं आपके लिए यह शानदार two in one dumpling momos maker. इससे आप मिंटों में momos बना सकते हैं. इसे use करना बहुत आसान है. छोटा और compact, आप इसे कहीं भी store कर सकते हैं. तो आज ही order करें.
 ```
 
 ---
 
 ### Meta Ad: Ad - Video 2 - Lifestyle Headlines (ID: 120227185729240128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Deepgram returned an empty transcript.
 
 **Multilingual Transcript**:
 ```
@@ -4251,8 +4414,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Ad - Custom Image Upload (ID: 120227147207760128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -4263,56 +4427,61 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Ad - Variation 2 - Headline Focus (ID: 120227144866490128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Ad - Test Multiple Ads (ID: 120227144159540128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Ad - 🚀 Trending Heritage Hide Leath (ID: 120227140268480128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Ad - 🎯 Limited Time Offer! (ID: 120227139870450128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Ad - Amazing Product - Limited Time (ID: 120227127230350128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -4323,8 +4492,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Ad - Amazing Product - Limited Time (ID: 120227127065760128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -4335,36 +4505,39 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120210912433910128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 59
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+In Feng Shui, Brazilian wood is considered an auspicious plant that brings good luck prosperity and longevity often used as gifts to express good wishes to others. Placing it in the southeast of the home can help improve the family's wealth and fortune. Placing it in the office can improve career fortune in the comfort of the working environment.
 ```
 
 ---
 
 ### Meta Ad: 5 (ID: 120210912525710128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 75
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+If there is someone in your family who is having trouble with business and is always losing his temper, then you can raise two Brazilian woods, also known as lucky woods, which symbolize good luck and good fortune. Raising them in the bedroom can not only eliminate fatigue and promote sleep, but also absorb ammonia, acetone, and other waste gases discharged by the human body. Once the flowers bloom, the whole house will be filled
 ```
 
 ---
 
 ### Meta Ad: 3 (ID: 120210912490990128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 61
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Keeping a Brazilian wood plant at home symbolizes smooth sailing, also known as lucky wood. Keep in the bedroom. It cannot only eliminate fatigue, promote sleep. The unique smell of the leaves can also purify the air. What matters is that each flower blooms. A little extra luck, and it's easy to take care of. Just watering is enough to survive.
 ```
 
 ---
@@ -4384,152 +4557,165 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 2 (ID: 120210912491470128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 101
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+अगर आपके घर में कोई अकेला रहता है तो मैं आपको उनके लिए Brazilian wood जिसे lucky wood भी कहते हैं कि कुछ कमले रखने की सलाह देती हूं. यह सदा बहार पौधा बिना धूप के भी पनपता है और केवल पानी से जीवित रहता है. अच्छी हवा और सौभाग्य के अच्छे इरादों के साथ यह आपके सपने देखते समय चुपचाप होगाएगा. जब भी यह खिलेगा, यह आपके लिए शुभ संकेत लाएगा. अगर आपके किसी क़रीबी को सकारात्मक ऊर्जा की ज़रूरत है तो आज ही उनके यह लकीबूद का पौधा ले आए और उनके भाग्य को संवारने का एक मौका दें.
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120210898237870128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: multi
+- **Word Count**: 35
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+तो लेकर आ चुके बहुत ही बेहतरीन offer के साथ यह पांच पूलों T shirt का set जो कि मिल रहा है सिर्फ बारह सौ रुपए में. यह T shirt बनी है pure cotton fabric
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120210889053760128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 85
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Repair fluid to repair car glass cracks and glue to repair cracks seamlessly. Cut effectively repair cracks and scratches on windshields and avoid long cracks. There is no need to wet it with water before repairing. After repairing, the effect is strong and durable, and the effect is also very good. With this glass repair kit, there is no need to replace your car glass. You can easily restore the integrity of your glass and achieve a traceless repair, saving you a lot of money.
 ```
 
 ---
 
 ### Meta Ad: 9 (ID: 120210841403580128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 74
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Trying the viral alpha tether pheromone cologne on my GF. How's your day? Good. What is that? What? Did she get a new cologne? Lo, I didn't think it would work that fast. Is that? She literally couldn't get off of me. That's not so good. What's in it? Where'd you get it from? I got it from AlphaDutch, but I wanted to keep it a secret. You'll get yours today, boys. Trust me.
 ```
 
 ---
 
 ### Meta Ad: 6 (ID: 120210841403550128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 151
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Smell so hot. What did you do? If your boyfriend hears this, he's gonna hate me. She actually told me earlier that she liked how I smelled today. I honestly just can't control myself around you. Today, you smell so manly. It's kinda driving me crazy. You are not the only one that has complimented me on scent today. I knew it. There's just something different about you. I got three compliments from girls before coming here. What is that? I need to get my boyfriend a bottle. It's this new cologne I got that infuses pheromones inside the bottle, which are basically chemical messengers to make girls go crazy. So that's why I was feeling this way. I need to get my boyfriend a bottle because that smell is making me weak. Tell you what, I sure as hell would not let my boyfriend go out with that cologne on.
 ```
 
 ---
 
 ### Meta Ad: 5 (ID: 120210841403540128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 201
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Three reasons why single men should get Cupid's Hypnosis two point o. Number one, it's infused with twice the amount of pheromones of the original Cupid Hypnosis, helping them create two times stronger attraction in women. It smells so sexy that it's been on my mind twenty four seven since I first got it. I physically can't stop myself. It smells so good. I would crave you if I smelled this on you. I was all over him like we were teenagers again. Number two, it's twice as potent so you can spray less, get better results, and use it for longer. Once you spray it, you're good for the day. You don't need to keep on reapplying throughout the night like would have to do with the cheap spray. And number three, they upgraded their scent from manly to lumberjack level. So it makes men smell like women really want them to smell. I'd wanna eat you up. It makes me feel some type of way. It smells like you love cupids. Thousands of men can't stop going on about how much they love cupids. Join them now and get it for fifty percent off at cupid fragrances dot com.
 ```
 
 ---
 
 ### Meta Ad: 2 (ID: 120210841403600128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 148
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Single guys, I promise you ladies will be hooked if you wear this. Even if you think she's out of relief, she will want you over any other guy if you only wear this. Eupid's hypnosis is a cologne woman just cannot resist. If you wear this, woman will not stop giving you their numbers. You walk next to them, and the next thing you know, they wanna get to know you. Wear this to a date, and she will not keep her hands off of you. That's a cupid hypnosis effect, guys. It's infused with a special blend of pheromones that blend seamlessly with your body's natural scent so you smell irresistible to women. Honestly, don't overthink it. They have an a hundred percent money back guarantee and forty percent off this week. So go to cupid fragrances dot com and snag one before it's too late.
 ```
 
 ---
 
 ### Meta Ad: 8 (ID: 120210841403570128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 154
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+I want every guy I date to smell like this. Oh my gosh. So I went on a Tinder date last night. Yes. And I wasn't sure if I wanted to go home with him or not, but then he sprays this. What is that? Girl, let his mouth. Let his mouth. Wait. I am not joking. It was the most amazing cologne I've ever smelled in my life. And I don't know about you, but don't you just find it super sexy when a guy smells manly? How sexy isn't it? So sexy. Oh my god. Yeah. Well, he played his cards right because he didn't do get lucky last night. I really want every guy a date. Just want like that. Right. Oh my gosh. What was her name again? Cupid hypnosis. Damn. Okay, guys. So single dose, if you wanna have successful night, you better get a bottle of cupid hypnosis.
 ```
 
 ---
 
 ### Meta Ad: 7 (ID: 120210841403560128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 46
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Does it make me more attractive? Yeah. Yeah? Like, ten times more? Yeah. Like, the possibility for me to take you out on a day? It's ten times more. Well, if you're watching this, make sure to go to Cuban Fragrances. I love you. Good night.
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120210841385060128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 164
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Have you still not bought a pheromone cologne because you think they're expensive? Cupid hypnosis is scientifically proven to attract women, and it costs only sixty dollars. Guys, that's just a sixty dollar investment for the returns of more attention from ladies and increased confidence levels. This stuff's gonna make them fall at your feet. I don't even know what rejection is since I started using it. So many women came up to me all night telling me I smelled so good and asking what I've got on. I first started using this three months ago and not only has it helped me land more dates, but my confidence around women has won up so much. That's some wonders for my self confidence. It's insane. You guys have to try it. So good. The fifty percent discount on Cupid Hypnosis makes it the perfect time to try it yourself. Their sale might end soon, and the price will double. So get yourself one now.
 ```
 
 ---
 
 ### Meta Ad: 2 (ID: 120210593773490128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 94
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Bumper offer में आपको एक ख़रीदने पर एक free मिल रहा है. इसे लगाने के लिए कोई कील ठोकने की ज़रूरत नहीं है. इसमें आती हैं यह self adhesive hooks जो बिल्कुल मज़बूत पकड़ बना लेती है. आप इसे bathroom या kitchen दोनों में उपयोग कर सकते हैं. इन shelves में आप अपने बहुत से सामान को store कर सकते हैं. इनके size के कारण यह आराम से पांच kilo तक के भार को झेल सकती है. तो टूटने का सवाल ही नहीं उठता. इससे अच्छा offer नहीं मिलेगा. आज ही owner डर करें.
 ```
 
 ---
 
 ### Meta Ad: 3 (ID: 120210593773950128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: multi
+- **Word Count**: 51
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+क्या आपके bathroom या kitchen में सामान इधर उधर बिखरा रहता है? अगर हां, तो आज ही यह stainless steel corner shelf को order कर दीजिए क्योंकि इन shelves में आप अपने बहुत से सामान को store कर सकते हैं. आप इसे bathroom या kitchen दोनों में उपयोग कर सकते हैं.
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120210460062660128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -4540,36 +4726,39 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 3 (ID: 120210390265680128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 91
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+क्या आपल्या कारचा dinush board, plastic parts, seats कीन्वा आपल्या घरातील furniture चीचमक उड़ा लिया है? जर होए दर हा product तुमचा साठीचा है. हां, आहे plastic restoring polishing agent. है एक foam पीयेंडवर लावून कारचा plastic parts जैसे dinush board अनी इतर पृष्ठ भागांबर polish करा. अनी है आपल्या नेन्नो coating तंत्र जाना चाह वापर करुण प्यापृष्ठ भागाची चमक पुनः आड़ते. अता तुम चिकार नवीन सार्खी दिसेल. Video मध्य तुम्हीं पाहू शक्ता की ताकल्यावर सुद्धा याची चमक जात ना ही. आज़च खरेदी करा buy one gate one free ओमफ्रम मध्य.
 ```
 
 ---
 
 ### Meta Ad: 3 (ID: 120210390289210128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 95
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+यह है plastic restoring polishing agent जो आपके बहुत काम आ सकता है. अगर इसे एक foam pad पर लगाकर car के plastic parts जैसे dashboard, handles, engine parts, seats या घर के furniture पर polish करते हैं तो यह अपनी nano coating technique की मदद से उस सतह की चमक को दस गुना बढ़ा देता है. आपके car के interiors वापस से नए जैसे हो जाते हैं और अब इसे ख़रीदने के पैसे भी वसूल हो जाते हैं. यह है तो लाजवाब product जो buy one get one free offer पर मिल रहा है.
 ```
 
 ---
 
 ### Meta Ad: 3 (ID: 120249744105970128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 47
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+हर successful relationship का secret पता है? Compromise. क्योंकि तुम्हें चंदन पसंद है, घरवालों को गुलाब और मेहमानों को उध. और इसका solution है सत्मी का buy too get one free. अब अपनी favorite कोई सी भी three incense boxes खरीदो सिर्फ़ nine point nine nine में.
 ```
 
 ---
@@ -4589,8 +4778,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120250435998840128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -4601,8 +4791,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120250357311090128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: The remote server hosting the media returned a client error: 403 Forbidden.
 
 **Multilingual Transcript**:
 ```
@@ -4613,56 +4804,61 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120250357311080128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 75
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+India में आजकल हर दूसरी अगरबत्ती brand खुद को organic बोलती है. जब हम सत्मी बना रहे थे ना तब कुछ time तक हम भी confused थे कि असली organic अगरबत्ती होती क्या है? फिर काफ़ी research करने के बाद और बहुत लोगों से बात करने के बाद हमें समझ आया Time ज़रूर लगा लेकिन आख़िर में जो ख़ुशबू निकलकर आई ना वह एकदम natural थी, soothing थी और सच में pure महसूस होती थी.
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120249412404430128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi,en
+- **Word Count**: 31
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Temples smell like चंदन for a reason. Our ancestors knew it calms the mind, clears the energy, settles the soul. In just one stick, your home can feel the same way.
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120250324514500128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 19
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+इसको बनाने में लगभग एक दो महीने लग गए. But जब यह note निकलकर आया तब it was amazing.
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120249742823620128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 83
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+कभी सोचा है? तीस रुपए की अगरबत्ती इतनी strong गुलाब की ख़ुशबू कैसे दे देती है? Mostly वह strong fragrance chemicals और artificial perfume से आती है. इसलिए जलाते ही काला धुआं बहुत तेज़ smell और कभी कभी आंखों में irritation भी feel होती है. हमारी गुलाब incense में rose powder, herbs और essential oils जैसे ingredients use होते हैं. इसलिए fragrance room पर attack नहीं करती, naturally धीरे धीरे feel होती है. बस यही difference है, strong smell और अच्छी खुशबू में.
 ```
 
 ---
 
 ### Meta Ad: BG3 (ID: 120242268397530128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Deepgram returned an empty transcript.
 
 **Multilingual Transcript**:
 ```
@@ -4673,8 +4869,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: BG7 (ID: 120242268397460128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Deepgram returned an empty transcript.
 
 **Multilingual Transcript**:
 ```
@@ -4685,12 +4882,13 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: BG10 (ID: 120242268397490128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 64
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+बाकी में यह सच बात है. क्या यह सच बात है? जी हां, मुझे यह बताते हुए बेहद खुशी हो रही है कि सत्मी ने सात सौ निन्यानवे में एक करूंगिली के साथ दूसरी करूंगिली बिल्कुल free दी है और वह भी hundred percent original of government lab certified. तो वे किस बात का है? जाइए और link पर click करिए. Thank you ma'am.
 ```
 
 ---
@@ -4762,8 +4960,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 3 (ID: 120240370434990128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Deepgram returned an empty transcript.
 
 **Multilingual Transcript**:
 ```
@@ -4774,20 +4973,22 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 3 (ID: 120240244138460128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 76
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+सिर्फ सात सौ निन्यानवे में एक करोमली माला के साथ दूसरा फिर से free और उसके साथ चार सौ निन्यानवे का पंचमुखी रुद्राक्ष जो कि original और lab certified है बिल्कुल free और साथ में अगर आप prepaid orders करते हैं तो अलग से fifty one rupees का off. उसके साथ free home delivery और सतनी का premium packaging. अब क्या चाहिए बच्चे की जान लोगे? Go and shop now from सतनी क्योंकि stocks limited हैं.
 ```
 
 ---
 
 ### Meta Ad: 4 (ID: 120240370400460128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Deepgram returned an empty transcript.
 
 **Multilingual Transcript**:
 ```
@@ -4798,32 +4999,35 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 3 (ID: 120240287198900128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 40
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+गए थे. फिर हमें किसी ने बताया आप हारे के सारे शाम बाबा को. पहले नहीं आते थे क्या cartoon? नहीं आए थे. पहले जाते थे. ना ना ना ना ना. पहली दबाए थे. तो बाबा ने हमारी sun ली.
 ```
 
 ---
 
 ### Meta Ad: 2 (ID: 120240287198890128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 103
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+खाटू श्याम जी जिन्हें कलयुग के सबसे चमत्कारी देवता माना जाता है और लाखों लोग इनमें आस्था रखते हैं. इसी आस्था को ध्यान में रखते हुए, सपनी लेकर आया है यह silver खाटू श्याम pendant. यह एक jewelry नहीं, आपकी spiritual shield है. शुद्ध silver से बनाइए pendant. रोज़ पहनने पर मन को शांति और दिल को सुकून मिलने का एहसास होता है. माना जाता है साचे मन से धारण किए जाना वाला श्याम बाबा का स्वरूप जीवन में सकारात्मकता लाता है. पहनिए खाटू श्याम जी का silver pendant और हर दिन श्याम बाबा की कृपा को अपने दिल के क़रीब महसूस कीजिए.
 ```
 
 ---
 
 ### Meta Ad: 4 (ID: 120240244138470128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Deepgram returned an empty transcript.
 
 **Multilingual Transcript**:
 ```
@@ -4834,36 +5038,39 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 – english (ID: 120240236630850128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi,en
+- **Word Count**: 101
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Original करंगाली माला for just four ninety nine rupees and that be government lab certified. Yes brother, absolutely true. This is the same करंगाली worn by celebrities like घनोष, रजनीता and many businessmen. We don't sell recycle करंगाली. We source, process and make the गालन ourselves, so there's no doubt about its authenticity. But for proof, all our करंगाली are certified by both government and private labs. And with this, you'll get five मुखीरों प्रक्षा absolutely free. And free home delivery, premium packaging, of course. But the offer of four ninety nine rupees is only for limited stock. Don't regret later.
 ```
 
 ---
 
 ### Meta Ad: kajju2_footwear (ID: 120227696751910128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: multi
+- **Word Count**: 41
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+अरे रो क्यों रही हो? नहीं तो क्या करूं? पौधे फिर से मुरझा गए. अरे यह लो doctor Green's magic sticks. इसे गमले में लगाओ और देखो इसका जादू. पौधे बिल्कुल नहीं मुरझाएंगे. अगर घर के पोधों को बचाना है करें.
 ```
 
 ---
 
 ### Meta Ad: 2 (ID: 120240207167650128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 134
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+This is करुंगुली also known as Abony Wood. करुंगुली माला is representing Lord गुर्गन also known as भगवान कार्तिकेण नौर who is a son of शिव and पार्वती. It is worn by many actor these days like धनुष, रजनीकांत and so many more. It is believed that wearing करुंगुली removes all the negativity, brings prosperity, even it increases your focus. But in the market, people in the name of करूंगुली are selling just normal plastic or even if they are selling the real one, they are selling it at a very very high cost and we felt that this sacred protection should not be limited to a few. So, during our शुभ मंगल sale, get करूंगुली at just rupees four nine nine plus a free रुद्राक्ष with it, that too with government lab certification.
 ```
 
 ---
@@ -4883,12 +5090,13 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 18 (ID: 120228277946250128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 47
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Backyard में घास इतनी मोटी हो गई है कि काटना भी डरावना लगता है. जंगल जैसी मोटी घास के लिए चाहिए, जंगल जैसा tool, grass, sickle, cutter, head sick, कोई भी झाड़ी, घास या काटे, सब हो जाए साफ़. Backyard को बनाओ beautiful. अभी cutter head खरीदो.
 ```
 
 ---
@@ -4921,8 +5129,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Shoes Maharashtra - Video 2 (ID: 120227590995980128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: fetch failed
 
 **Multilingual Transcript**:
 ```
@@ -4933,72 +5142,78 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: No Interest Ad - Video 1 (ID: 120227591347190128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 143
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+गर्मियों में ठंडा ठंडा नींबू शरबत पिने मिले, इसलिए मैंने terrace पर यह नींबू का पौधा लगाया था. मुझे तो विश्वास ही नहीं हो रहा इतने छोटे से पौधे पर इतने नींबू आने लग गए. यह चादू हुआ इन doctor green magic sticks की वजह से. जब से मैंने इन sticks को use करना शुरू कर दिया, मेरे plants कम से कम care में काफ़ी तेजी से grow हो रहे हैं. बस एक stick को लेकर आपको अपने plant में इस तरह से लगाना है और रोज़ की तरह पानी देना है. फिर यह stick अगले तीस दिन तक पौधे को सारे essential nutrients provide करने का काम करती है, जिससे पौधे एकदम healthy और हरे भरे हो जाते हैं. अगर आप भी घर पर फूलो फलो से भरे plants चाहते हैं, तो आपको इन sticks को ज़रूर इस्तेमाल करना चाहिए. Order now.
 ```
 
 ---
 
 ### Meta Ad: Test Ad (ID: 120227529583280128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 92
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+आपको भी घर पर अलग अलग तरह के food cook करना पसंद है? इस dual dump मेघर की मदद से momos, मोदक और different dumplings बनाएं चुटकियों में. Simply इसके flat side पर dough रखें और press करें और perfect shade dumpling skin तैयार है. फिर दूसरे side इसे अपने favorite ingredient से fill करें और सिर्फ इस liver को pull करें. आपकी dumplings cook करने के लिए ready हैं. यह parties और daily kitchen use के लिए perfect product है. Best price के लिए shop now button पर अभी click करें.
 ```
 
 ---
 
 ### Meta Ad: 16 (ID: 120228277946340128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 57
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+बारिश के बाद खेत में सिर्फ़ फ़सल नहीं, छाड़ियां भी उगाई हैं. सामान्य blade से dense छाड़ियां और मोटी घास काटना almost impossible है. Grass sickle cutter head की चौली sharp teeth tough से tough wheats को मिनटों में साफ़ कर देती हैं. Farmer का भरोसे मंटूर. अब खेत की सफाई आसान. आज ही कटहेर order करो.
 ```
 
 ---
 
 ### Meta Ad: 6 (ID: 120228277946320128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi,en
+- **Word Count**: 36
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+ये मोटे झारियां हटेंगी कैसे? Ordinary blades jam or fail? The sickle cutter head has forty razor sharp teeth that drip through thick stems. Perfect for farm, gardens, or wild plots. Tough weeds - game over.
 ```
 
 ---
 
 ### Meta Ad: 20 (ID: 120228277946370128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 57
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+गर्मी में घिसता है, बारिश में charm हो जाता है, हर मौसम में नया blade, cheap plates हर season में fail हो जाते हैं. लेकिन grass sickle cutter head बना है heavy duty steel से. गर्मी, बरसार, कीचड़, सब में करता है perfect काम. All weather cutter चाहिए? अभी order करो और हर मौसम को आसान बनाओ.
 ```
 
 ---
 
 ### Meta Ad: 19 (ID: 120228277946260128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 46
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+बस हल्की घास काटनी है, फिर भी पूरी machine उठाओ. हर बार heavy duty machine चलाना waste है. Grass sickle cutter head छोटे बड़े दोनों कामों में efficient है बिना ज़्यादा effort के. Light, sharp और superfast छोटे काम के लिए perfect tool. अभी try करो.
 ```
 
 ---
@@ -5018,84 +5233,91 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120228276598280128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi,en
+- **Word Count**: 57
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Garden घास से नहीं, जंगल से लग रहा है. Normal trimmers give up on thick grass and wild weeds. But this grass sickle cutter head cuts through everything. Tall grass, tents, bushes, even sugarcane like stalks. अब जंगल को garden बनाना दस minute का काम है. Ultra sharp durable steel teeth, just fix it and power through.
 ```
 
 ---
 
 ### Meta Ad: 4 (ID: 120228277946220128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi,en
+- **Word Count**: 42
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+घास काटते काटते, पूरा Sunday चला गया. Old tools waste your time and energy. This cutter head finishes the job 3x faster. Attach to any brush cutter and slice through hours of work in minutes. अब gardening में मेहनत नहीं, मज़ा है.
 ```
 
 ---
 
 ### Meta Ad: 24 (ID: 120228277946390128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 46
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Gardening का काम शांति का होना चाहिए, punishment नहीं. Grass sickle cutter head से वही काम होता है 3X faster. Fast cutting, clean edges और लंबी durability. अब दो घंटे का काम सिर्फ़ बीस minute में. अब Sunday बचेगा आपके लिए. Cutter head अभी order करें.
 ```
 
 ---
 
 ### Meta Ad: Shoes Video Creative 1 – Adset 1 (ID: 120227590908890128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 143
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+गर्मियों में ठंडा ठंडा नींबू शरबत पिने मिले, इसलिए मैंने terrace पर यह नींबू का पौधा लगाया था. मुझे तो विश्वास ही नहीं हो रहा इतने छोटे से पौधे पर इतने नींबू आने लग गए. यह चादू हुआ इन doctor green magic sticks की वजह से. जब से मैंने इन sticks को use करना शुरू कर दिया, मेरे plants कम से कम care में काफ़ी तेजी से grow हो रहे हैं. बस एक stick को लेकर आपको अपने plant में इस तरह से लगाना है और रोज़ की तरह पानी देना है. फिर यह stick अगले तीस दिन तक पौधे को सारे essential nutrients provide करने का काम करती है, जिससे पौधे एकदम healthy और हरे भरे हो जाते हैं. अगर आप भी घर पर फूलो फलो से भरे plants चाहते हैं, तो आपको इन sticks को ज़रूर इस्तेमाल करना चाहिए. Order now.
 ```
 
 ---
 
 ### Meta Ad: Video Tech Content - Var 2 (ID: 120227191872780128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi,en
+- **Word Count**: 44
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+हम ले आए हैं आपके लिए यह शानदार two in one dumpling momos maker. इससे आप मिंटों में momos बना सकते हैं. इसे use करना बहुत आसान है. छोटा और compact, आप इसे कहीं भी store कर सकते हैं. तो आज ही order करें.
 ```
 
 ---
 
 ### Meta Ad: kajju2_mensfashion (ID: 120227696748640128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 41
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+अरे रो क्यों रही हो? नहीं तो क्या करूं? पौधे फिर से मुरझा गए. अरे यह लो doctor Green's magic sticks. इसे गमले में लगाओ और देखो इसका जादू. पौधे बिल्कुल नहीं मुरझाएंगे. अगर घर के पोधों को बचाना है करें.
 ```
 
 ---
 
 ### Meta Ad: Heritage Hide Leather Shoe | shoe002 (ID: 120227644316400128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 127
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+घर पर आया, हर कोई मुझसे यही पूछता है कि आपका यह aloe vera का पौधा इतना बड़ा कैसे हो गया? तो इसका जवाब है यह doctor green की magic sticks. बस इस stick को plant की मिट्टी में लगाएं और देखिए इसका magic. यह stick लगाने के बाद आपको regular पानी डालना. एक stick पूरे तीस दिन तक आपके plant को nutrition देती है और आपके plant को natural fertilizer provide करती है. साथ ही plant की roots को मज़बूत बनाती है जिससे plant बहुत जल्दी grow होता है. यह stick सौ प्रतिशत natural है और सभी तरह के plant के लिए use कर सकते हो. तो अब plant के growth की चिंता छोड़ दो. अभी इन sticks को order करो, link नीचे दी गई है.
 ```
 
 ---
@@ -5128,68 +5350,74 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Interest+Behavior Ad - Video 2 (ID: 120227591349530128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 112
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+आपको पता है कि आपके garden की मिट्टी में ज़रूरी पोशाक तत्वों की कमी हो सकती है. Doctor Green Magic Stick एक organic growth booster है जो आपके पौधों को ज़रूरी nutrients देता है ताकि वह healthy और तेज़ी से बढ़ सके. इस्तेमाल करना भी आसान है, बस stick को मिट्टी में लाओ. फिर देखें कैसे आपके पौधे खिलने लगते हैं और उनमें नई जान आ जाती है. इसके natural nutrients सीधे जड़ों तक पहुंचते हैं, उन्हें मज़बूत बनाते हैं और growth को naturally accelerate करते हैं. आपका garden हो जाता है lush, green और vibrant. आज ही try करें doctor green magic stick और अपने garden को दे एक नई ज़िंदगी.
 ```
 
 ---
 
 ### Meta Ad: Shoes Video Creative 1 – Adset 2 (ID: 120227590913210128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 143
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+गर्मियों में ठंडा ठंडा नींबू शरबत पिने मिले, इसलिए मैंने terrace पर यह नींबू का पौधा लगाया था. मुझे तो विश्वास ही नहीं हो रहा इतने छोटे से पौधे पर इतने नींबू आने लग गए. यह चादू हुआ इन doctor green magic sticks की वजह से. जब से मैंने इन sticks को use करना शुरू कर दिया, मेरे plants कम से कम care में काफ़ी तेजी से grow हो रहे हैं. बस एक stick को लेकर आपको अपने plant में इस तरह से लगाना है और रोज़ की तरह पानी देना है. फिर यह stick अगले तीस दिन तक पौधे को सारे essential nutrients provide करने का काम करती है, जिससे पौधे एकदम healthy और हरे भरे हो जाते हैं. अगर आप भी घर पर फूलो फलो से भरे plants चाहते हैं, तो आपको इन sticks को ज़रूर इस्तेमाल करना चाहिए. Order now.
 ```
 
 ---
 
 ### Meta Ad: Test Video Ad (ID: 120227514488000128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 92
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+आपको भी घर पर अलग अलग तरह के food cook करना पसंद है? इस dual dump मेघर की मदद से momos, मोदक और different dumplings बनाएं चुटकियों में. Simply इसके flat side पर dough रखें और press करें और perfect shade dumpling skin तैयार है. फिर दूसरे side इसे अपने favorite ingredient से fill करें और सिर्फ इस liver को pull करें. आपकी dumplings cook करने के लिए ready हैं. यह parties और daily kitchen use के लिए perfect product है. Best price के लिए shop now button पर अभी click करें.
 ```
 
 ---
 
 ### Meta Ad: Test Ad (ID: 120227514475060128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 92
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+आपको भी घर पर अलग अलग तरह के food cook करना पसंद है? इस dual dump मेघर की मदद से momos, मोदक और different dumplings बनाएं चुटकियों में. Simply इसके flat side पर dough रखें और press करें और perfect shade dumpling skin तैयार है. फिर दूसरे side इसे अपने favorite ingredient से fill करें और सिर्फ इस liver को pull करें. आपकी dumplings cook करने के लिए ready हैं. यह parties और daily kitchen use के लिए perfect product है. Best price के लिए shop now button पर अभी click करें.
 ```
 
 ---
 
 ### Meta Ad: Ad - Open (ID: 120227194515680128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Tech Young Adults - Variation 5 (ID: 120227191487340128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -5200,8 +5428,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Fashion Female Metro Cities - Variation 6 (ID: 120227191452090128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -5212,8 +5441,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Image Fashion Content - Var 6 (ID: 120227191686920128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -5224,8 +5454,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Image Fashion Content - Var 3 (ID: 120227191656620128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -5236,8 +5467,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: New Engagement ad (ID: 120221491844710128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -5248,128 +5480,139 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120210593287480128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 116
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+यह है stainless steel corner shelf जो आपके बिखरे हुए bathroom या kitchen के लिए बहुत ज़रूरी है क्योंकि इन shelves में आप अपने बहुत से सामान को store कर सकते हैं. आप इसे bathroom या kitchen दोनों में उपयोग कर सकते हैं. Bumper offer में आपको एक ख़रीदने पर एक free मिल रहा है. इनके size के कारण यह आराम से पांच kilo तक के बाहर को झेल सकती हैं तो टूटने का सवाल ही नहीं उठता. इसे लगाने के लिए कोई कील ठोकने की ज़रूरत नहीं है क्योंकि इसमें आती हैं यह self adhesive hooks जो बिल्कुल मज़बूत पकड़ बना लेती है. एक सुंदर bathroom या kitchen के लिए यह product बहुत ज़रूरी है.
 ```
 
 ---
 
 ### Meta Ad: 5 (ID: 120210390379850128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: multi
+- **Word Count**: 41
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+कल कर्मीणा, कारु लुनी dashboard, सितलू, steering vial, बील cover लु वंटी plastic aprit लालू तेलगा, मर्यू पाठविगा खने पिस्ताई, कानी इपुडू अला जगदू, नीमू plastic restoring palising agent नूती सुकूफ चामू, दानी ने पूम प्याट पाई अपने सीसी शुभरन चेंडी.
 ```
 
 ---
 
 ### Meta Ad: 4 (ID: 120210390289200128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 102
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Over time, your car's dashboard, seats, steering wheel, doors, and wheel covers can turn white and make your car look old. But now, that won't be the case anymore. We present the plastic restoring polishing agent. Simply apply it with a foam pad to your car's plastic parts like the dashboard and other surfaces, and it will use its nano coating technology to restore their shine. Your car will look brand new again. As you can see in the video, the shine doesn't fade even when water is applied. Buy today and take advantage of our buy one get one free offer.
 ```
 
 ---
 
 ### Meta Ad: 2 (ID: 120210390289220128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 98
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+समय के साथ car के dashboard, seats, steering, gates, wheel cover वग़ैरह सफ़ेद पड़ जाते हैं, लेकिन अब ऐसा नहीं रहेगा क्योंकि हम लाए हैं plastic restoring polishing agent. इसे एक foam pad पर लगाकर car के plastic parts जैसे dashboard और बाकी सतहों पर polish कर दीजिए और यह अपनी nano coating technique का उपयोग करके उस सतह की चमक को वापस ले आएगा. अब आपकी car नई जैसी लगने लगेगी. Video में आप देख सकते हैं कि पानी मारने पर भी इसकी चमक नहीं जाती है. आज ही ख़रीदें buy one get one free offer पर.
 ```
 
 ---
 
 ### Meta Ad: 3 (ID: 120210639358690128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: multi
+- **Word Count**: 51
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+क्या आपके bathroom या kitchen में सामान इधर उधर बिखरा रहता है? अगर हां, तो आज ही यह stainless steel corner shelf को order कर दीजिए क्योंकि इन shelves में आप अपने बहुत से सामान को store कर सकते हैं. आप इसे bathroom या kitchen दोनों में उपयोग कर सकते हैं.
 ```
 
 ---
 
 ### Meta Ad: 2 (ID: 120210639358660128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 94
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Bumper offer में आपको एक ख़रीदने पर एक free मिल रहा है. इसे लगाने के लिए कोई कील ठोकने की ज़रूरत नहीं है. इसमें आती हैं यह self adhesive hooks जो बिल्कुल मज़बूत पकड़ बना लेती है. आप इसे bathroom या kitchen दोनों में उपयोग कर सकते हैं. इन shelves में आप अपने बहुत से सामान को store कर सकते हैं. इनके size के कारण यह आराम से पांच kilo तक के भार को झेल सकती है. तो टूटने का सवाल ही नहीं उठता. इससे अच्छा offer नहीं मिलेगा. आज ही owner डर करें.
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120210639358700128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 116
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+यह है stainless steel corner shelf जो आपके बिखरे हुए bathroom या kitchen के लिए बहुत ज़रूरी है क्योंकि इन shelves में आप अपने बहुत से सामान को store कर सकते हैं. आप इसे bathroom या kitchen दोनों में उपयोग कर सकते हैं. Bumper offer में आपको एक ख़रीदने पर एक free मिल रहा है. इनके size के कारण यह आराम से पांच kilo तक के बाहर को झेल सकती हैं तो टूटने का सवाल ही नहीं उठता. इसे लगाने के लिए कोई कील ठोकने की ज़रूरत नहीं है क्योंकि इसमें आती हैं यह self adhesive hooks जो बिल्कुल मज़बूत पकड़ बना लेती है. एक सुंदर bathroom या kitchen के लिए यह product बहुत ज़रूरी है.
 ```
 
 ---
 
 ### Meta Ad: Ad - Video 3 - Smart Features Headlines (ID: 120227185894080128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Ad - Video 1 - Product Focus Headlines (ID: 120227185870160128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi,en
+- **Word Count**: 44
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+हम ले आए हैं आपके लिए यह शानदार two in one dumpling momos maker. इससे आप मिंटों में momos बना सकते हैं. इसे use करना बहुत आसान है. छोटा और compact, आप इसे कहीं भी store कर सकते हैं. तो आज ही order करें.
 ```
 
 ---
 
 ### Meta Ad: Ad - Video 3 - Smart Features Headlines (ID: 120227185744010128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Ad - Image Comparison - Headlines Test (ID: 120227185899630128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -5380,8 +5623,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Ad - Image Comparison - Headlines Test (ID: 120227185753600128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -5392,44 +5636,48 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 4 (ID: 120210390265690128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 62
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+कालांतरा ने कार्चे bench board, seats, steering, gates, wheel cover वग़ैरह पंड्रे पड़तात, अनि त्यामुले तुम्ची कार्जुनी दिसाईला लागते. पंड आता से होनार नाही, कारण आम ही घेउन आलो आहौत plastic restoring polishing agent. एका foam पेंडवर लागून कार्चय plastic parts जैसे DNC board, आनी बाकीचा पृष्ठभागावर polish करा. आनी है आपल्या, नींलंबू coating तंत्र ज्ञानाचा वापर करूंड त्या पृष्ठभागाची चमत्परत अनेल.
 ```
 
 ---
 
 ### Meta Ad: Ad - Video 3 - Smart Features Headlines (ID: 120227185313440128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Ad - Video 1 - Product Focus Headlines (ID: 120227185246800128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi,en
+- **Word Count**: 44
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+हम ले आए हैं आपके लिए यह शानदार two in one dumpling momos maker. इससे आप मिंटों में momos बना सकते हैं. इसे use करना बहुत आसान है. छोटा और compact, आप इसे कहीं भी store कर सकते हैं. तो आज ही order करें.
 ```
 
 ---
 
 ### Meta Ad: Ad - Video 2 - Lifestyle Headlines (ID: 120227185276990128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Deepgram returned an empty transcript.
 
 **Multilingual Transcript**:
 ```
@@ -5440,8 +5688,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Ad - Image Comparison - Headlines Test (ID: 120227185317550128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -5452,8 +5701,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Ad - Different Video Only (ID: 120227147249270128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Deepgram returned an empty transcript.
 
 **Multilingual Transcript**:
 ```
@@ -5464,56 +5714,61 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Ad - Comprehensive Test Set (ID: 120227147241990128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Ad - Text and Description Change (ID: 120227147254270128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Ad - Headline Change Only (ID: 120227147256510128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Ad - CTA Change Only (ID: 120227147258490128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Ad - Custom Image Upload (ID: 120227147252290128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -5524,8 +5779,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Ad - Custom Image Upload (ID: 120227147000940128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -5536,32 +5792,35 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Ad - CTA Change Only (ID: 120227146728440128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Ad - Comprehensive Test Set (ID: 120227146701120128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120221704557800128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -5572,44 +5831,48 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Ad - Different Video Only (ID: 120227146705860128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Ad - Text and Description Change (ID: 120227146720510128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Ad - Headline Change Only (ID: 120227146723370128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Ad - Custom Image Upload (ID: 120227146712180128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -5620,104 +5883,113 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Ad - Ad Variation 6 (ID: 120227146039090128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Ad - Open (ID: 120227146036040128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Ad - Variation 3 - CTA Focus (ID: 120227144869370128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Ad - Variation 1 - Text Focus (ID: 120227144861300128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Ad - Multi Ads Set 20250619_223451 (ID: 120227144857910128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Ad - Open (ID: 120227143597050128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Ad - Test Ad Set (ID: 120227143128720128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: Ad - ⚡ Amazing Heritage Hide Leathe (ID: 120227131335010128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 320
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Now keep your hands free, your phone charged, and your stuff safe with this amazing USB sling bag. From daily commutes to weekend adventures, this sleek and compact bag keeps everything in place, and your phone fully charged thanks to the built in USB port. If you worried about security, don't be. With hidden compartments and anti theft zippers, your valuables stay protected no matter where you go. And with its ergonomic design and lightweight build, comfort and style go hand in hand. This isn't just a bag. It's your tech ready, travel friendly partner that blends fashion with function. Click the link and upgrade your everyday carry. Order the bag today. Always on the move and worried about your essentials? It's time to carry smart with this USB sling bag. Compact, modern, and built for everyday hustle. Whether you're catching the metro, walking through crowded streets, or navigating a college, this bag's anti theft design and secure compartments keep your stuff safe and organized. Plus, it comes with a built in USB charging port, so your phone stays powered up wherever you go. Lightweight, stylish, and made for hands free comfort, this sling bag isn't just an accessory, it's your everyday essential. Now click on the link and order your bag today. Meet the sling bag that powers your phone and protects your valuables. All in one compact design. With its anti theft zippers, hidden compartments, and a built in USB charging port, you can keep your essentials secure and your devices powered up while you're on the move. Perfect for city explorers, daily commuters, or college students. The ergonomic fit ensures comfort all day long without compromising on style. It's lightweight. It's durable. No more worrying about safety or low battery. This is not just a bag. It's a smarter way to travel every day. So, YWA, click the link and upgrade to the USB Sling Bag now.
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120221776012040128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -5728,8 +6000,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Ad - Amazing Product - Limited Time (ID: 120227126930230128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -5740,8 +6013,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Ad - 🔥 Get Heritage Hide Leather Sh (ID: 120227131063460128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -5752,8 +6026,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Ad - 🔥 Get Heritage Hide Leather Sh (ID: 120227130896450128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -5764,8 +6039,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Ad - 🔥 Get Heritage Hide Leather Sh (ID: 120227128125770128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -5776,8 +6052,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Ad - Amazing Product - Limited Time (ID: 120227127512830128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -5788,8 +6065,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Ad - Limited Time Offer (ID: 120227126192560128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -5800,8 +6078,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Ad - Shop Now & Save Big (ID: 120227125448050128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -5812,8 +6091,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: New Awareness ad (ID: 120212989563930128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -5824,12 +6104,13 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 3 (ID: 120210841403520128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 201
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Three reasons why single men should get Cupid's Hypnosis two point o. Number one, it's infused with twice the amount of pheromones of the original Cupid Hypnosis, helping them create two times stronger attraction in women. It smells so sexy that it's been on my mind twenty four seven since I first got it. I physically can't stop myself. It smells so good. I would crave you if I smelled this on you. I was all over him like we were teenagers again. Number two, it's twice as potent so you can spray less, get better results, and use it for longer. Once you spray it, you're good for the day. You don't need to keep on reapplying throughout the night like would have to do with the cheap spray. And number three, they upgraded their scent from manly to lumberjack level. So it makes men smell like women really want them to smell. I'd wanna eat you up. It makes me feel some type of way. It smells like you love cupids. Thousands of men can't stop going on about how much they love cupids. Join them now and get it for fifty percent off at cupid fragrances dot com.
 ```
 
 ---
@@ -5914,48 +6195,52 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: Shoes Video Creative 2 – Adset 1 (ID: 120227590912180128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 112
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+आपको पता है कि आपके garden की मिट्टी में ज़रूरी पोशाक तत्वों की कमी हो सकती है. Doctor Green Magic Stick एक organic growth booster है जो आपके पौधों को ज़रूरी nutrients देता है ताकि वह healthy और तेज़ी से बढ़ सके. इस्तेमाल करना भी आसान है, बस stick को मिट्टी में लाओ. फिर देखें कैसे आपके पौधे खिलने लगते हैं और उनमें नई जान आ जाती है. इसके natural nutrients सीधे जड़ों तक पहुंचते हैं, उन्हें मज़बूत बनाते हैं और growth को naturally accelerate करते हैं. आपका garden हो जाता है lush, green और vibrant. आज ही try करें doctor green magic stick और अपने garden को दे एक नई ज़िंदगी.
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120210390289230128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 100
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+क्या आपके car का dashboard, plastic parts, seats या आपके घर के furniture की चमक उड़ चुकी है? अगर हां, तो यह product आपके लिए ही है. यह है plastic restoring polishing agent. इसे एक foam pad पर लगाकर car के parts जैसे dashboard जैसे सतहों पर polish कर दीजिए और यह अपनी nano coating technique का उपयोग करके उस सतह की चमक को वापस ले आएगा. अब आपकी car नई जैसी लगने लगेगी. Video में आप देख सकते हैं कि पानी मारने पर भी इसकी चमक नहीं जाती है. आज ही ख़रीदें buy one get one free offer पर.
 ```
 
 ---
 
 ### Meta Ad: 2 (ID: 120210390265670128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: multi
+- **Word Count**: 38
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+तुम्ही नवीन कार घेतली आहे का अनि plastic parts फिक्कठ झाले आहित का. या plastic restoration agent ला मागवा. कारण है तुम्चा कार्चा blank parts, leather parts, interiors इत्यादिन ना पुन्हा नवीन सार के बनबू शक्ते. वेलो वेली
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120210390177830128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 91
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+क्या आपल्या कारचा dinush board, plastic parts, seats कीन्वा आपल्या घरातील furniture चीचमक उड़ा लिया है? जर होए दर हा product तुमचा साठीचा है. हां, आहे plastic restoring polishing agent. है एक foam पीयेंडवर लावून कारचा plastic parts जैसे dinush board अनी इतर पृष्ठ भागांबर polish करा. अनी है आपल्या नेन्नो coating तंत्र जाना चाह वापर करुण प्यापृष्ठ भागाची चमक पुनः आड़ते. अता तुम चिकार नवीन सार्खी दिसेल. Video मध्य तुम्हीं पाहू शक्ता की ताकल्यावर सुद्धा याची चमक जात ना ही. आज़च खरेदी करा buy one gate one free ओमफ्रम मध्य.
 ```
 
 ---
@@ -6053,8 +6338,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 2 (ID: 120250436014380128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6065,12 +6351,13 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120249789604940128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 51
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+कुछ खुशबुएं वक्त के साथ भी नहीं बदलती. दादी, आपके कमरे की खुशबू आज भी वैसी ही है. सत्मी? कुछ खुशबुएं, सिर्फ महकती नहीं, याद वन जाती हैं. सत्मी, bamboo less incense sticks. अपने घर की पहचान बनाइए अपनी पसंद की खुशबू से. तीन खुशबुएं सिर्फ नौ सौ निन्यानवे रुपए में.
 ```
 
 ---
@@ -6090,20 +6377,22 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120250357311150128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 162
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+मेरी मां रोज़ एक ऐसी अगरबत्ती जलाती थी जिसमें से काला धुआ निकलता था. एक दिन मैंने कहा, मां please यह मत जलाया करो. अगले दिन जब मैं घर आया तो हैरान रह गया. ना कोई धुआं, ना वह भारी सी smell, बस पूरे घर में केसर और चंदन की इतनी सुकून भरी खुशबू फैली हुई थी कि मोट ही fresh हो गया. मैंने मां से पुछा, मां यह खुशबू कहां से आ रही है? तब उन्होंने मुझे सत्मी का यह box दिखाया. Packaging देखकर ही समझ आ गया कि यह कोई सस्ती या chemical वाली अगरबत्ती नहीं है. फिर जब मैंने stick निकाली और ध्यान से देखा तो पता चला कि यह गाय की गुबर से बनी है, मतलब पूरी तरह organic. तब मुझे लगा, अच्छा, इसलिए इतनी premium लग रही है. पक्का महंगी होगी. मैंने मां से पुछा, कितनी की आती है? मां बस मुस्कुराकर बोलीं, बेटा, refill pack तो लगभग उतने का ही पड़ता है जितनी तुम्हारी normal अगरबत्ती.
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120250357311140128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Deepgram returned an empty transcript.
 
 **Multilingual Transcript**:
 ```
@@ -6114,92 +6403,100 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120250324670000128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 114
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+सत्मी की premium incense sticks पर यही क्यों? यह जटा मांगसी और cowden जैसे natural ingredients है बनी है और bambulis भी है क्योंकि हिंदू rituals के according बास को मंदिर और घरों में नहीं जलाना चाहिए. इसके एक pack में hundred incense sticks आते हैं जो पूरे से तीन महीने तक चलती हैं और अभी सत्मी के special buy to get one free offer में सिर्फ nine ninety nine में तीन premium incense boxes मिल रहे हैं और अपनी पसंद की कोई सी भी तीन favorite fragrances choose कर सकते हैं. जब इतने सारे फ़ायदे मिल रहे हैं तो time waste क्यों करना? तुरंत सत्मी dot in पर जाइए और offer avail करिए.
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120250324670020128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 63
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+मैंने यह नौ सौ निन्यानवे रुपए वाला pack लिया. पहले लगा थोड़ा expensive है. फिर मैंने एक simple comparison किया. Market वाली अगरबत्ती जलते ही काला धुआं और बहुत तेज़ smell और दस minute बाद सर दर्द. यह bamboo less है natural ingredient से बनी है. खुशबू महसूस होती है चुभती नहीं इसलिए मुझे इसका difference समझ आया. Homes should feel like home.
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120250324514480128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 65
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+काफी time बाद घर आया था. सुबह उठते ही एक अलग सी खुशबू आई. दादी ने अपनी favorite गुलाब incense stick जला रखी थी और शाम को देखा तो दादा नाग चंपा वाली, जिसमें चंपा पेटles की महक आ रही थी. मैंने mummy से पुछा तो बोलीं, सत्मी का seven point nine nine combo मंगवाया है. अब दोनों की favorite fragrance घर में रहती है.
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120250324670010128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi,en
+- **Word Count**: 43
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Premium होना महंगा होना नहीं होता. Premium वह होता है जिसे रोज़ इस्तेमाल करने का मन करें और यह चंदन वाली incense stick रोज़ जलाना आपकी आदत वन जाएगी. Best quality with organic ingredients comes with beautiful ceramic stand which adds aesthetics too.
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120250324654620128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 71
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+मैंने काफी brands try किए हैं. किसी में smell अच्छी थी, smoke ज़्यादा, किसी में burn time अच्छा था, fragrance नहीं. लेकिन सत्मी, यह वह अगरबत्ती है जिसे जलाने के बाद लगता है बस, घर complete लग रहा है. कभी कभी product नहीं, feeling choose करनी चाहिए. और अगर try करनी ही है तो अभी सही time है. अब सिर्फ़ नौ सौ निन्यानवे में तीन boxes. Buy two, get one free.
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120250324514490128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 57
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+आज सुबह मेरा सत्मी का parcel आया. Box खोला तो अंदर एक extra incense stick box था. मैंने सोचा यह तो packing की mistake लग रही है. फिर मैंने order check किया और पता चला यह गलती नहीं थी. Buy one get one free offer चल रहा है. Honestly एक box expect किया था, दो मिल गए.
 ```
 
 ---
 
 ### Meta Ad: HIM0010 ISH0082 ISH0071 (ID: 120250106194100128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 2
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Hi. Hi.
 ```
 
 ---
 
 ### Meta Ad: ISH0081 ISH0083 (ID: 120250106124390128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Deepgram returned an empty transcript.
 
 **Multilingual Transcript**:
 ```
@@ -6210,32 +6507,35 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: TAM0041 TAM0037 TAM0035 (ID: 120250106194120128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: en
+- **Word Count**: 16
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+I can't move on baby dog. Waiting no cars looking good to stay. I'm out right
 ```
 
 ---
 
 ### Meta Ad: 5 (ID: 120249818261490128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 63
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+मैंने यह नौ सौ निन्यानवे रुपए वाला pack लिया. पहले लगा थोड़ा expensive है, फिर मैंने एक simple comparison किया. Market वाली अगरबत्ती जलते ही काला धुआं और बहुत तेज़ smell और दस minute बाद सर दर्द. यह bamboo less है, natural ingredient से बनी है. खुशबू महसूस होती है, चुभती नहीं इसलिए मुझे इसका difference समझ आया. Homes should feel like home.
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120249817915280128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: The remote server hosting the media returned a client error: 403 Forbidden.
 
 **Multilingual Transcript**:
 ```
@@ -6259,20 +6559,22 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120249789604950128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 83
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+कभी सोचा है? तीस रुपए की अगरबत्ती इतनी strong गुलाब की ख़ुशबू कैसे दे देती है? Mostly वह strong fragrance chemicals और artificial perfume से आती है. इसलिए जलाते ही काला धुआं बहुत तेज़ smell और कभी कभी आंखों में irritation भी feel होती है. हमारी गुलाब incense में rose powder, herbs और essential oils जैसे ingredients use होते हैं. इसलिए fragrance room पर attack नहीं करती, naturally धीरे धीरे feel होती है. बस यही difference है, strong smell और अच्छी खुशबू में.
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120249744105960128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: fetch failed
 
 **Multilingual Transcript**:
 ```
@@ -6283,116 +6585,126 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120249587355660128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 22
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+यह कैसा अगरबत्ती जला दिया? ऐसे कैसे मिलेगा सुकून? अब आईना बात, ऐसी ख़ुशबू मिले तो एक के साथ एक free लाना.
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120249587355640128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 52
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+Fragrance choose करना भी ना Netflix पर movie choose करने जैसा हो गया है. बीस minute देखते रहो और end में confusion और बढ़ जाता है. तो इस बार choose ही नहीं किया. सीधा buy one get one free offer में two incense stick boxes order कर लिए. अब सब sorted हैं.
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120249500382810128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 64
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+काफी time बाद घर आया था. सुबह उठते ही एक अलग सी खुशबू आई. दादी ने अपनी favorite गुलाब incense stick जला रखी थी और शाम को देखा तो दादा नाग चंपा वाली, जिसमें चंपा petals की महक आ रही थी. मैंने mummy से पुछा तो बोलीं, सत्मी का seven ninety nine combo मंगवाया है. अब दोनों की favorite fragrance घर में रहती है.
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120249499292400128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 48
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+मैं best हूँ. मेरी fragrance सबसे मस्त, नहीं नहीं, मैं best हूँ. Customers मुझे ही choose करते हैं, मेरी खुशबू सुनते ही दिल खुश हो जाता है. अरे भाई लड़ क्यों रहे हो? Incense sticks पर buy one get one offer चल रहे हैं, दोनों मेरे साथ चलो.
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120249408696240128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi,en
+- **Word Count**: 41
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+The दिया was glowing, the room was quiet and a familiar fragrance filled the air. It was the warmth of चंदन, a scent that has been a part of sacred moments for generations. A small incense stick carrying a timeless story.
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120249412350190128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 47
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+शिवजी को चंदन अर्पित करने की परंपरा इतनी पुरानी है कि इसका आरंभ कब हुआ? कोई नहीं जानता. बस इतना जानते हैं कि आज भी चंदन उतना ही पवित्र माना जाता है. आज भी बहुत से घरों में दिन की शुरुआत उसी की खुशबू से होती है.
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120249500382800128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 57
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+आज सुबह मेरा सत्मी का parcel आया. Box खोला तो अंदर एक extra incense stick box था. मैंने सोचा यह तो packing की mistake लग रही है. फिर मैंने order check किया और पता चला यह गलती नहीं थी. Buy one get one free offer चल रहा है. Honestly एक box expect किया था, दो मिल गए.
 ```
 
 ---
 
 ### Meta Ad: hk 32/ hk55 (ID: 120248751121010128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 42
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+पहले अगरबत्ती जलाते ही कमरा धुएं से भर जाता था. अब सिर्फ़ खुशबू फैलती है. सत्मी उध इंसेंस टिक की यही खासियत है, इसे सबसे अलग बनाती है. Natural ingredient से बनी कम धुएं वाली अगरबत्ती ताकि आपको सुकून मिले, परेशानी नहीं.
 ```
 
 ---
 
 ### Meta Ad: 1 (ID: 120248750686310128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 11
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+प्रभु जी भूल गए क्या? प्रभु जी मुझको भूले गए लोग.
 ```
 
 ---
 
 ### Meta Ad: 10 – Copy (ID: 120240454280500128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6403,8 +6715,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 4 – Copy (ID: 120240454280540128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6415,8 +6728,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 7 – Copy (ID: 120240454280560128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6427,20 +6741,22 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 – Copy (ID: 120240454445380128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 121
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+सिर्फ़ four ninety nine rupees में original करूंगाली माला और वह भी government lab certified. हां भाई बिल्कुल सच. यह वही करूंगाली है जो धनुष रजनीकांत जैसे celebs और कई businessman पहनते आए हैं. हम market से उठाकर बेचने वाले नहीं हैं. करूंगाली हम ख़ुद source करते हैं, ख़ुद process करते हैं और ख़ुद माला बनाते हैं. इसलिए originality में कोई doubt ही नहीं. But proof के लिए फिर भी हमारी सारी करूंगाली government and private lab दोनों से certified होते हैं. हर order के साथ आपको मिलेगा पांच मुखी रुद्राक्ष बुद्ध कुल free and free home delivery. Premium packaging तो है ही, पर four ninety nine rupees का offer सिर्फ limited stock के लिए है. बाद में regret मत करना.
 ```
 
 ---
 
 ### Meta Ad: 2 – Copy (ID: 120240454835280128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6451,8 +6767,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 9 – Copy (ID: 120240454280490128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6463,8 +6780,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 5 – Copy (ID: 120240454835270128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6475,8 +6793,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 3 – Copy (ID: 120240454835290128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6487,8 +6806,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 3 – Copy (ID: 120240454688450128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6499,8 +6819,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 5 – Copy (ID: 120240454280470128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6511,8 +6832,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 2 – Copy (ID: 120240454688420128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6523,8 +6845,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 6 – Copy (ID: 120240454688390128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6535,8 +6858,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 3 – Copy (ID: 120240454280480128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6547,8 +6871,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 12 – Copy (ID: 120242268342680128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6559,8 +6884,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 4 – Copy (ID: 120242268357290128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Deepgram returned an empty transcript.
 
 **Multilingual Transcript**:
 ```
@@ -6571,8 +6897,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 2 – Copy (ID: 120242268342700128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6583,8 +6910,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 11 – Copy (ID: 120242268342710128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6595,8 +6923,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 6 – Copy (ID: 120242268342750128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6607,8 +6936,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 7 – Copy (ID: 120242268342740128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6619,8 +6949,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 5 – Copy (ID: 120242268342670128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6631,8 +6962,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 – Copy (ID: 120242268342730128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6643,8 +6975,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 10 – Copy (ID: 120242268342690128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6655,8 +6988,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 8 – Copy (ID: 120242268342720128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6667,8 +7001,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 9 – Copy (ID: 120242268342650128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6679,20 +7014,22 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 5 – Copy (ID: 120242268357320128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 31
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+इनमें से कोई भी दो मारा उठा लें. आप अपनी पसंद का सटनी के सात सौ निन्यानवे बार बार get one offer के अंदर. Go and shop now, come सकते हैं.
 ```
 
 ---
 
 ### Meta Ad: 4 – Copy (ID: 120242268342760128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6703,32 +7040,35 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: BG5 (ID: 120242268397550128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 29
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+कंधा नीतेरेरी कदम्बा, वो वीरों सूरी कुट्ट, मुरस्कुट्ट वार मैया, हर बाड़े गिल, बोड़ी पेर ल, हर बुगने वो बीरो. गालगाल, पादा पिन्नाहित्तो, लाडंदीरंदा, आजचमिचम गिन्री, होगादा. मुर्दा, मुर्दी
 ```
 
 ---
 
 ### Meta Ad: 3 – Copy (ID: 120242268357310128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
-- **Detected Language**: N/A
+- **Status**: transcript_available
+- **Detected Language**: hi
+- **Word Count**: 76
 
 **Multilingual Transcript**:
 ```
-[No Transcript Available]
+सिर्फ सात सौ निन्यानवे में एक करोमली माला के साथ दूसरा फिर से free और उसके साथ चार सौ निन्यानवे का पंचमुखी रुद्राक्ष जो कि original और lab certified है बिल्कुल free और साथ में अगर आप prepaid orders करते हैं तो अलग से fifty one rupees का off. उसके साथ free home delivery और सटनी का premium packaging. अब क्या चाहिए बच्चे की जान लोगे? Go and shop now from सटनी क्योंकि stocks limited हैं.
 ```
 
 ---
 
 ### Meta Ad: 2 – Copy (ID: 120242268357330128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 1965570570664148: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -6739,8 +7079,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 8 – Copy (ID: 120240454688440128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6751,8 +7092,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 2 collection new (ID: 120247357693580128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6763,8 +7105,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 product (ID: 120247357003640128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6775,8 +7118,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 2 product (ID: 120247356720830128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6787,8 +7131,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 collection (ID: 120247357261330128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6799,8 +7144,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 collection (ID: 120247356720820128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6811,8 +7157,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 collection (ID: 120247357389930128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: No video ID found on this Meta ad creative.
 
 **Multilingual Transcript**:
 ```
@@ -6823,8 +7170,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 3 PRODUCT PAGE (ID: 120247229657680128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 1950410388940984: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -6835,8 +7183,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120247229222070128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 874914995673812: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -6847,8 +7196,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120247229565230128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 998822199536837: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -6859,8 +7209,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 2 (ID: 120247229565190128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 1950410388940984: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -6871,8 +7222,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 2 (ID: 120247229533280128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 2400949047067740: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -6883,8 +7235,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 4 havan – collection (ID: 120246947120050128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 1025523153471334: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -6895,8 +7248,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 3 gulab (ID: 120246947036420128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 1021366747112808: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -6907,8 +7261,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 3 collection (ID: 120246947056980128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 1021366747112808: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -6919,8 +7274,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 4 havan (ID: 120246947064920128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 1025523153471334: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -6931,8 +7287,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 – collection (ID: 120246947878880128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 1558583282268085: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -6943,8 +7300,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120246947764650128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 4002232366743749: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -6955,8 +7313,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 – collection (ID: 120246947974470128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 27054921030804679: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -6967,8 +7326,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 3 – collection (ID: 120246947886820128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 958288773711445: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -6979,8 +7339,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 2 – collection (ID: 120246947885170128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 996009812822300: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -6991,8 +7352,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120246946474370128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 1558583282268085: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -7003,8 +7365,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 2 – collection (ID: 120246947978320128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 4027376240894626: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -7015,8 +7378,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120246946474410128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 27054921030804679: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -7027,8 +7391,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 2 (ID: 120246946474360128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 996009812822300: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -7039,8 +7404,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 3 (ID: 120246946474350128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 958288773711445: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -7051,8 +7417,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120246946474390128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 1347384907252909: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -7063,8 +7430,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 2 (ID: 120246946474380128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 4027376240894626: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -7075,8 +7443,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120246720352500128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 1624392851984798: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -7087,8 +7456,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: BG9 (ID: 120242268397480128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 1998232180768400: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -7099,8 +7469,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 – Copy (ID: 120242268357300128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 5329967867227454: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -7111,8 +7482,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 2 (ID: 120246531285830128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 1927677434391939: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -7123,8 +7495,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 2 (ID: 120246531240330128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 3946461722155448: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -7135,8 +7508,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120246277659230128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 986269187440834: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
@@ -7147,8 +7521,9 @@ This is करुंगुली also known as Abony Wood. करुंगुल
 
 ### Meta Ad: 1 (ID: 120246276301670128)
 - **Spend**: ₹0
-- **Status**: not_transcribed
+- **Status**: failed
 - **Detected Language**: N/A
+- **Extraction Note**: Could not read Meta video 1860915734582649: (#4) Application request limit reached
 
 **Multilingual Transcript**:
 ```
