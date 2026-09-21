@@ -48,10 +48,47 @@ function cosineSimilarity(a, b) {
   return dot;
 }
 
-function extractKeywords(text) {
-  const clean = text.toLowerCase().replace(/[^a-z0-9]/g, ' ');
-  const words = clean.split(/\s+/).filter(w => w.length > 3);
-  return new Set(words);
+function normalizeSpelling(text) {
+  return text
+    .toLowerCase()
+    .replace(/khushboo|khushbu|khusboo|khusbu/g, 'khushbu')
+    .replace(/agarbatti|agarbathi|agarbati|incense/g, 'agarbatti')
+    .replace(/dhuaand|dhuand|dhuaan|dhuan/g, 'dhuan')
+    .replace(/dabbe|dibbe|dabba|dibba|boxes|box/g, 'dabbe')
+    .replace(/nau sau ninyanve|nine point nine nine|nine ninety nine|999|₹999/g, 'num999')
+    .replace(/buy two get one free|buy 2 get 1 free|buy too get one free|b2g1/g, 'b2g1')
+    .replace(/teen|three|tin/g, 'num3')
+    .replace(/ceramic stand|ceramic stand free/g, 'ceramicstand')
+    .replace(/bambooless|bamboo less/g, 'bambooless')
+    .replace(/charcoal free|charcoal-free|charcoalfree/g, 'charcoalfree')
+    .replace(/satmi|satmya|satmiya/g, 'satmi')
+    .replace(/white wash|whitewash|paint ki smell/g, 'whitewash')
+    .replace(/papa ne dekha|papa bole/g, 'papadialogue')
+    .replace(/mehmaan|mehman/g, 'mehman')
+    .replace(/janmashtami|krishna ji|krishna bhagwan/g, 'janmashtami')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function identifyAnchors(text) {
+  const norm = normalizeSpelling(transliterateDevanagari(text));
+  const found = new Set();
+  if (norm.includes('num999')) found.add('offer_999');
+  if (norm.includes('b2g1')) found.add('offer_b2g1');
+  if (norm.includes('pack of') || (norm.includes('num3') && (norm.includes('dabbe') || norm.includes('pack')))) found.add('pack_of_3');
+  if (norm.includes('ceramicstand')) found.add('ceramic_stand');
+  if (norm.includes('bambooless')) found.add('bambooless');
+  if (norm.includes('charcoalfree')) found.add('charcoalfree');
+  if (norm.includes('chandan')) found.add('aroma_chandan');
+  if (norm.includes('gulab')) found.add('aroma_gulab');
+  if (norm.includes('oudh')) found.add('aroma_oudh');
+  if (norm.includes('jatamansi')) found.add('aroma_jatamansi');
+  if (norm.includes('whitewash')) found.add('angle_whitewash');
+  if (norm.includes('papadialogue') || (norm.includes('papa') && norm.includes('dabbe'))) found.add('angle_papa');
+  if (norm.includes('janmashtami')) found.add('angle_janmashtami');
+  if (norm.includes('mehman')) found.add('angle_mehman');
+  if (norm.includes('relationship') || norm.includes('compromise')) found.add('angle_relationship');
+  return found;
 }
 
 async function main() {
@@ -101,7 +138,7 @@ async function main() {
   }
 
   if (!scriptEmbeddings.length) {
-    console.log(`Computing embeddings for ${allScripts.length} scripts in Creative Library...`);
+    console.log(`Computing multi-anchor embeddings for ${allScripts.length} scripts in Creative Library...`);
     const startTime = Date.now();
     for (let i = 0; i < allScripts.length; i++) {
       const script = allScripts[i];
@@ -110,6 +147,10 @@ async function main() {
       }
       const combinedText = `${script.creative_code} ${script.product} ${script.hook} ${script.script_text}`.slice(0, 1500);
       const out = await embedder(combinedText, { pooling: 'mean', normalize: true });
+
+      const sHook = transliterateDevanagari(script.hook || script.product).slice(0, 160);
+      const hookOut = await embedder(sHook, { pooling: 'mean', normalize: true });
+
       scriptEmbeddings.push({
         ad_id: script.ad_id,
         creative_code: script.creative_code,
@@ -117,7 +158,9 @@ async function main() {
         creator: script.creator,
         editor: script.editor,
         hook: script.hook,
-        embedding: Array.from(out.data)
+        embedding: Array.from(out.data),
+        hookEmbedding: Array.from(hookOut.data),
+        anchors: Array.from(identifyAnchors(script.script_text || ''))
       });
     }
     fs.writeFileSync(embeddingsCachePath, JSON.stringify(scriptEmbeddings), 'utf8');
@@ -144,30 +187,44 @@ async function main() {
     const tOut = await embedder(combinedTranscript, { pooling: 'mean', normalize: true });
     const tVector = Array.from(tOut.data);
 
-    // Score all scripts
+    // Multi-Anchor Triangulation
+    const tAnchors = identifyAnchors(transliterated);
+    const tHook = transliterated.slice(0, 160);
+    const tHookOut = await embedder(tHook, { pooling: 'mean', normalize: true });
+    const tHookVector = Array.from(tHookOut.data);
+
+    // Score all scripts in memory via instant dot products
     const scored = [];
-    const tKeywords = extractKeywords(transliterated);
 
     for (let j = 0; j < scriptEmbeddings.length; j++) {
       const sc = scriptEmbeddings[j];
-      let sim = cosineSimilarity(tVector, sc.embedding);
+      const sim = cosineSimilarity(tVector, sc.embedding);
+      const hookSim = sc.hookEmbedding ? cosineSimilarity(tHookVector, sc.hookEmbedding) : sim;
 
-      // Check key keyword bonus (shared entities like 999, buy 2 get 1, satmi, papa, etc.)
-      let sharedCount = 0;
-      const sKeywords = extractKeywords(allScripts[j].script_text);
-      for (const kw of tKeywords) {
-        if (sKeywords.has(kw)) sharedCount++;
+      // Check shared commercial & narrative anchors
+      const sAnchors = new Set(sc.anchors || []);
+      const sharedAnchors = [];
+      for (const a of tAnchors) {
+        if (sAnchors.has(a)) sharedAnchors.push(a);
       }
 
-      if (sharedCount >= 3) {
-        sim += Math.min(sharedCount * 0.015, 0.06);
+      // Composite multi-anchor weighted similarity
+      let compositeScore = sim * 0.70 + hookSim * 0.20;
+      if (sharedAnchors.length >= 2) {
+        compositeScore += Math.min(sharedAnchors.length * 0.03, 0.10);
+      } else if (sharedAnchors.length === 1) {
+        compositeScore += 0.02;
       }
+
+      compositeScore = Math.min(Math.max(compositeScore, 0), 1);
 
       scored.push({
         candidate: sc,
         script: allScripts[j],
-        sim: Number(sim.toFixed(4)),
-        sharedKeywords: sharedCount
+        sim: Number(compositeScore.toFixed(4)),
+        bodySim: Number(sim.toFixed(4)),
+        hookSim: Number(hookSim.toFixed(4)),
+        sharedAnchors
       });
     }
 
@@ -182,26 +239,28 @@ async function main() {
     let matchedCode = null;
     let rationale = '';
 
-    if (best.sim >= 0.74 && margin >= 0.06) {
+    const hasStrongAnchors = best.sharedAnchors.length >= 2 || (best.sharedAnchors.length >= 1 && best.hookSim >= 0.70);
+
+    if (best.sim >= 0.76 && margin >= 0.05 && hasStrongAnchors) {
       confidence = 'high';
       matchedAdId = best.candidate.ad_id;
       matchedCode = best.candidate.creative_code;
       highCount++;
-      rationale = `High confidence match (${(best.sim * 100).toFixed(1)}%, margin: +${(margin * 100).toFixed(1)}%). Transcribed spoken speech aligns with ${best.candidate.creative_code} ("${best.candidate.product}"). Hook/theme: "${best.candidate.hook.slice(0, 80)}...". Creator: ${best.candidate.creator}.`;
-    } else if (best.sim >= 0.65 && margin >= 0.04) {
+      rationale = `High confidence (${(best.sim * 100).toFixed(1)}%, margin: +${(margin * 100).toFixed(1)}%). Corresponds to ${best.candidate.creative_code} ("${best.candidate.product}"). Hook: "${best.candidate.hook.slice(0, 70)}...". Anchors verified: [${best.sharedAnchors.join(', ')}]. Creator: ${best.candidate.creator}, Editor: ${best.candidate.editor}.`;
+    } else if (best.sim >= 0.65 && margin >= 0.03) {
       confidence = 'medium';
       matchedAdId = best.candidate.ad_id;
       matchedCode = best.candidate.creative_code;
       mediumCount++;
-      rationale = `Moderate match (${(best.sim * 100).toFixed(1)}%, margin: +${(margin * 100).toFixed(1)}%). Corresponds to ${best.candidate.creative_code} ("${best.candidate.product}"). Hook: "${best.candidate.hook.slice(0, 80)}...". Needs reviewer verification.`;
-    } else if (best.sim >= 0.58) {
+      rationale = `Moderate match (${(best.sim * 100).toFixed(1)}%, margin: +${(margin * 100).toFixed(1)}%). Corresponds to ${best.candidate.creative_code} ("${best.candidate.product}"). Anchors: [${best.sharedAnchors.join(', ')}]. Review suggested.`;
+    } else if (best.sim >= 0.55) {
       confidence = 'low';
       lowCount++;
-      rationale = `Low confidence match (${(best.sim * 100).toFixed(1)}%). Closest candidate is ${best.candidate.creative_code} ("${best.candidate.product}"), but margin is narrow (+${(margin * 100).toFixed(1)}%).`;
+      rationale = `Low confidence (${(best.sim * 100).toFixed(1)}%). Nearest candidate is ${best.candidate.creative_code}, but margin (+${(margin * 100).toFixed(1)}%) or anchor evidence is narrow.`;
     } else {
       confidence = 'unmatched';
       unmatchedCount++;
-      rationale = `No confident match found. Best score was ${(best.sim * 100).toFixed(1)}% for ${best.candidate.creative_code}, which falls below threshold.`;
+      rationale = `No confident match found. Best candidate was ${best.candidate.creative_code} (${(best.sim * 100).toFixed(1)}%), below threshold.`;
     }
 
     results.push({
@@ -218,6 +277,7 @@ async function main() {
       similarity_score: best.sim,
       margin: margin,
       rationale: rationale,
+      anchors_matched: best.sharedAnchors,
       transcript_snippet: rawTranscript.slice(0, 160) + (rawTranscript.length > 160 ? '...' : ''),
       runner_up_creative_code: second ? second.candidate.creative_code : null,
       runner_up_score: second ? second.sim : null

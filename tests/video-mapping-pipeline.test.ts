@@ -93,11 +93,49 @@ describe('Video Mapping Pipeline', () => {
 
     it('classifies unmatched when best similarity is below threshold', () => {
       const bestSim = 0.45;
-      const secondSim = 0.40;
-      const margin = bestSim - secondSim;
-
       const isUnmatched = bestSim < 0.58;
       expect(isUnmatched).toBe(true);
+    });
+  });
+
+  describe('Stage 4: Spelling invariance & Anchor matching', () => {
+    it('normalizes spelling variants of khushbu, boxes, and numbers to identical tokens', async () => {
+      const { normalizeSpelling } = await import('@/lib/semantic-transcript-matcher');
+      expect(normalizeSpelling('khushboo')).toBe('khushbu');
+      expect(normalizeSpelling('khusboo')).toBe('khushbu');
+      expect(normalizeSpelling('dabbe')).toBe('dabbe');
+      expect(normalizeSpelling('dibbe')).toBe('dabbe');
+      expect(normalizeSpelling('₹999')).toBe('num999');
+      expect(normalizeSpelling('nau sau ninyanve')).toBe('num999');
+      expect(normalizeSpelling('Buy 2 Get 1 Free')).toBe('b2g1');
+      expect(normalizeSpelling('buy two get one free')).toBe('b2g1');
+    });
+
+    it('identifies commercial and narrative anchors across Hindi and English variations', async () => {
+      const { matchTranscriptSemantically } = await import('@/lib/semantic-transcript-matcher');
+      const candidates = [
+        {
+          id: 'ad-him0095',
+          name: 'HIM0095',
+          script_text: 'Main Satmi ka Pack of 3 leke ghar aaya. Papa ne dekha aur bole, teen dabbe kyun? Maine kaha, 999 mein buy 2 get 1 free offer hai, sath me ceramic stand free hai.',
+          hook: 'Main Satmi ka Pack of 3 leke ghar aaya.'
+        },
+        {
+          id: 'ad-unrelated',
+          name: 'UNRELATED',
+          script_text: 'Skin serum for daily morning routine.',
+          hook: 'Skin serum'
+        }
+      ];
+
+      const spokenTranscript = 'मैं सत्मी का pack of three लेकर घर आया. Papa ने देखा और बोले, तीन डब्बे, क्यों? 999 में offer hai, ceramic stand free.';
+      const match = matchTranscriptSemantically(spokenTranscript, candidates);
+
+      expect(match.creativeName).toBe('HIM0095');
+      expect(match.confidence).toBe('high');
+      expect(match.anchorsMatched).toContain('pack_of_3');
+      expect(match.anchorsMatched).toContain('ceramic_stand');
+      expect(match.anchorsMatched).toContain('angle_papa');
     });
   });
 });
