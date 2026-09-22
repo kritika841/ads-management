@@ -3,6 +3,7 @@ name: Deploy to Hostinger VPS
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
@@ -52,9 +53,41 @@ jobs:
 
       - name: Extract and restart on VPS
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          META_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          META_ACCOUNT: ${{ secrets.META_AD_ACCOUNT_ID }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT }}
-          script: bash /home/deployer/apps/satmi-ads/deploy.sh
+          envs: META_TOKEN,META_ACCOUNT
+          script: |
+            set -e
+            APP_DIR="/home/deployer/apps/satmi-ads"
+            ENV_FILE="$APP_DIR/.env"
+            touch "$ENV_FILE"
+
+            # Sync Meta credentials into production .env if available
+            node -e '
+            const fs = require("fs");
+            const envPath = "'"$ENV_FILE"'";
+            let content = fs.existsSync(envPath) ? fs.readFileSync(envPath, "utf8") : "";
+            const updates = {
+              META_ACCESS_TOKEN: process.env.META_TOKEN || "",
+              META_AD_ACCOUNT_ID: process.env.META_ACCOUNT || ""
+            };
+            for (const [key, val] of Object.entries(updates)) {
+              if (!val) continue;
+              const regex = new RegExp(`^${key}=.*$`, "m");
+              if (regex.test(content)) {
+                content = content.replace(regex, `${key}=${val}`);
+              } else {
+                content = (content.endsWith("\n") || content.length === 0 ? content : content + "\n") + `${key}=${val}\n`;
+              }
+            }
+            fs.writeFileSync(envPath, content, "utf8");
+            '
+
+            bash /home/deployer/apps/satmi-ads/deploy.sh
+
