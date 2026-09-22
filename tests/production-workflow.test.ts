@@ -111,7 +111,7 @@ describe("production workflow", () => {
       expect(blocked).toBe(true);
     });
 
-    it("blocks content creators if any of their creatives has changes_requested (to editor)", () => {
+    it("does not block content creators if their creative has changes_requested (to editor)", () => {
       const blocked = isCreativeCreationBlocked({
         role: "content_creator",
         userId: "creator-1",
@@ -119,7 +119,7 @@ describe("production workflow", () => {
           { creator_id: "creator-1", production_stage: "changes_requested" }
         ]
       });
-      expect(blocked).toBe(true);
+      expect(blocked).toBe(false);
     });
 
     it("blocks managers if they added a creative that has creator_changes_requested", () => {
@@ -133,7 +133,7 @@ describe("production workflow", () => {
       expect(blocked).toBe(true);
     });
 
-    it("blocks managers if they added a creative that has changes_requested", () => {
+    it("does not block managers if their creative has changes_requested (to editor)", () => {
       const blocked = isCreativeCreationBlocked({
         role: "manager",
         userId: "manager-1",
@@ -141,10 +141,10 @@ describe("production workflow", () => {
           { creator_id: "manager-1", production_stage: "changes_requested" }
         ]
       });
-      expect(blocked).toBe(true);
+      expect(blocked).toBe(false);
     });
 
-    it("blocks managers if an ad they created (via activity log) has changes requested", () => {
+    it("blocks managers if an ad they created (via activity log) has creator_changes_requested", () => {
       const blocked = isCreativeCreationBlocked({
         role: "manager",
         userId: "manager-1",
@@ -157,6 +157,21 @@ describe("production workflow", () => {
         ]
       });
       expect(blocked).toBe(true);
+    });
+
+    it("does not block managers if an ad they created has changes_requested (to editor)", () => {
+      const blocked = isCreativeCreationBlocked({
+        role: "manager",
+        userId: "manager-1",
+        ads: [
+          {
+            creator_id: "other-creator",
+            production_stage: "changes_requested",
+            activity_logs: [{ actor_id: "manager-1", action: "creator_item_created" }]
+          }
+        ]
+      });
+      expect(blocked).toBe(false);
     });
 
     it("does not block managers if the changes requested are on creatives added by someone else", () => {

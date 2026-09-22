@@ -76,7 +76,7 @@ export async function saveCreatorItem(payload: z.input<typeof creatorItemSchema>
     const { data: userAds } = await admin
       .from("ads")
       .select("id, creator_id, production_stage")
-      .in("production_stage", ["creator_changes_requested", "changes_requested"]);
+      .eq("production_stage", "creator_changes_requested");
 
     if (userAds && userAds.length > 0) {
       const directMatch = userAds.some((ad) => ad.creator_id === profile.id);

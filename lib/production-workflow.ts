@@ -225,10 +225,11 @@ export function isCreativeCreationBlocked({
   }
 
   return ads.some((ad) => {
-    const isChangeRequested =
-      ad.production_stage === "creator_changes_requested" ||
-      ad.production_stage === "changes_requested";
-    if (!isChangeRequested) return false;
+    // Only creator_changes_requested blocks creative creation.
+    // Editor changes ("changes_requested") are for the editor and do not block the creator.
+    if (ad.production_stage !== "creator_changes_requested") {
+      return false;
+    }
 
     if (ad.creator_id === userId) return true;
 
