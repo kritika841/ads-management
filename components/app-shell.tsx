@@ -9,6 +9,7 @@ import {
   Bell,
   Clapperboard,
   ClipboardCheck,
+  FolderKanban,
   House,
   LayoutDashboard,
   LogOut,
@@ -44,6 +45,7 @@ export function AppShell({
   const [mobileOpen, setMobileOpen] = useState(false);
   const workspaceLinks: NavItem[] = [
     { href: "/dashboard", label: "Home", icon: House },
+    { href: "/campaigns", label: "Campaigns", icon: FolderKanban },
     { href: "/targets", label: "Daily targets", icon: ClipboardCheck },
     { href: "/library", label: "Creative library", icon: LayoutDashboard },
     { href: "/raw-clips-search", label: "Ad Library", icon: Clapperboard },

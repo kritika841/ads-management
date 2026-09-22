@@ -99,7 +99,7 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
             </Link>
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <h1 className="text-2xl font-semibold text-foreground">{ad.name}</h1>
-              <ProductionStageBadge stage={ad.production_stage} role={profile.role} allowManagerFinalApproval={settings.allow_manager_final_approval ?? true} />
+              <ProductionStageBadge stage={ad.production_stage} role={profile.role} allowManagerFinalApproval={settings.allow_manager_final_approval ?? true} approvalStage={ad.approval_stage} />
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
               {ad.campaign?.name ?? "No campaign"} · <span suppressHydrationWarning>{workflowWaitingLabel(ad.workflow_status_changed_at)}</span>
@@ -128,7 +128,7 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
           <div className="flex min-w-0 items-start gap-3">
             <span className="mt-1 size-2.5 shrink-0 rounded-full bg-primary" aria-hidden />
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-foreground">{getProductionStageLabel(ad.production_stage, profile.role, settings.allow_manager_final_approval ?? true)}</p>
+              <p className="text-sm font-semibold text-foreground">{getProductionStageLabel(ad.production_stage, profile.role, settings.allow_manager_final_approval ?? true, ad.approval_stage)}</p>
               <p className="mt-0.5 text-sm text-muted-foreground">{nextStepText(ad, settings.allow_manager_final_approval ?? true)}</p>
             </div>
           </div>
@@ -220,13 +220,19 @@ function currentOwner(ad: AdWithRelations, allowManager = true) {
   if (["ready_for_edit", "editing", "changes_requested"].includes(ad.production_stage)) return ad.editor?.name ?? "Editor not assigned";
   if (ad.production_stage === "creator_changes_requested") return ad.creator?.name ?? "Content creator";
   if (ad.production_stage === "creator_review") return `${ad.creator?.name ?? "Content creator"} or final reviewer`;
-  if (ad.production_stage === "final_review") return allowManager ? "Manager or admin" : "Admin";
+  if (ad.production_stage === "final_review") {
+    if (allowManager) return "Manager or admin";
+    return ad.approval_stage === "admin_final" ? "Admin" : "Manager";
+  }
   return "Complete";
 }
 
 function nextStepText(ad: AdWithRelations, allowManager = true) {
   if (ad.production_stage === "final_review" && !allowManager) {
-    return "Waiting for final approval from an administrator.";
+    if (ad.approval_stage === "admin_final") {
+      return "Approved by manager. Waiting for final approval from an administrator.";
+    }
+    return "Waiting for manager review before submitting to administrator.";
   }
   const messages = {
     script_writing: "Complete the script, then move it toward the shoot.",

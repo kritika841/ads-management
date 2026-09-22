@@ -61,7 +61,7 @@ export function DashboardClient({
   const queueOptions = useMemo(() => queuesForRole(profile.role), [profile.role]);
   const [queue, setQueue] = useState<QueueKey>(initialQueue);
   const [reviewSubTab, setReviewSubTab] = useState<"all" | "new" | "editor" | "creator">("all");
-  const canApprove = profile.role === "admin" || (profile.role === "manager" && allowManagerFinalApproval);
+  const canApprove = profile.role === "admin" || profile.role === "manager";
   const [query, setQuery] = useState("");
   const [stage, setStage] = useState("all");
   const [editor, setEditor] = useState("all");
@@ -298,9 +298,12 @@ export function DashboardClient({
   function decide(ad: AdWithRelations, decision: "approve" | "request_changes", note = "") {
     if (decision === "approve") {
       setActingAdId(ad.id);
+      const isIntermediate = !allowManagerFinalApproval && profile.role === "manager";
       toast({
         title: "Approved",
-        description: `${ad.name} will be approved in 5 seconds.`,
+        description: isIntermediate
+          ? `${ad.name} will be approved and sent to Admin in 5 seconds.`
+          : `${ad.name} will be approved in 5 seconds.`,
         tone: "success",
         duration: 5_000,
         action: { label: "Undo", onClick: () => setActingAdId(null) },
@@ -320,7 +323,16 @@ export function DashboardClient({
         toast({ title: "Review not saved", description: response.message ?? "Unable to save review.", tone: "error" });
       } else {
         const resolvedTarget = target ?? "editor";
-        toast({ title: decision === "approve" ? `${ad.name} approved` : "Changes requested", description: decision === "approve" ? "The creative is now approved." : resolvedTarget === "creator" ? `${ad.name} was returned to the creator.` : `${ad.name} was returned to the editor.`, tone: "success" });
+        const isIntermediate = decision === "approve" && profile.role === "manager" && !allowManagerFinalApproval;
+        toast({
+          title: decision === "approve" ? `${ad.name} approved` : "Changes requested",
+          description: decision === "approve"
+            ? (isIntermediate ? "Forwarded to Administrator for final approval." : "The creative is now approved.")
+            : resolvedTarget === "creator"
+              ? `${ad.name} was returned to the creator.`
+              : `${ad.name} was returned to the editor.`,
+          tone: "success"
+        });
         setCancelAd(null); setCancelReason(""); setCancelTarget(""); router.refresh();
       }
       setActingAdId(null);
@@ -747,7 +759,7 @@ function WorkflowCard({ ad, mediaToken, profile, canApprove = true, allowManager
             <MediaPlaceholder label={ad.production_stage === "ready_for_edit" ? "Editing has not started" : ad.production_stage === "editing" ? "Editing in progress" : "Video not available yet"} />
           </div>
         )}
-        <span className="pointer-events-none absolute left-3 top-3 z-10 max-w-[60%]"><ProductionStageBadge stage={ad.production_stage} role={profile.role} allowManagerFinalApproval={allowManagerFinalApproval} /></span>
+        <span className="pointer-events-none absolute left-3 top-3 z-10 max-w-[60%]"><ProductionStageBadge stage={ad.production_stage} role={profile.role} allowManagerFinalApproval={allowManagerFinalApproval} approvalStage={ad.approval_stage} /></span>
         {profile.role === "admin" && downloaded ? <button type="button" disabled={dismissingDownloaded} onClick={(event) => { event.stopPropagation(); void dismissDownloaded(); }} className="group/download absolute right-3 top-3 z-10 inline-flex items-center gap-1 rounded-full border border-success/40 bg-card/90 px-2.5 py-1 text-[10px] font-semibold text-success shadow-sm backdrop-blur-sm transition hover:bg-success/10 disabled:cursor-wait" title="Dismiss downloaded badge" aria-label={`Dismiss downloaded badge for ${ad.name}`}><Download className="size-3" aria-hidden />Downloaded{dismissingDownloaded ? <Loader2 className="size-2.5 animate-spin" aria-hidden /> : <X className="size-2.5 opacity-0 transition-opacity group-hover/download:opacity-100 group-focus-visible/download:opacity-100" aria-hidden />}</button> : null}
       </div>
       <div className="p-4">
@@ -792,14 +804,15 @@ function WorkflowCard({ ad, mediaToken, profile, canApprove = true, allowManager
 
         {canFinalReview ? (
           <div className="mt-3 grid grid-cols-2 gap-2">
-            {canApprove ? (
+            {profile.role === "manager" && !allowManagerFinalApproval && ad.approval_stage === "admin_final" ? (
+              <Button size="sm" variant="secondary" disabled className="gap-1.5 opacity-85" title="You approved this creative. Waiting for Administrator final approval.">
+                <Check className="size-3.5 text-primary" aria-hidden />
+                Awaiting Admin
+              </Button>
+            ) : (
               <Button size="sm" disabled={pending} onClick={onApprove}>
                 {pending ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Check className="size-3.5" aria-hidden />}
                 Approve
-              </Button>
-            ) : (
-              <Button size="sm" variant="secondary" disabled title="Final approval is restricted to Administrators by system settings">
-                Requires Admin
               </Button>
             )}
             <Button size="sm" variant="secondary" onClick={onRequestChanges}>Changes</Button>
@@ -898,7 +911,7 @@ function WorkflowTable({ ads, profile, canApprove = true, allowManagerFinalAppro
                 <td className="px-3 py-3" onClick={(event) => { event.stopPropagation(); onToggleSelect(ad.id); }}><button type="button" aria-label={isSelected ? "Deselect" : "Select"} aria-pressed={isSelected} className={`flex size-7 items-center justify-center rounded-md border transition-colors ${isSelected ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:border-ring"}`}>{isSelected ? <SquareCheck className="size-4" aria-hidden /> : <Square className="size-4" aria-hidden />}</button></td>
                 <td className="px-4 py-3"><p className="font-medium text-foreground">{ad.name}</p><p className="text-xs text-muted-foreground">{ad.campaign?.name}</p>{progress ? <DownloadProgressBar progress={progress} compact /> : <div className="mt-1 flex flex-wrap gap-1.5">{ad.product?.name ? <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">Product · {ad.product.name}</span> : null}{ordinaryTags.map((tag) => <span key={tag.id} className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">#{tag.name}</span>)}{profile.role === "admin" && isDownloaded(ad) ? <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-[10px] font-semibold text-success"><Download className="size-2.5" aria-hidden />Downloaded</span> : null}</div>}</td>
                 <td className="px-4 py-3">
-                  <ProductionStageBadge stage={ad.production_stage} role={profile.role} allowManagerFinalApproval={allowManagerFinalApproval} className="bg-muted text-muted-foreground shadow-none" />
+                  <ProductionStageBadge stage={ad.production_stage} role={profile.role} allowManagerFinalApproval={allowManagerFinalApproval} approvalStage={ad.approval_stage} className="bg-muted text-muted-foreground shadow-none" />
                   {ad.production_stage === "creator_changes_requested" ? (
                     <span className="mt-1 block text-[11px] font-medium text-primary">To: {ad.creator?.name ?? "Creator"}</span>
                   ) : ad.production_stage === "changes_requested" ? (
@@ -913,7 +926,7 @@ function WorkflowTable({ ads, profile, canApprove = true, allowManagerFinalAppro
                 <td className="px-4 py-3">{ad.creator?.name ?? "Unassigned"}</td>
                 <td className="px-4 py-3">{ad.editor?.name ?? "Unassigned"}</td>
                 <td className="px-4 py-3 text-muted-foreground normal-case" suppressHydrationWarning>{workflowStageAgeLabel(ad.production_stage, ad.workflow_status_changed_at)}</td>
-                <td className="px-4 py-3"><div className="flex justify-end gap-2" onClick={(event) => event.stopPropagation()}>{reviewable ? <>{canApprove ? <Button size="sm" disabled={pendingId === ad.id} onClick={() => onApprove(ad)}>Approve</Button> : <span className="inline-flex items-center text-xs text-muted-foreground italic px-1" title="Final approval restricted to Admin">Admin only</span>}<Button size="sm" variant="secondary" onClick={() => onRequestChanges(ad)}>Changes</Button></> : creatorChangeRequested ? <Button size="sm" variant="secondary" onClick={open}>Resubmit<ArrowRight className="size-3.5" aria-hidden /></Button> : <Button size="sm" variant="secondary" onClick={open}>Open<ArrowRight className="size-3.5" aria-hidden /></Button>}{canDownload ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-50" title="Download video" disabled={isDownloadingRow} onClick={() => onDownload(ad)}>{isDownloadingRow ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Download className="size-4" aria-hidden />}</button> : null}{canDeleteAd(profile.role) ? <DeleteAdButton adId={ad.id} adName={ad.name} compact /> : null}</div></td>
+                <td className="px-4 py-3"><div className="flex justify-end gap-2" onClick={(event) => event.stopPropagation()}>{reviewable ? <>{profile.role === "manager" && !allowManagerFinalApproval && ad.approval_stage === "admin_final" ? <span className="inline-flex items-center gap-1 text-xs text-primary font-medium px-1.5 py-1 rounded bg-primary/10" title="Approved by manager. Waiting for administrator final approval."><Check className="size-3" aria-hidden />Awaiting Admin</span> : <Button size="sm" disabled={pendingId === ad.id} onClick={() => onApprove(ad)}>Approve</Button>}<Button size="sm" variant="secondary" onClick={() => onRequestChanges(ad)}>Changes</Button></> : creatorChangeRequested ? <Button size="sm" variant="secondary" onClick={open}>Resubmit<ArrowRight className="size-3.5" aria-hidden /></Button> : <Button size="sm" variant="secondary" onClick={open}>Open<ArrowRight className="size-3.5" aria-hidden /></Button>}{canDownload ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-50" title="Download video" disabled={isDownloadingRow} onClick={() => onDownload(ad)}>{isDownloadingRow ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Download className="size-4" aria-hidden />}</button> : null}{canDeleteAd(profile.role) ? <DeleteAdButton adId={ad.id} adName={ad.name} compact /> : null}</div></td>
               </tr>
             );
           })}

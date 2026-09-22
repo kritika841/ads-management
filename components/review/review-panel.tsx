@@ -34,7 +34,7 @@ export function ReviewPanel({
   const isReviewer = profile.role === "admin" || profile.role === "manager";
   const isAdmin = profile.role === "admin";
   const isManager = profile.role === "manager";
-  const canApprove = isAdmin || (isManager && allowManagerFinalApproval);
+  const managerApprovedPendingAdmin = !allowManagerFinalApproval && isManager && ad.approval_stage === "admin_final";
   const canReviewNow = isReviewer && ad.status === "pending_review" && (ad.production_stage === "creator_review" || ad.production_stage === "final_review");
   const canReopenApproved = (isAdmin || isManager) && ad.production_stage === "approved";
   const canChooseChangeTarget = isReviewer && (canReviewNow || canReopenApproved);
@@ -47,9 +47,12 @@ export function ReviewPanel({
   function decide(decision: "approve" | "request_changes") {
     if (decision === "approve") {
       setApprovalQueued(true);
+      const isIntermediate = !allowManagerFinalApproval && isManager;
       toast({
         title: "Approved",
-        description: "Final approval will be saved in 5 seconds.",
+        description: isIntermediate
+          ? "Approval will be submitted to Admin in 5 seconds."
+          : "Final approval will be saved in 5 seconds.",
         tone: "success",
         duration: 5_000,
         action: { label: "Undo", onClick: () => setApprovalQueued(false) },
@@ -64,7 +67,16 @@ export function ReviewPanel({
     startTransition(async () => {
       const response = await runServerAction(() => reviewAd(ad.id, decision, note, changeTarget || undefined));
       setApprovalQueued(false);
-      toast({ title: response.ok ? (decision === "approve" ? "Creative approved" : "Changes requested") : "Review not saved", description: response.ok ? (decision === "approve" ? "Final approval is complete." : changeTarget === "creator" ? "The creative was returned to the creator." : "The creative was returned to the editor.") : response.message ?? "Unable to review.", tone: response.ok ? "success" : "error" });
+      const isIntermediate = !allowManagerFinalApproval && isManager;
+      toast({
+        title: response.ok ? (decision === "approve" ? (isIntermediate ? "Approved by manager" : "Creative approved") : "Changes requested") : "Review not saved",
+        description: response.ok
+          ? (decision === "approve"
+            ? (isIntermediate ? "Forwarded to Administrator for final approval." : "Final approval is complete.")
+            : changeTarget === "creator" ? "The creative was returned to the creator." : "The creative was returned to the editor.")
+          : response.message ?? "Unable to review.",
+        tone: response.ok ? "success" : "error"
+      });
       if (response.ok) {
         setNote("");
         setChangeTarget("");
@@ -100,19 +112,31 @@ export function ReviewPanel({
               </Select>
             </Field>
           ) : null}
-          {!canApprove && canReviewNow ? (
-            <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">Final approval is restricted to Administrators under current system settings. You can still request changes or add notes below.</p>
+          {managerApprovedPendingAdmin ? (
+            <p className="rounded-md bg-accent px-3 py-2 text-xs text-accent-foreground flex items-center gap-1.5">
+              <CheckCircle2 className="size-3.5 text-primary shrink-0" aria-hidden />
+              You approved this creative. It is currently waiting for administrator final approval.
+            </p>
+          ) : !allowManagerFinalApproval && isAdmin && ad.approval_stage === "admin_final" ? (
+            <p className="rounded-md bg-accent px-3 py-2 text-xs text-accent-foreground flex items-center gap-1.5">
+              <CheckCircle2 className="size-3.5 text-primary shrink-0" aria-hidden />
+              Manager review completed. Awaiting your final administrator approval.
+            </p>
+          ) : !allowManagerFinalApproval && isManager ? (
+            <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+              Your approval will forward this creative to an administrator for final approval.
+            </p>
           ) : null}
           <div className="grid gap-2">
-            {canApprove ? (
-              <Button disabled={isPending || approvalQueued || !canReviewNow} onClick={() => decide("approve")}>
-                {isPending || approvalQueued ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" aria-hidden />}
-                Final approve
+            {managerApprovedPendingAdmin ? (
+              <Button disabled variant="secondary" className="gap-1.5">
+                <Check className="size-4 text-primary" aria-hidden />
+                Approved · Waiting for Admin
               </Button>
             ) : (
-              <Button disabled variant="secondary" title="Final approval is restricted to Administrators by system settings">
-                <Check className="size-4" aria-hidden />
-                Requires Admin approval
+              <Button disabled={isPending || approvalQueued || !canReviewNow} onClick={() => decide("approve")}>
+                {isPending || approvalQueued ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" aria-hidden />}
+                {!allowManagerFinalApproval && isManager ? "Approve & Submit to Admin" : isAdmin && !allowManagerFinalApproval && ad.approval_stage === "admin_final" ? "Grant final approval" : "Final approve"}
               </Button>
             )}
             <Button

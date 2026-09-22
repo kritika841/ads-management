@@ -12,6 +12,7 @@ import type {
   AppSettings,
   AuditLog,
   Campaign,
+  CampaignOverview,
   Comment,
   DailyTarget,
   DailyTaskRule,
@@ -19,6 +20,7 @@ import type {
   EditorTimeLog,
   Notification,
   Product,
+  ProductionStage,
   Profile,
   ReviewAction,
   ReviewSubmissionType
@@ -552,4 +554,141 @@ export async function getEditorAverageEditTimes(): Promise<Record<string, number
     averages[editorId] = Math.floor(totalSeconds / adIds.length);
   }
   return averages;
+}
+
+export async function getCampaignsWithOverview(): Promise<CampaignOverview[]> {
+  const admin = createSupabaseAdminClient();
+  const [campaignsResult, adsResult, incentiveResult] = await Promise.all([
+    admin.from("campaigns").select("*").order("name", { ascending: true }),
+    admin
+      .from("ads")
+      .select(
+        `
+          *,
+          creator:profiles!ads_creator_id_fkey(id,name,email,avatar_url,role),
+          editor:profiles!ads_editor_id_fkey(id,name,email,avatar_url,role),
+          campaign:campaigns(id,name),
+          product:products(id,name,sku,image_url),
+          ad_tags(tags(id,name)),
+          ad_versions(id)
+        `
+      )
+      .order("updated_at", { ascending: false }),
+    admin.from("incentive_creatives").select("ad_id,latest_spend,latest_purchases,latest_cpa")
+  ]);
+
+  if (campaignsResult.error) {
+    throw campaignsResult.error;
+  }
+
+  const campaigns = (campaignsResult.data ?? []) as Campaign[];
+  const ads = normalizeAds(adsResult.data ?? []);
+  const incentiveMap = new Map<string, { latest_spend?: number; latest_purchases?: number; latest_cpa?: number }>();
+  if (incentiveResult.data) {
+    for (const item of incentiveResult.data) {
+      if (item.ad_id) {
+        incentiveMap.set(item.ad_id, {
+          latest_spend: Number(item.latest_spend ?? 0),
+          latest_purchases: Number(item.latest_purchases ?? 0),
+          latest_cpa: item.latest_cpa != null ? Number(item.latest_cpa) : undefined
+        });
+      }
+    }
+  }
+
+  // Group ads by campaign
+  const adsByCampaign = new Map<string, AdWithRelations[]>();
+  for (const ad of ads) {
+    if (!ad.campaign_id) continue;
+    const list = adsByCampaign.get(ad.campaign_id) ?? [];
+    // Attach any incentive metrics onto metadata if available
+    const inc = incentiveMap.get(ad.id);
+    if (inc) {
+      (ad as AdWithRelations & { performance?: typeof inc }).performance = inc;
+    }
+    list.push(ad);
+    adsByCampaign.set(ad.campaign_id, list);
+  }
+
+  const creationStages = new Set(["script_writing", "ready_to_shoot", "shoot_complete", "ready_for_edit", "editing"]);
+  const reviewStages = new Set(["creator_review", "final_review", "creator_changes_requested", "changes_requested"]);
+
+  return campaigns.map((campaign) => {
+    const creatives = adsByCampaign.get(campaign.id) ?? [];
+    const videoGoal = campaign.video_goal && campaign.video_goal > 0 ? campaign.video_goal : 10;
+    const totalCreatives = creatives.length;
+
+    let approvedCount = 0;
+    let inCreationCount = 0;
+    let inReviewCount = 0;
+    let totalSpend = 0;
+    let totalPurchases = 0;
+    let cpaSum = 0;
+    let cpaCount = 0;
+
+    const stageBreakdown: Record<ProductionStage, number> = {
+      script_writing: 0,
+      ready_to_shoot: 0,
+      shoot_complete: 0,
+      ready_for_edit: 0,
+      editing: 0,
+      creator_review: 0,
+      final_review: 0,
+      creator_changes_requested: 0,
+      changes_requested: 0,
+      approved: 0
+    };
+
+    for (const creative of creatives) {
+      const stage = creative.production_stage;
+      if (stageBreakdown[stage] !== undefined) {
+        stageBreakdown[stage]++;
+      }
+
+      if (stage === "approved" || creative.status === "approved") {
+        approvedCount++;
+      } else if (reviewStages.has(stage)) {
+        inReviewCount++;
+      } else if (creationStages.has(stage)) {
+        inCreationCount++;
+      }
+
+      const perf = incentiveMap.get(creative.id);
+      if (perf) {
+        if (perf.latest_spend) totalSpend += perf.latest_spend;
+        if (perf.latest_purchases) totalPurchases += perf.latest_purchases;
+        if (perf.latest_cpa != null && perf.latest_cpa > 0) {
+          cpaSum += perf.latest_cpa;
+          cpaCount++;
+        }
+      }
+    }
+
+    const goalProgressPercent = videoGoal > 0 ? Math.min(100, Math.round((approvedCount / videoGoal) * 100)) : 0;
+    const averageCpa = cpaCount > 0 ? Number((cpaSum / cpaCount).toFixed(2)) : null;
+
+    return {
+      campaign,
+      videoGoal,
+      totalCreatives,
+      goalProgressPercent,
+      approvedCount,
+      inCreationCount,
+      inReviewCount,
+      stageBreakdown,
+      metrics: {
+        totalSpend: Number(totalSpend.toFixed(2)),
+        totalPurchases: Math.round(totalPurchases),
+        totalImpressions: 0,
+        totalClicks: 0,
+        averageCpa
+      },
+      creatives
+    };
+  });
+}
+
+export async function getCampaignDetail(campaignId: string): Promise<CampaignOverview | null> {
+  const overviews = await getCampaignsWithOverview();
+  return overviews.find((o) => o.campaign.id === campaignId) ?? null;
 }

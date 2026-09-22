@@ -1,5 +1,5 @@
 import { getProductionStageLabel } from "@/lib/production-workflow";
-import type { ProductionStage, UserRole } from "@/lib/types";
+import type { ApprovalStage, ProductionStage, UserRole } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const stageStyles: Record<ProductionStage, string> = {
@@ -19,14 +19,16 @@ export function ProductionStageBadge({
   stage,
   className,
   role,
-  allowManagerFinalApproval = true
+  allowManagerFinalApproval = true,
+  approvalStage
 }: {
   stage: ProductionStage;
   className?: string;
   role?: UserRole;
   allowManagerFinalApproval?: boolean;
+  approvalStage?: ApprovalStage;
 }) {
-  const label = getProductionStageLabel(stage, role, allowManagerFinalApproval);
+  const label = getProductionStageLabel(stage, role, allowManagerFinalApproval, approvalStage);
 
   return (
     <span className={cn("inline-flex h-7 max-w-full items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-full border px-2.5 text-xs font-semibold", stageStyles[stage], className)}>

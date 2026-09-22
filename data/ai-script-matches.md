@@ -1,5 +1,5 @@
 # AI One-Shot Video Mapping Results
-Generated on: 2026-09-21T10:26:39.089Z
+Generated on: 2026-09-22T05:35:37.460Z
 Total Transcripts Evaluated: 311
 High Confidence Matches: 18
 Medium Confidence Matches: 27

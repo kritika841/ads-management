@@ -849,13 +849,16 @@ export async function reviewAd(adId: string, decision: "approve" | "request_chan
 
   const resolvedTarget = target || (ad.production_stage === "creator_changes_requested" ? "creator" : "editor");
 
-  if (decision === "approve" && profile.role === "manager") {
+  const isManager = profile.role === "manager";
+  let isIntermediateManagerApproval = false;
+
+  if (decision === "approve" && isManager) {
     const { data: settings } = await admin.from("app_settings").select("*").eq("id", 1).single();
     const allowManager = (settings as { allow_manager_final_approval?: boolean; two_step_approval?: boolean } | null)?.allow_manager_final_approval !== undefined
       ? (settings as { allow_manager_final_approval?: boolean }).allow_manager_final_approval
       : !(settings as { two_step_approval?: boolean } | null)?.two_step_approval;
     if (settings && allowManager === false) {
-      return { ok: false, message: "Final approval is restricted to administrators by system settings." };
+      isIntermediateManagerApproval = true;
     }
   }
 
@@ -866,33 +869,84 @@ export async function reviewAd(adId: string, decision: "approve" | "request_chan
     p_note: note.trim() || null,
     p_target: resolvedTarget
   });
-  if (error) return { ok: false, message: error.message };
 
-  const nextStatus = decision === "approve"
-    ? "approved"
-    : resolvedTarget === "creator"
-      ? "creator_changes_requested"
-      : "changes_requested";
+  if (error) {
+    if (isIntermediateManagerApproval && error.message.includes("Final approval is restricted to administrators")) {
+      // Fallback: perform intermediate approval directly if DB RPC has not yet been upgraded
+      const { error: updateError } = await admin.from("ads").update({
+        production_stage: "final_review",
+        approval_stage: "admin_final",
+        creator_reviewed_at: ad.production_stage === "creator_review" ? (ad.creator_reviewed_at || new Date().toISOString()) : ad.creator_reviewed_at
+      }).eq("id", adId);
+      if (updateError) return { ok: false, message: updateError.message };
 
-  const recipientIds = nextStatus === "creator_changes_requested"
-    ? [ad.creator_id].filter((id): id is string => Boolean(id))
-    : nextStatus === "approved"
-      ? [ad.creator_id, ad.editor_id].filter((id): id is string => Boolean(id))
-      : [ad.editor_id].filter((id): id is string => Boolean(id));
+      await admin.from("review_actions").insert({
+        ad_id: adId,
+        reviewer_id: profile.id,
+        decision: "approve",
+        note: note.trim() || null
+      });
 
-  const { data: recipients } = recipientIds.length
-    ? await admin.from("profiles").select("*").in("id", recipientIds)
-    : { data: [] };
+      await admin.from("activity_logs").insert({
+        ad_id: adId,
+        actor_id: profile.id,
+        action: "manager_approved",
+        metadata: {
+          note: note.trim() || "",
+          previous_stage: ad.production_stage,
+          production_stage: "final_review"
+        }
+      });
+    } else {
+      return { ok: false, message: error.message };
+    }
+  }
 
-  for (const recipient of recipients ?? []) {
-    await createNotification(admin, {
-      recipient: recipient as Profile,
-      adId,
-      title: notificationTitle(decision, nextStatus),
-      body: nextStatus === "creator_changes_requested"
-        ? (note || `${ad.name} needs creator updates before final review.`)
-        : (note || `${ad.name} is now changes requested.`)
-    });
+  if (isIntermediateManagerApproval) {
+    // Notify all active administrators that manager approved and final admin approval is needed
+    const { data: admins } = await admin
+      .from("profiles")
+      .select("*")
+      .eq("role", "admin")
+      .eq("active", true);
+
+    for (const adminUser of admins ?? []) {
+      await createNotification(admin, {
+        recipient: adminUser as Profile,
+        adId,
+        title: "Manager approved · Final review ready",
+        body: note.trim()
+          ? `${profile.name} approved ${ad.name}: "${note.trim()}". Ready for final admin approval.`
+          : `${profile.name} approved ${ad.name}. Ready for final admin approval.`
+      });
+    }
+  } else {
+    const nextStatus = decision === "approve"
+      ? "approved"
+      : resolvedTarget === "creator"
+        ? "creator_changes_requested"
+        : "changes_requested";
+
+    const recipientIds = nextStatus === "creator_changes_requested"
+      ? [ad.creator_id].filter((id): id is string => Boolean(id))
+      : nextStatus === "approved"
+        ? [ad.creator_id, ad.editor_id].filter((id): id is string => Boolean(id))
+        : [ad.editor_id].filter((id): id is string => Boolean(id));
+
+    const { data: recipients } = recipientIds.length
+      ? await admin.from("profiles").select("*").in("id", recipientIds)
+      : { data: [] };
+
+    for (const recipient of recipients ?? []) {
+      await createNotification(admin, {
+        recipient: recipient as Profile,
+        adId,
+        title: notificationTitle(decision, nextStatus),
+        body: nextStatus === "creator_changes_requested"
+          ? (note || `${ad.name} needs creator updates before final review.`)
+          : (note || `${ad.name} is now changes requested.`)
+      });
+    }
   }
 
   revalidatePath("/dashboard");
@@ -900,7 +954,7 @@ export async function reviewAd(adId: string, decision: "approve" | "request_chan
   revalidatePath(`/ads/${adId}`);
   revalidatePath("/analytics");
 
-  return { ok: true };
+  return { ok: true, intermediateApproval: isIntermediateManagerApproval };
 }
 
 export async function deleteAd(adId: string) {
@@ -1446,6 +1500,7 @@ function revalidateAdPaths(adId: string) {
   revalidatePath("/library");
   revalidatePath(`/ads/${adId}`);
   revalidatePath("/analytics");
+  revalidatePath("/campaigns");
 }
 
 function notificationTitle(decision: "approve" | "request_changes", status: string) {

@@ -23,6 +23,7 @@ export function CreatorItemForm({
   availableTags,
   editorWorkloads,
   overrideMode,
+  defaultCampaignId,
   onSaved
 }: {
   profile: Profile;
@@ -34,6 +35,7 @@ export function CreatorItemForm({
   availableTags: string[];
   editorWorkloads: Record<string, number>;
   overrideMode?: boolean;
+  defaultCampaignId?: string;
   onSaved?: (adId: string) => void;
 }) {
   const router = useRouter();
@@ -55,7 +57,7 @@ export function CreatorItemForm({
 
   const [name, setName] = useState(initialAd?.name ?? "");
   const [nameLoading, setNameLoading] = useState(!initialAd);
-  const [campaignId, setCampaignId] = useState(initialAd?.campaign_id ?? campaigns[0]?.id ?? "");
+  const [campaignId, setCampaignId] = useState(initialAd?.campaign_id ?? defaultCampaignId ?? campaigns[0]?.id ?? "");
   const [productId, setProductId] = useState(initialAd?.product_id ?? "");
   const [creatorId, setCreatorId] = useState(defaultCreatorId);
   const [scriptHtml, setScriptHtml] = useState(initialAd?.script_html ?? "");

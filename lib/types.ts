@@ -46,9 +46,29 @@ export type Campaign = {
   id: string;
   name: string;
   description: string | null;
+  video_goal?: number | null;
   active: boolean;
   created_at: string;
   updated_at: string;
+};
+
+export type CampaignOverview = {
+  campaign: Campaign;
+  videoGoal: number;
+  totalCreatives: number;
+  goalProgressPercent: number;
+  approvedCount: number;
+  inCreationCount: number;
+  inReviewCount: number;
+  stageBreakdown: Record<ProductionStage, number>;
+  metrics: {
+    totalSpend: number;
+    totalPurchases: number;
+    totalImpressions: number;
+    totalClicks: number;
+    averageCpa: number | null;
+  };
+  creatives: AdWithRelations[];
 };
 
 export type Product = {

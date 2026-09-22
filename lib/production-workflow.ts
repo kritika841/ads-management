@@ -46,10 +46,19 @@ export const productionStageLabels: Record<ProductionStage, string> = {
 export function getProductionStageLabel(
   stage: ProductionStage,
   role?: UserRole,
-  allowManagerFinalApproval: boolean = true
+  allowManagerFinalApproval: boolean = true,
+  approvalStage?: ApprovalStage
 ): string {
-  if (stage === "final_review" && !allowManagerFinalApproval && role && role !== "admin") {
-    return "Admin approval pending";
+  if (stage === "final_review" && !allowManagerFinalApproval) {
+    if (approvalStage === "admin_final") {
+      return "Admin approval pending";
+    }
+    if (approvalStage === "manager_review") {
+      return "Manager review";
+    }
+    if (role && role !== "admin") {
+      return "Admin approval pending";
+    }
   }
   return productionStageLabels[stage];
 }

@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CheckCircle2, Loader2, Pencil, Plus, Power, RotateCcw, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { ArrowUpRight, FolderKanban, Loader2, Power, Trash2 } from "lucide-react";
 import { deleteCampaign, saveCampaign, updateSettings } from "@/app/actions/admin";
 import { runServerAction } from "@/lib/client-action";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Textarea } from "@/components/ui/field";
+import { Field, Input } from "@/components/ui/field";
 import type { AppSettings, AuditLog, Campaign } from "@/lib/types";
 import { cn, formatDateTime } from "@/lib/utils";
 
@@ -21,9 +22,6 @@ export function SettingsClient({
   const [deadlineReminderDays, setDeadlineReminderDays] = useState(settings.deadline_reminder_days);
   const [maxConcurrentEdits, setMaxConcurrentEdits] = useState(settings.max_concurrent_edits);
   const [allowManagerFinalApproval, setAllowManagerFinalApproval] = useState(settings.allow_manager_final_approval ?? true);
-  const [campaignName, setCampaignName] = useState("");
-  const [campaignDescription, setCampaignDescription] = useState("");
-  const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -38,35 +36,6 @@ export function SettingsClient({
       }));
       setMessage(response.ok ? "Settings saved." : response.message ?? "Unable to save settings.");
     });
-  }
-
-  function persistCampaign() {
-    setMessage(null);
-    startTransition(async () => {
-      const response = await runServerAction(() => saveCampaign({
-        id: editingCampaign?.id,
-        name: campaignName,
-        description: campaignDescription,
-        active: editingCampaign?.active ?? true
-      }));
-      setMessage(response.ok ? (editingCampaign ? "Campaign updated." : "Campaign created.") : response.message ?? "Unable to save campaign.");
-      if (response.ok) {
-        resetCampaignForm();
-      }
-    });
-  }
-
-  function editCampaign(campaign: Campaign) {
-    setEditingCampaign(campaign);
-    setCampaignName(campaign.name);
-    setCampaignDescription(campaign.description ?? "");
-    setMessage(null);
-  }
-
-  function resetCampaignForm() {
-    setEditingCampaign(null);
-    setCampaignName("");
-    setCampaignDescription("");
   }
 
   function toggleCampaign(campaign: Campaign) {
@@ -155,7 +124,7 @@ export function SettingsClient({
                     Admin Only
                   </span>
                   <span className="mt-1 text-[11px] leading-4 text-muted-foreground">
-                    Only administrators can grant final approval. Managers can review and request changes.
+                    Two-stage approval: Managers review and approve first, then administrators grant final approval.
                   </span>
                 </button>
               </div>
@@ -168,30 +137,105 @@ export function SettingsClient({
         </section>
 
         <section className="panel overflow-hidden">
-          <div className="border-b border-border p-5"><div className="flex items-center justify-between gap-3"><div><h2 className="section-heading">Campaigns</h2><p className="mt-1 text-xs text-muted-foreground">{campaigns.filter((item) => item.active).length} active of {campaigns.length}</p></div>{editingCampaign ? <Button size="sm" variant="ghost" onClick={resetCampaignForm}><RotateCcw className="size-3.5" aria-hidden />Cancel edit</Button> : null}</div>
-          <div className="mt-5 grid gap-3 md:grid-cols-[minmax(180px,0.7fr)_minmax(240px,1fr)_auto] md:items-end">
-            <Field label="Campaign name">
-              <Input value={campaignName} onChange={(event) => setCampaignName(event.target.value)} />
-            </Field>
-            <Field label="Description">
-              <Textarea className="min-h-10" value={campaignDescription} onChange={(event) => setCampaignDescription(event.target.value)} />
-            </Field>
-            <Button disabled={isPending || !campaignName.trim()} onClick={persistCampaign}>
-              {isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : editingCampaign ? <CheckCircle2 className="size-4" aria-hidden /> : <Plus className="size-4" aria-hidden />}
-              {editingCampaign ? "Save" : "Add"}
-            </Button>
-          </div></div>
-            <div className="divide-y divide-border">
-              {campaigns.map((campaign) => (
-                <div key={campaign.id} className={`flex items-center justify-between gap-3 px-5 py-3 transition hover:bg-muted ${!campaign.active ? "bg-muted/60" : ""}`}>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground">{campaign.name}</p>
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground">{campaign.description ?? "No description"}</p>
-                  </div>
-                  <div className="flex items-center gap-1"><span className={`mr-2 inline-flex items-center gap-1.5 text-xs font-medium ${campaign.active ? "text-success" : "text-muted-foreground"}`}><span className={`size-1.5 rounded-full ${campaign.active ? "bg-success" : "bg-border"}`} />{campaign.active ? "Active" : "Inactive"}</span><Button size="icon" variant="ghost" className="size-9" title="Edit campaign" onClick={() => editCampaign(campaign)}><Pencil className="size-4" aria-hidden /></Button><Button size="icon" variant="ghost" className="size-9" title={campaign.active ? "Deactivate campaign" : "Activate campaign"} onClick={() => toggleCampaign(campaign)}><Power className="size-4" aria-hidden /></Button><Button size="icon" variant="ghost" className="size-9 text-destructive hover:text-destructive" title="Delete campaign" onClick={() => removeCampaign(campaign)}><Trash2 className="size-4" aria-hidden /></Button></div>
-                </div>
-              ))}
+          <div className="border-b border-border p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="section-heading">Campaigns</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {campaigns.filter((item) => item.active).length} active of {campaigns.length} total
+                </p>
+              </div>
+              <Link
+                href="/campaigns"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-xs font-medium text-foreground shadow-xs hover:bg-muted transition"
+              >
+                <FolderKanban className="size-3.5" aria-hidden />
+                Open Campaigns
+                <ArrowUpRight className="size-3.5" aria-hidden />
+              </Link>
             </div>
+            <p className="mt-3 text-xs text-muted-foreground">
+              Campaigns, target creative goals, and production overviews are created and managed directly in the Campaigns dashboard.
+            </p>
+          </div>
+
+          <div className="divide-y divide-border">
+            {campaigns.length === 0 ? (
+              <div className="p-8 text-center">
+                <p className="text-sm text-muted-foreground">No campaigns created yet.</p>
+                <Link
+                  href="/campaigns"
+                  className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary bg-primary px-3 text-xs font-medium text-primary-foreground shadow-xs hover:bg-primary/90 transition"
+                >
+                  <FolderKanban className="size-3.5" aria-hidden />
+                  Create campaign in Campaigns
+                </Link>
+              </div>
+            ) : (
+              campaigns.map((campaign) => (
+                <div
+                  key={campaign.id}
+                  className={cn(
+                    "flex items-center justify-between gap-3 px-5 py-3 transition hover:bg-muted",
+                    !campaign.active && "bg-muted/60"
+                  )}
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/campaigns/${campaign.id}`}
+                        className="text-sm font-medium text-foreground hover:text-primary transition-colors"
+                      >
+                        {campaign.name}
+                      </Link>
+                      {campaign.video_goal ? (
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+                          Goal: {campaign.video_goal}
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                      {campaign.description ?? "No description"}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span
+                      className={cn(
+                        "mr-2 inline-flex items-center gap-1.5 text-xs font-medium",
+                        campaign.active ? "text-success" : "text-muted-foreground"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "size-1.5 rounded-full",
+                          campaign.active ? "bg-success" : "bg-border"
+                        )}
+                      />
+                      {campaign.active ? "Active" : "Inactive"}
+                    </span>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="size-9"
+                      title={campaign.active ? "Deactivate campaign" : "Activate campaign"}
+                      onClick={() => toggleCampaign(campaign)}
+                    >
+                      <Power className="size-4" aria-hidden />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="size-9 text-destructive hover:text-destructive"
+                      title="Delete campaign"
+                      onClick={() => removeCampaign(campaign)}
+                    >
+                      <Trash2 className="size-4" aria-hidden />
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </section>
       </div>
       {message ? <p className="mt-4 rounded-md border border-border bg-card px-3 py-2 text-sm text-muted-foreground shadow-soft">{message}</p> : null}
