@@ -132,9 +132,15 @@ export function IncentivesDashboard({
         setMessage(null);
         try {
             const response = await fetch("/api/incentives/sync", { method: "POST" });
-            const payload = await response.json();
+            const text = await response.text();
+            let payload: { error?: string; message?: string; catalogAds?: number; autoMatched?: number; autoLinked?: number; synced?: number } = {};
+            try {
+                payload = JSON.parse(text);
+            } catch {
+                throw new Error(`Server returned HTTP ${response.status}: ${text.slice(0, 150)}`);
+            }
             if (!response.ok)
-                throw new Error(payload.error ?? "Sync failed.");
+                throw new Error(payload.error ?? `Sync failed (HTTP ${response.status}).`);
             setMessage(payload.message ?? `Imported ${payload.catalogAds ?? 0} Meta ads, auto-tagged ${payload.autoMatched ?? 0}, added ${payload.autoLinked ?? 0} to incentives, and updated ${payload.synced ?? 0} tracked creatives.`);
             router.refresh();
         }
