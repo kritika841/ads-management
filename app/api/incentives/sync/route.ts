@@ -265,7 +265,9 @@ async function syncMetaIncentives(actorId: string | null) {
     console.error("Meta incentives sync failed", cause);
     const errorMessage = cause instanceof Error ? cause.message : typeof cause === "object" && cause && "message" in cause ? String(cause.message) : String(cause);
     if (syncRunId) await admin.from("meta_sync_runs").update({ status: "failed", completed_at: new Date().toISOString(), error_message: errorMessage, duration_ms: Date.now() - syncStartedAt }).eq("id", syncRunId);
-    return NextResponse.json({ error: errorMessage }, { status: 502 });
+    const isRateLimit = errorMessage.includes("too many calls") || errorMessage.includes("rate limit") || errorMessage.includes("OAuthException");
+    const status = isRateLimit ? 429 : 400;
+    return NextResponse.json({ error: errorMessage }, { status });
   }
 }
 
