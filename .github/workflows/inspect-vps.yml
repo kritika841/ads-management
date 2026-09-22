@@ -1,0 +1,25 @@
+name: Inspect VPS Environment and Logs
+
+on:
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect VPS env keys and error log
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            echo "=== Variable names in /home/deployer/apps/satmi-ads/.env ==="
+            grep -E '^[A-Za-z0-9_]+=' /home/deployer/apps/satmi-ads/.env | cut -d= -f1 || true
+
+            echo "=== Last 40 lines of satmi-ads-error.log ==="
+            tail -n 40 /home/deployer/logs/satmi-ads-error.log || true
+
+            echo "=== Last 20 lines of satmi-ads-out.log ==="
+            tail -n 20 /home/deployer/logs/satmi-ads-out.log || true
