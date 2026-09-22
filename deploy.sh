@@ -1,9 +1,22 @@
 #!/bin/bash
 set -e
 cd /home/deployer/apps/satmi-ads
+echo "Backing up previous static chunks for zero-downtime client compatibility..."
+mkdir -p /home/deployer/static-cache
+if [ -d ".next/static" ]; then
+  cp -rn .next/static/* /home/deployer/static-cache/ 2>/dev/null || true
+fi
+
 echo "Extracting new build..."
 tar -xzf release.tar.gz
 rm release.tar.gz
+
+echo "Restoring previous static chunks..."
+if [ -d "/home/deployer/static-cache" ]; then
+  cp -rn /home/deployer/static-cache/* .next/static/ 2>/dev/null || true
+  # Prune chunks older than 7 days so disk space remains optimal
+  find /home/deployer/static-cache -type f -mtime +7 -delete 2>/dev/null || true
+fi
 echo "Installing production dependencies..."
 npm ci --omit=dev
 command -v node > .node-path

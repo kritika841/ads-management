@@ -21,6 +21,36 @@ export default function nextConfig(phase: string): NextConfig {
           hostname: "*.supabase.co"
         }
       ]
+    },
+    async headers() {
+      return [
+        {
+          source: "/_next/static/:path*",
+          headers: [
+            {
+              key: "Cache-Control",
+              value: "public, max-age=31536000, immutable"
+            }
+          ]
+        },
+        {
+          source: "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|woff|woff2)).*)",
+          headers: [
+            {
+              key: "Cache-Control",
+              value: "no-store, no-cache, must-revalidate, proxy-revalidate"
+            },
+            {
+              key: "Pragma",
+              value: "no-cache"
+            },
+            {
+              key: "Expires",
+              value: "0"
+            }
+          ]
+        }
+      ];
     }
   };
 }

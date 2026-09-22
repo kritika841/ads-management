@@ -10,9 +10,13 @@ export function ChunkLoadRecovery() {
     const pageKey = `${window.location.pathname}${window.location.search}`;
 
     const recover = () => {
-      if (window.sessionStorage.getItem(RELOAD_GUARD) === pageKey) return;
-      window.sessionStorage.setItem(RELOAD_GUARD, pageKey);
-      window.location.reload();
+      const last = window.sessionStorage.getItem(RELOAD_GUARD);
+      const now = Date.now();
+      if (last && now - Number(last) < 15_000) return;
+      window.sessionStorage.setItem(RELOAD_GUARD, String(now));
+      const url = new URL(window.location.href);
+      url.searchParams.set("_v", String(now));
+      window.location.replace(url.toString());
     };
 
     const handleError = (event: Event) => {
