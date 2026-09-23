@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { getExcelColumnLetter } from "@/components/campaigns/excel-table";
 import { isDownloaded } from "@/lib/utils";
@@ -83,8 +84,7 @@ describe("campaigns and excel table functionality", () => {
   });
 
   it("verifies campaign video_goal nullable migration exists", () => {
-    const fs = require("node:fs");
-    const migration = fs.readFileSync("supabase/migrations/20260923120000_campaign_video_goal_nullable.sql", "utf8");
+    const migration = readFileSync("supabase/migrations/20260923120000_campaign_video_goal_nullable.sql", "utf8");
     expect(migration).toContain("alter table public.campaigns alter column video_goal drop not null");
     expect(migration).toContain("alter table public.campaigns alter column video_goal drop default");
   });

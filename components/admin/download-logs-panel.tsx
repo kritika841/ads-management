@@ -359,7 +359,7 @@ export function DownloadLogsPanel({ initialLogs = [] }: { initialLogs?: Download
             <span>Source:</span>
             <select
               value={sourceFilter}
-              onChange={(e) => setSourceFilter(e.target.value as any)}
+              onChange={(e) => setSourceFilter(e.target.value as "all" | "creative_library" | "campaigns")}
               className="h-8 rounded-lg border border-border bg-background px-2 text-xs text-foreground focus:outline-none"
             >
               <option value="all">All sources</option>

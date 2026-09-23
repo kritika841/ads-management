@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { DEFAULT_HIDDEN_METRICS, DEFAULT_MANAGER_CREATIVE_SCOPE, type HiddenMetricsByRole, type ManagerCreativeScope } from "@/lib/metric-visibility";
+import { DEFAULT_HIDDEN_METRICS, DEFAULT_MANAGER_CREATIVE_SCOPE, PERFORMANCE_METRIC_KEYS, type HiddenMetricsByRole, type ManagerCreativeScope, type PerformanceMetricKey } from "@/lib/metric-visibility";
 
 const METRIC_VISIBILITY_FILE = path.join(process.cwd(), "data", "metric-visibility.json");
 
@@ -8,15 +8,22 @@ export type MetricVisibilityConfig = HiddenMetricsByRole & {
   manager_creative_scope?: ManagerCreativeScope;
 };
 
+function sanitizeKeys(arr: unknown): PerformanceMetricKey[] {
+  if (!Array.isArray(arr)) return [];
+  return arr.filter((item): item is PerformanceMetricKey =>
+    typeof item === "string" && (PERFORMANCE_METRIC_KEYS as readonly string[]).includes(item)
+  );
+}
+
 export async function readMetricVisibilityFile(): Promise<MetricVisibilityConfig> {
   try {
     const raw = await fs.readFile(METRIC_VISIBILITY_FILE, "utf-8");
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const scope = parsed.manager_creative_scope === "own" ? "own" : "all";
     return {
-      content_creator: Array.isArray(parsed.content_creator) ? (parsed.content_creator as any) : [],
-      editor: Array.isArray(parsed.editor) ? (parsed.editor as any) : [],
-      manager: Array.isArray(parsed.manager) ? (parsed.manager as any) : [],
+      content_creator: sanitizeKeys(parsed.content_creator),
+      editor: sanitizeKeys(parsed.editor),
+      manager: sanitizeKeys(parsed.manager),
       manager_creative_scope: scope
     };
   } catch {
