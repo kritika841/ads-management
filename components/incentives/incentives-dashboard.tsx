@@ -13,7 +13,7 @@ import { MetricVisibilitySettings } from "@/components/incentives/metric-visibil
 import { ReliableMetaVideo, type LiveMetaVideo } from "@/components/incentives/reliable-meta-video";
 import { runServerAction } from "@/lib/client-action";
 import { calculateMonthlyIncentive, evaluateIncentiveCreative, type IncentiveCampaign, type IncentiveCreative, type MetaAd } from "@/lib/incentives";
-import type { HiddenMetricsByRole } from "@/lib/metric-visibility";
+import type { HiddenMetricsByRole, ManagerCreativeScope } from "@/lib/metric-visibility";
 import type { Product, Profile } from "@/lib/types";
 import { cn } from "@/lib/utils";
 type EligibleAd = {
@@ -92,6 +92,7 @@ export function IncentivesDashboard({
     transcriptMappings = [],
     campaignDestinations,
     hiddenMetricsByRole,
+    managerCreativeScope = "all",
 }: {
     campaigns: IncentiveCampaign[];
     creatives: IncentiveCreative[];
@@ -103,9 +104,10 @@ export function IncentivesDashboard({
     transcriptMappings?: TranscriptMapping[];
     campaignDestinations?: Record<string, { destination: string; campaignName?: string | null }>;
     hiddenMetricsByRole?: HiddenMetricsByRole;
+    managerCreativeScope?: ManagerCreativeScope;
 }) {
     const router = useRouter();
-    const reviewer = profile.role === "admin" || profile.role === "manager";
+    const reviewer = profile.role === "admin" || (profile.role === "manager" && managerCreativeScope !== "own");
     const [message, setMessage] = useState<string | null>(null);
     const [syncing, setSyncing] = useState(false);
     const [section, setSection] = useState<"overview" | "winning" | "losing" | "active" | "paused" | "testing" | "settings" | "mapping" | null>(null);
@@ -114,7 +116,9 @@ export function IncentivesDashboard({
         ? []
         : profile.role === "manager"
         ? (hiddenMetricsByRole?.manager ?? [])
-        : (hiddenMetricsByRole?.content_creator ?? hiddenMetricsByRole?.editor ?? []);
+        : profile.role === "editor"
+        ? (hiddenMetricsByRole?.editor ?? [])
+        : (hiddenMetricsByRole?.content_creator ?? []);
     const isSpendHidden = roleHiddenMetrics.includes("spend");
     useEffect(() => {
         const applyHash = () => {
@@ -169,7 +173,10 @@ export function IncentivesDashboard({
       {section === "settings" ? (
         reviewer && profile.role === "admin" ? (
           <div className="mt-6 space-y-6">
-            <MetricVisibilitySettings initialHiddenMetrics={hiddenMetricsByRole} />
+            <MetricVisibilitySettings
+              initialHiddenMetrics={hiddenMetricsByRole}
+              initialManagerCreativeScope={managerCreativeScope}
+            />
             <CampaignSettingsView metaAds={metaAds} initialDestinations={campaignDestinations} />
           </div>
         ) : (

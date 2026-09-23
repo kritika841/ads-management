@@ -1,12 +1,18 @@
 import { getCampaignDestinations } from "@/lib/campaign-destinations";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { readMetricVisibilityFile } from "@/lib/metric-visibility-server";
 import type { Profile } from "@/lib/types";
 import type { IncentiveCampaign, IncentiveCreative, MetaAd } from "@/lib/incentives";
 
 export async function getIncentiveDashboard(profile: Profile) {
-  const supabase = await createSupabaseServerClient();
-  const reviewer = profile.role === "admin" || profile.role === "manager";
-  let creativesQuery = supabase
+  const admin = createSupabaseAdminClient();
+  const visibilityConfig = await readMetricVisibilityFile();
+  const managerScope = visibilityConfig.manager_creative_scope ?? "all";
+  const isManagerScoped = profile.role === "manager" && managerScope === "own";
+  const isScoped = profile.role === "content_creator" || profile.role === "editor" || isManagerScoped;
+  const reviewer = profile.role === "admin" || (profile.role === "manager" && !isManagerScoped);
+
+  let creativesQuery = admin
     .from("incentive_creatives")
     .select(`
       *,
@@ -36,12 +42,20 @@ export async function getIncentiveDashboard(profile: Profile) {
     editor: { id: string; name: string } | null;
   }> = [];
 
-  if (!reviewer) {
-    const column = profile.role === "content_creator" ? "creator_id" : "editor_id";
-    const { data: adsData, error: adsError } = await supabase
+  if (isScoped) {
+    let userAdsQuery = admin
       .from("ads")
-      .select("id,name,product_id,creator_id,editor_id,thumbnail_url,drive_file_id,preview_url,resolved_video_url,status,production_stage,creator:profiles!ads_creator_id_fkey(id,name),editor:profiles!ads_editor_id_fkey(id,name)")
-      .eq(column, profile.id);
+      .select("id,name,product_id,creator_id,editor_id,thumbnail_url,drive_file_id,preview_url,resolved_video_url,status,production_stage,creator:profiles!ads_creator_id_fkey(id,name),editor:profiles!ads_editor_id_fkey(id,name)");
+
+    if (profile.role === "content_creator") {
+      userAdsQuery = userAdsQuery.eq("creator_id", profile.id);
+    } else if (profile.role === "editor") {
+      userAdsQuery = userAdsQuery.eq("editor_id", profile.id);
+    } else if (profile.role === "manager") {
+      userAdsQuery = userAdsQuery.or(`creator_id.eq.${profile.id},editor_id.eq.${profile.id}`);
+    }
+
+    const { data: adsData, error: adsError } = await userAdsQuery;
     if (adsError) throw adsError;
     userAds = (adsData ?? []).map((ad) => ({
       ...ad,
@@ -50,23 +64,36 @@ export async function getIncentiveDashboard(profile: Profile) {
     }));
 
     const userAdIds = userAds.map((ad) => ad.id);
-    const col = profile.role === "content_creator" ? "creator_id" : "editor_id";
-    if (userAdIds.length) {
-      creativesQuery = creativesQuery.or(`${col}.eq.${profile.id},ad_id.in.(${userAdIds.join(",")})`);
-    } else {
-      creativesQuery = creativesQuery.eq(col, profile.id);
+    if (profile.role === "content_creator") {
+      if (userAdIds.length) {
+        creativesQuery = creativesQuery.or(`creator_id.eq.${profile.id},ad_id.in.(${userAdIds.join(",")})`);
+      } else {
+        creativesQuery = creativesQuery.eq("creator_id", profile.id);
+      }
+    } else if (profile.role === "editor") {
+      if (userAdIds.length) {
+        creativesQuery = creativesQuery.or(`editor_id.eq.${profile.id},ad_id.in.(${userAdIds.join(",")})`);
+      } else {
+        creativesQuery = creativesQuery.eq("editor_id", profile.id);
+      }
+    } else if (profile.role === "manager") {
+      if (userAdIds.length) {
+        creativesQuery = creativesQuery.or(`creator_id.eq.${profile.id},editor_id.eq.${profile.id},ad_id.in.(${userAdIds.join(",")})`);
+      } else {
+        creativesQuery = creativesQuery.or(`creator_id.eq.${profile.id},editor_id.eq.${profile.id}`);
+      }
     }
   }
 
   const [campaignResult, creativeResult, allAdsResult, metaAdsResult, transcriptMappingsResult] = await Promise.all([
-    supabase.from("incentive_campaigns").select("*,product:products(id,name,sku)").order("created_at", { ascending: false }),
+    admin.from("incentive_campaigns").select("*,product:products(id,name,sku)").order("created_at", { ascending: false }),
     creativesQuery,
-    reviewer
-      ? supabase.from("ads").select("id,name,product_id,creator_id,editor_id,thumbnail_url,drive_file_id,preview_url,resolved_video_url,status,production_stage,creator:profiles!ads_creator_id_fkey(id,name),editor:profiles!ads_editor_id_fkey(id,name)").order("created_at", { ascending: false })
+    !isScoped
+      ? admin.from("ads").select("id,name,product_id,creator_id,editor_id,thumbnail_url,drive_file_id,preview_url,resolved_video_url,status,production_stage,creator:profiles!ads_creator_id_fkey(id,name),editor:profiles!ads_editor_id_fkey(id,name)").order("created_at", { ascending: false })
       : Promise.resolve({ data: userAds, error: null }),
-    loadMetaAds(supabase),
+    loadMetaAds(admin),
     reviewer
-      ? supabase.from("meta_ad_transcript_mappings").select("mapping_key,meta_ad_id,meta_creative_id,meta_video_id,transcript,transcript_language,transcript_language_confidence,transcript_source,transcript_status,transcript_error,review_status,reviewed_at,review_note,matched_ad_id,match_score,match_confidence,matched_tokens,transcript_token_count,script_token_count,mapped_at,ad:ads!meta_ad_transcript_mappings_matched_ad_id_fkey(id,name,script_text,thumbnail_url,preview_url,drive_file_id,drive_url,resolved_video_url,product:products(name))").order("mapped_at", { ascending: false })
+      ? admin.from("meta_ad_transcript_mappings").select("mapping_key,meta_ad_id,meta_creative_id,meta_video_id,transcript,transcript_language,transcript_language_confidence,transcript_source,transcript_status,transcript_error,review_status,reviewed_at,review_note,matched_ad_id,match_score,match_confidence,matched_tokens,transcript_token_count,script_token_count,mapped_at,ad:ads!meta_ad_transcript_mappings_matched_ad_id_fkey(id,name,script_text,thumbnail_url,preview_url,drive_file_id,drive_url,resolved_video_url,product:products(name))").order("mapped_at", { ascending: false })
       : Promise.resolve({ data: [], error: null })
   ]);
 
@@ -76,7 +103,7 @@ export async function getIncentiveDashboard(profile: Profile) {
   if (metaAdsResult.error) throw metaAdsResult.error;
   if (transcriptMappingsResult.error) throw transcriptMappingsResult.error;
 
-  const rawEligibleAds = reviewer ? (allAdsResult.data ?? []) : userAds;
+  const rawEligibleAds = !isScoped ? (allAdsResult.data ?? []) : userAds;
   const eligibleAds = rawEligibleAds.map((ad) => ({
     ...ad,
     creator: Array.isArray(ad.creator) ? ad.creator[0] ?? null : ad.creator,
@@ -88,7 +115,7 @@ export async function getIncentiveDashboard(profile: Profile) {
     userAds.map((a) => a.name.trim().toUpperCase()).filter(Boolean)
   );
 
-  // Filter meta ads for non-reviewers so creators/editors only see their matching ads
+  // Filter meta ads for scoped roles so users only see their matching ads
   const rawMetaAds = (metaAdsResult.data ?? []).map((ad) => ({
     ...ad,
     spend: Number(ad.spend),
@@ -102,13 +129,13 @@ export async function getIncentiveDashboard(profile: Profile) {
     }))
   })) as MetaAd[];
 
-  const metaAds = reviewer
+  const metaAds = !isScoped
     ? rawMetaAds
     : rawMetaAds.filter((ad) => {
         // Direct ID mapping
         if (ad.matched_ad_id && userAdIds.has(ad.matched_ad_id)) return true;
-        if (profile.role === "content_creator" && ad.matched_creator_id === profile.id) return true;
-        if (profile.role === "editor" && ad.matched_editor_id === profile.id) return true;
+        if ((profile.role === "content_creator" || profile.role === "manager") && ad.matched_creator_id === profile.id) return true;
+        if ((profile.role === "editor" || profile.role === "manager") && ad.matched_editor_id === profile.id) return true;
 
         // Tag matching on detected tag
         if (ad.detected_tag && userAdNames.has(ad.detected_tag.toUpperCase())) return true;
@@ -132,9 +159,11 @@ export async function getIncentiveDashboard(profile: Profile) {
       });
 
   const campaignDestinations = getCampaignDestinations();
+  const matchedMetaAdIds = new Set(metaAds.map((ad) => ad.id));
 
   const userCreativeList = (creativeResult.data ?? []).filter((creative) => {
-    if (reviewer) return true;
+    if (!isScoped) return true;
+    if (creative.meta_ad_id && matchedMetaAdIds.has(creative.meta_ad_id)) return true;
     if (profile.role === "content_creator") {
       return (
         creative.creator_id === profile.id ||
@@ -146,6 +175,14 @@ export async function getIncentiveDashboard(profile: Profile) {
       return (
         creative.editor_id === profile.id ||
         (creative.ad && creative.ad.editor_id === profile.id) ||
+        (creative.ad_id && userAdIds.has(creative.ad_id))
+      );
+    }
+    if (profile.role === "manager") {
+      return (
+        creative.creator_id === profile.id ||
+        creative.editor_id === profile.id ||
+        (creative.ad && (creative.ad.creator_id === profile.id || creative.ad.editor_id === profile.id)) ||
         (creative.ad_id && userAdIds.has(creative.ad_id))
       );
     }
@@ -172,14 +209,14 @@ export async function getIncentiveDashboard(profile: Profile) {
     })) as IncentiveCreative[],
     eligibleAds,
     metaAds,
-    syncRuns: reviewer ? await loadSyncRuns(supabase) : [],
+    syncRuns: reviewer ? await loadSyncRuns(admin) : [],
     transcriptMappings: transcriptMappingsResult.data ?? [],
     campaignDestinations
   };
 }
 
-async function loadMetaAds(supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>) {
-  const detailed = await supabase
+async function loadMetaAds(admin: ReturnType<typeof createSupabaseAdminClient>) {
+  const detailed = await admin
     .from("meta_ads")
     .select("*,daily_metrics:meta_ad_daily_metrics(*),assets:meta_ad_assets(*,daily_metrics:meta_ad_asset_daily_metrics(*))")
     .order("spend", { ascending: false });
@@ -189,11 +226,11 @@ async function loadMetaAds(supabase: Awaited<ReturnType<typeof createSupabaseSer
   // while that operational database update is pending.
   if (detailed.error?.code !== "PGRST200") return detailed;
 
-  return supabase.from("meta_ads").select("*").order("spend", { ascending: false });
+  return admin.from("meta_ads").select("*").order("spend", { ascending: false });
 }
 
-async function loadSyncRuns(supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>) {
-  const { data, error } = await supabase.from("meta_sync_runs").select("*").order("started_at", { ascending: false }).limit(10);
+async function loadSyncRuns(admin: ReturnType<typeof createSupabaseAdminClient>) {
+  const { data, error } = await admin.from("meta_sync_runs").select("*").order("started_at", { ascending: false }).limit(10);
   return error ? [] : (data ?? []);
 }
 

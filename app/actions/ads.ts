@@ -876,6 +876,7 @@ export async function reviewAd(adId: string, decision: "approve" | "request_chan
       const { error: updateError } = await admin.from("ads").update({
         production_stage: "final_review",
         approval_stage: "admin_final",
+        status: "pending_review",
         creator_reviewed_at: ad.production_stage === "creator_review" ? (ad.creator_reviewed_at || new Date().toISOString()) : ad.creator_reviewed_at
       }).eq("id", adId);
       if (updateError) return { ok: false, message: updateError.message };
@@ -897,9 +898,47 @@ export async function reviewAd(adId: string, decision: "approve" | "request_chan
           production_stage: "final_review"
         }
       });
+    } else if ((isAdminReopen || isManagerReopen) && (error.message.includes("Creative is not available for final review") || error.message.includes("Only managers and admins"))) {
+      // Fallback: perform reopen directly if DB RPC has not yet been upgraded
+      const nextStage = resolvedTarget === "creator" ? "creator_changes_requested" : "changes_requested";
+      const { error: updateError } = await admin.from("ads").update({
+        production_stage: nextStage,
+        status: "changes_requested",
+        approval_stage: "manager_review",
+        approved_at: null,
+        final_approved_at: null
+      }).eq("id", adId);
+      if (updateError) return { ok: false, message: updateError.message };
+
+      await admin.from("review_actions").insert({
+        ad_id: adId,
+        reviewer_id: profile.id,
+        decision: "request_changes",
+        note: note.trim() || null
+      });
+
+      await admin.from("activity_logs").insert({
+        ad_id: adId,
+        actor_id: profile.id,
+        action: "approved_ad_reopened",
+        metadata: {
+          note: note.trim() || "",
+          previous_stage: "approved",
+          production_stage: nextStage,
+          target: resolvedTarget,
+          reopened: true
+        }
+      });
     } else {
       return { ok: false, message: error.message };
     }
+  }
+
+  // Ensure ad status column matches decision
+  if (decision === "request_changes") {
+    await admin.from("ads").update({ status: "changes_requested" }).eq("id", adId);
+  } else if (decision === "approve" && !isIntermediateManagerApproval) {
+    await admin.from("ads").update({ status: "approved" }).eq("id", adId);
   }
 
   if (isIntermediateManagerApproval) {
@@ -1084,6 +1123,8 @@ export async function dismissDownloadedBadge(adId: string) {
   });
   revalidatePath("/dashboard");
   revalidatePath("/library");
+  revalidatePath("/campaigns");
+  revalidatePath("/campaigns/[id]", "page");
   return { ok: true };
 }
 
@@ -1154,6 +1195,8 @@ export async function bulkSetDownloadedBadge(adIds: string[], downloaded: boolea
   })));
   revalidatePath("/dashboard");
   revalidatePath("/library");
+  revalidatePath("/campaigns");
+  revalidatePath("/campaigns/[id]", "page");
   return { ok: true, count: existingAdIds.length, downloaded: parsed.data.downloaded };
 }
 

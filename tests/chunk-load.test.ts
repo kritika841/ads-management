@@ -4,6 +4,7 @@ import { isChunkLoadFailure, isNextChunkUrl, isStaleApplicationFailure } from "@
 describe("chunk load recovery", () => {
   it.each([
     new Error("Loading chunk app/library/page failed."),
+    new Error("Loading CSS chunk app/globals failed."),
     { name: "ChunkLoadError", message: "route chunk unavailable" },
     "Failed to fetch dynamically imported module",
     "Importing a module script failed"
@@ -13,6 +14,8 @@ describe("chunk load recovery", () => {
 
   it("does not reload for ordinary application errors", () => {
     expect(isChunkLoadFailure(new Error("Invalid login credentials"))).toBe(false);
+    expect(isStaleApplicationFailure(Object.assign(new Error("Database connection lost"), { digest: "12345" }))).toBe(false);
+    expect(isStaleApplicationFailure(Object.assign(new Error("Cannot read properties of undefined"), { digest: "98765" }))).toBe(false);
   });
 
   it.each([

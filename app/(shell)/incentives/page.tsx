@@ -21,6 +21,7 @@ export default async function IncentivesPage() {
       profile={profile}
       products={products}
       hiddenMetricsByRole={settings.hidden_metrics_by_role}
+      managerCreativeScope={settings.manager_creative_scope ?? "all"}
       {...dashboard}
     />
   );

@@ -54,9 +54,9 @@ export type Campaign = {
 
 export type CampaignOverview = {
   campaign: Campaign;
-  videoGoal: number;
+  videoGoal: number | null;
   totalCreatives: number;
-  goalProgressPercent: number;
+  goalProgressPercent: number | null;
   approvedCount: number;
   inCreationCount: number;
   inReviewCount: number;
@@ -134,6 +134,7 @@ export type AdWithRelations = Ad & {
     note: string | null;
     created_at: string;
     reviewer?: Pick<Profile, "id" | "name" | "role"> | null;
+    target_role?: "creator" | "editor" | null;
   } | null;
   activity_logs?: {
     id: string;
@@ -303,6 +304,7 @@ export type AppSettings = {
   final_review_sla_hours: number;
   revision_sla_hours: number;
   allow_manager_final_approval?: boolean;
+  manager_creative_scope?: import("@/lib/metric-visibility").ManagerCreativeScope;
   hidden_metrics_by_role?: import("@/lib/metric-visibility").HiddenMetricsByRole;
   updated_at: string;
 };

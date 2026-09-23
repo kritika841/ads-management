@@ -39,6 +39,56 @@ export function isCarriedTarget(item: DailyTarget): boolean {
   return Boolean(item.carried_from_target_id) || item.task_name.toLowerCase().includes("(carried forward)");
 }
 
+export function baseTaskName(taskName: string): string {
+  return taskName.replace(/\s*\(carried forward\)/i, "").trim();
+}
+
+export function reconcileDailySurplus(daily: DailyTarget[]): Array<{ task: DailyTarget; effectiveCompleted: number; isShort: boolean }> {
+  const taskStates = daily.map((item) => ({
+    item,
+    target: item.target_quantity,
+    completed: item.completed_quantity,
+    effectiveCompleted: item.completed_quantity,
+    isCarried: isCarriedTarget(item),
+    baseName: canonicalTaskName(undefined, item.task_name).replace(/\s*\(carried forward\)/i, "").trim().toLowerCase(),
+  }));
+
+  for (const nonCarried of taskStates) {
+    if (nonCarried.isCarried || nonCarried.effectiveCompleted <= nonCarried.target) continue;
+    let surplus = nonCarried.effectiveCompleted - nonCarried.target;
+
+    // First satisfy carried tasks with matching base task name
+    for (const carried of taskStates) {
+      if (!carried.isCarried || carried.effectiveCompleted >= carried.target) continue;
+      if (carried.baseName === nonCarried.baseName) {
+        const needed = carried.target - carried.effectiveCompleted;
+        const grant = Math.min(surplus, needed);
+        carried.effectiveCompleted += grant;
+        surplus -= grant;
+        if (surplus <= 0) break;
+      }
+    }
+
+    // Next satisfy any other carried tasks on that day
+    if (surplus > 0) {
+      for (const carried of taskStates) {
+        if (!carried.isCarried || carried.effectiveCompleted >= carried.target) continue;
+        const needed = carried.target - carried.effectiveCompleted;
+        const grant = Math.min(surplus, needed);
+        carried.effectiveCompleted += grant;
+        surplus -= grant;
+        if (surplus <= 0) break;
+      }
+    }
+  }
+
+  return taskStates.map((state) => ({
+    task: state.item,
+    effectiveCompleted: state.effectiveCompleted,
+    isShort: state.target > 0 && state.effectiveCompleted < state.target,
+  }));
+}
+
 export function summarizeTargets(profiles: Profile[], targets: DailyTarget[], month: string, today = dateInTargetTimeZone()) {
   const bounds = monthBounds(month);
   const currentMonth = today.slice(0, 7);
@@ -58,8 +108,9 @@ export function summarizeTargets(profiles: Profile[], targets: DailyTarget[], mo
       const daily = records.filter((item) => item.target_date === date);
       const dailyTarget = daily.reduce((sum, item) => sum + item.target_quantity, 0);
       const dailyCompleted = daily.reduce((sum, item) => sum + item.completed_quantity, 0);
-      const assignedTasks = daily.filter((item) => item.target_quantity > 0);
-      const shortTasks = assignedTasks.filter((item) => item.completed_quantity < item.target_quantity).map((item) => item.task_name);
+      const reconciled = reconcileDailySurplus(daily);
+      const assignedTasks = reconciled.filter((r) => r.task.target_quantity > 0);
+      const shortTasks = assignedTasks.filter((r) => r.isShort).map((r) => r.task.task_name);
       const status = assignedTasks.length && shortTasks.length
         ? date > today ? "scheduled" : date < today ? "missed" : "in_progress"
         : dailyStatus(dailyTarget, dailyCompleted, date, today);

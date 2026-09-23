@@ -81,7 +81,16 @@ export function AppShell({
           { href: "/admin/users", label: "People", icon: Users },
           { href: "/admin/performance", label: "Editor Performance", icon: BarChart2 },
           { href: "/admin/products", label: "Products", icon: Package },
-          { href: "/admin/settings", label: "Settings", icon: Settings }
+          {
+            href: "/admin/settings#workflow",
+            label: "Settings",
+            icon: Settings,
+            children: [
+              { href: "/admin/settings#workflow", label: "Workflow & Campaigns" },
+              { href: "/admin/settings#downloads", label: "Download Logs" },
+              { href: "/admin/settings#audit", label: "Audit Log" }
+            ]
+          }
         ]
       : [];
   const pageTitle = [...workspaceLinks, ...adminLinks].find((item) => isActivePath(pathname, item.href))?.label ??
@@ -235,11 +244,12 @@ function NavGroup({
 }) {
   const [hash, setHash] = useState("");
   useEffect(() => {
-    const syncHash = () => setHash(window.location.hash || "#overview");
+    const defaultHash = pathname.startsWith("/admin/settings") ? "#workflow" : "#overview";
+    const syncHash = () => setHash(window.location.hash || defaultHash);
     syncHash();
     window.addEventListener("hashchange", syncHash);
     return () => window.removeEventListener("hashchange", syncHash);
-  }, []);
+  }, [pathname]);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(
       items
@@ -319,10 +329,11 @@ function NavGroup({
                 <div className="ml-9 mt-1 space-y-0.5 border-l border-border pl-2">
                   {item.children.map((child) => {
                     const childHash = child.href.includes("#") ? `#${child.href.split("#")[1]}` : "";
-                    const activeHash = hash || "#overview";
+                    const defaultHash = pathname.startsWith("/admin/settings") ? "#workflow" : "#overview";
+                    const activeHash = hash || defaultHash;
                     const childActive =
                       pathname === child.href.split("#")[0] &&
-                      (childHash === activeHash || (!hash && childHash === "#overview"));
+                      (childHash === activeHash || (!hash && childHash === defaultHash));
                     return (
                       <a
                         key={child.href}

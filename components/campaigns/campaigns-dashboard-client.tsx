@@ -5,9 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle,
+  AppWindow,
   ArrowRight,
+  Check,
   CheckCircle2,
   Clock,
+  Copy,
+  Download,
   Edit2,
   ExternalLink,
   Film,
@@ -20,19 +24,31 @@ import {
   RotateCcw,
   Search,
   SlidersHorizontal,
+  SquareCheck,
   Target,
   Trash2,
   Video,
   X
 } from "lucide-react";
 import { ExcelColumnDef, ExcelTable } from "@/components/campaigns/excel-table";
+import {
+  useBulkDownload,
+  BulkDownloadProgress,
+  BulkActionsBar
+} from "@/components/campaigns/bulk-download-progress";
+import { CreativeStatusBadge } from "@/components/campaigns/campaign-detail-client";
+import { AdPreviewModal } from "@/components/dashboard/ad-preview-modal";
+import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
+import { useToast } from "@/components/ui/toast";
+import { ProductionStageBadge } from "@/components/workflow/production-stage";
+import { bulkSetDownloadedBadge } from "@/app/actions/ads";
 import { saveInternalCampaign, deleteInternalCampaign } from "@/app/actions/campaigns";
 import { runServerAction } from "@/lib/client-action";
 import type { AdWithRelations, Campaign, CampaignOverview, Profile } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, formatDateOnly, isDownloaded } from "@/lib/utils";
 
 function getAdThumbnailSrc(ad: AdWithRelations): string {
   if (ad.id) {
@@ -92,6 +108,89 @@ function MiniThumbnail({ ad }: { ad: AdWithRelations }) {
   );
 }
 
+function AdScriptModal({
+  ad,
+  onClose
+}: {
+  ad: AdWithRelations | null;
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  if (!ad) return null;
+
+  const text = ad.script_text || "No script text available.";
+  const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
+
+  const handleCopy = () => {
+    if (ad.script_text) {
+      void navigator.clipboard.writeText(ad.script_text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  return (
+    <Modal open labelledBy="script-modal-title" onClose={onClose} className="p-0 sm:p-6">
+      <section className="mx-auto min-h-full w-full bg-card shadow-float sm:min-h-0 sm:max-w-2xl sm:rounded-xl">
+        <div className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border bg-card px-5 sm:rounded-t-lg">
+          <h2 id="script-modal-title" className="text-base font-semibold text-foreground truncate pr-2">
+            {ad.name}
+          </h2>
+          <Button size="icon" variant="ghost" onClick={onClose}>
+            <X className="size-4" />
+          </Button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
+            <div className="flex items-center gap-2">
+              <CreativeStatusBadge ad={ad} />
+              {ad.product?.name ? (
+                <span className="text-xs font-medium text-foreground">· {ad.product.name}</span>
+              ) : null}
+            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>{wordCount} words</span>
+              <span>·</span>
+              <span>{text.length} characters</span>
+            </div>
+          </div>
+
+          <div className="max-h-[50vh] overflow-y-auto rounded-lg border border-border bg-muted/30 p-4 font-normal text-sm leading-relaxed text-foreground whitespace-pre-wrap select-text">
+            {text}
+          </div>
+
+          <div className="flex items-center justify-between pt-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={handleCopy}
+              className="gap-1.5 text-xs"
+            >
+              {copied ? <Check className="size-3.5 text-success" /> : <Copy className="size-3.5" />}
+              {copied ? "Copied" : "Copy script"}
+            </Button>
+
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/ads/${ad.id}`}
+                className="inline-flex items-center gap-1 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors"
+              >
+                Open creative
+                <ArrowRight className="size-3" />
+              </Link>
+              <Button type="button" size="sm" onClick={onClose} className="text-xs">
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </Modal>
+  );
+}
+
 export function CampaignsDashboardClient({
   profile,
   campaignOverviews
@@ -100,6 +199,11 @@ export function CampaignsDashboardClient({
   campaignOverviews: CampaignOverview[];
 }) {
   const router = useRouter();
+
+  // Dual View Switcher: "campaigns" vs "ads"
+  const [dashboardView, setDashboardView] = useState<"campaigns" | "ads">("campaigns");
+
+  // Campaigns View filters
   const [search, setSearch] = useState("");
   const [filterActive, setFilterActive] = useState<"all" | "active" | "inactive">("all");
   const [selectedProductId, setSelectedProductId] = useState<string>("all");
@@ -108,18 +212,89 @@ export function CampaignsDashboardClient({
   const [selectedProgress, setSelectedProgress] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
 
+  // Ads View filters & bulk state
+  const { toast } = useToast();
+  const [adSearch, setAdSearch] = useState("");
+  const [adCampaignFilter, setAdCampaignFilter] = useState<string>("all");
+  const [adProductFilter, setAdProductFilter] = useState<string>("all");
+  const [adCreatorFilter, setAdCreatorFilter] = useState<string>("all");
+  const [adEditorFilter, setAdEditorFilter] = useState<string>("all");
+  const [adStageFilter, setAdStageFilter] = useState<string>("all");
+  const [adDownloadFilter, setAdDownloadFilter] = useState<"all" | "downloaded" | "not_downloaded">("all");
+  const [showAdFilters, setShowAdFilters] = useState(false);
+  const [updatingDownloadedId, setUpdatingDownloadedId] = useState<string | null>(null);
+  const [isBulkUpdatingDownloaded, setIsBulkUpdatingDownloaded] = useState(false);
+  const adsBulk = useBulkDownload();
+  const campaignsBulk = useBulkDownload();
+
+  const handleToggleDownloaded = async (ad: AdWithRelations) => {
+    if (profile.role !== "admin" || updatingDownloadedId) return;
+    const currentlyDownloaded = isDownloaded(ad);
+    setUpdatingDownloadedId(ad.id);
+    try {
+      const res = await runServerAction(() => bulkSetDownloadedBadge([ad.id], !currentlyDownloaded));
+      if (!res.ok) {
+        toast({ title: "Could not update downloaded badge", description: res.message ?? "Try again.", tone: "error" });
+        return;
+      }
+      toast({
+        title: !currentlyDownloaded ? `Marked "${ad.name}" as downloaded` : `Removed downloaded badge from "${ad.name}"`,
+        tone: "success"
+      });
+      router.refresh();
+    } finally {
+      setUpdatingDownloadedId(null);
+    }
+  };
+
+  const handleBulkDownloaded = async (downloaded: boolean) => {
+    if (profile.role !== "admin" || !adsBulk.selectedIds.size || isBulkUpdatingDownloaded) return;
+    setIsBulkUpdatingDownloaded(true);
+    try {
+      const ids = Array.from(adsBulk.selectedIds);
+      const res = await runServerAction(() => bulkSetDownloadedBadge(ids, downloaded));
+      if (!res.ok) {
+        toast({ title: "Could not update downloaded badges", description: res.message ?? "Try again.", tone: "error" });
+        return;
+      }
+      toast({
+        title: downloaded
+          ? `Marked ${res.count} creative${res.count === 1 ? "" : "s"} as downloaded`
+          : `Removed downloaded badge from ${res.count} creative${res.count === 1 ? "" : "s"}`,
+        tone: "success"
+      });
+      router.refresh();
+    } finally {
+      setIsBulkUpdatingDownloaded(false);
+    }
+  };
+
+  // Modals for Ads view
+  const [previewAd, setPreviewAd] = useState<AdWithRelations | null>(null);
+  const [selectedScriptAd, setSelectedScriptAd] = useState<AdWithRelations | null>(null);
+
   const [isPending, startTransition] = useTransition();
 
-  // Modal states
+  // Modal states for Campaign Creation / Editing
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [videoGoal, setVideoGoal] = useState(10);
+  const [videoGoal, setVideoGoal] = useState<number | null>(null);
   const [active, setActive] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const canManage = profile.role === "admin" || profile.role === "manager";
+
+  // Flat list of all creatives across campaigns
+  const allCreatives: (AdWithRelations & { campaign?: Campaign })[] = useMemo(() => {
+    return campaignOverviews.flatMap((ov) =>
+      ov.creatives.map((creative) => ({
+        ...creative,
+        campaign: ov.campaign
+      }))
+    );
+  }, [campaignOverviews]);
 
   // Available filter options extracted from creatives
   const { allProducts, allCreators, allEditors } = useMemo(() => {
@@ -142,7 +317,7 @@ export function CampaignsDashboardClient({
     };
   }, [campaignOverviews]);
 
-  // Filtered overviews
+  // Filtered overviews (for Campaigns view)
   const filteredOverviews = useMemo(() => {
     return campaignOverviews.filter((item) => {
       if (filterActive === "active" && !item.campaign.active) return false;
@@ -176,8 +351,12 @@ export function CampaignsDashboardClient({
         if (!hasEditor) return false;
       }
 
-      if (selectedProgress === "completed" && item.goalProgressPercent < 100) return false;
-      if (selectedProgress === "in_progress" && (item.goalProgressPercent >= 100 || item.totalCreatives === 0))
+      if (selectedProgress === "completed" && (item.goalProgressPercent == null || item.goalProgressPercent < 100))
+        return false;
+      if (
+        selectedProgress === "in_progress" &&
+        (item.goalProgressPercent == null || item.goalProgressPercent >= 100 || item.totalCreatives === 0)
+      )
         return false;
       if (selectedProgress === "empty" && item.totalCreatives > 0) return false;
 
@@ -210,6 +389,91 @@ export function CampaignsDashboardClient({
     setSelectedProgress("all");
   };
 
+  // Filtered ads (for Ads view)
+  const filteredAds = useMemo(() => {
+    return allCreatives.filter((ad) => {
+      if (adCampaignFilter !== "all" && ad.campaign_id !== adCampaignFilter) return false;
+      if (adProductFilter !== "all" && ad.product_id !== adProductFilter) return false;
+      if (adCreatorFilter !== "all" && ad.creator_id !== adCreatorFilter) return false;
+      if (adEditorFilter !== "all" && ad.editor_id !== adEditorFilter) return false;
+
+      if (adDownloadFilter !== "all") {
+        const dl = isDownloaded(ad);
+        if (adDownloadFilter === "downloaded" && !dl) return false;
+        if (adDownloadFilter === "not_downloaded" && dl) return false;
+      }
+
+      if (adStageFilter !== "all") {
+        if (adStageFilter === "approved" && ad.production_stage !== "approved" && ad.status !== "approved") {
+          return false;
+        }
+        if (adStageFilter === "in_review") {
+          const reviewStages = ["creator_review", "final_review", "creator_changes_requested", "changes_requested"];
+          if (!reviewStages.includes(ad.production_stage)) return false;
+        }
+        if (adStageFilter === "in_creation") {
+          const creationStages = ["script_writing", "ready_to_shoot", "shoot_complete", "ready_for_edit", "editing"];
+          if (!creationStages.includes(ad.production_stage)) return false;
+        }
+        if (ad.production_stage !== adStageFilter && ad.status !== adStageFilter) return false;
+      }
+
+      if (adSearch.trim()) {
+        const q = adSearch.toLowerCase();
+        const matchName = ad.name.toLowerCase().includes(q);
+        const matchCamp = ad.campaign?.name.toLowerCase().includes(q);
+        const matchScript = ad.script_text?.toLowerCase().includes(q);
+        const matchNotes = ad.notes?.toLowerCase().includes(q);
+        const matchProd = ad.product?.name.toLowerCase().includes(q);
+        const matchCreator = ad.creator?.name.toLowerCase().includes(q);
+        const matchEditor = ad.editor?.name.toLowerCase().includes(q);
+        const matchTags = ad.tags?.some((t) => t.name.toLowerCase().includes(q));
+        if (
+          !matchName &&
+          !matchCamp &&
+          !matchScript &&
+          !matchNotes &&
+          !matchProd &&
+          !matchCreator &&
+          !matchEditor &&
+          !matchTags
+        ) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [
+    allCreatives,
+    adCampaignFilter,
+    adProductFilter,
+    adCreatorFilter,
+    adEditorFilter,
+    adStageFilter,
+    adDownloadFilter,
+    adSearch
+  ]);
+
+  const hasActiveAdFilters =
+    adSearch.trim() !== "" ||
+    adCampaignFilter !== "all" ||
+    adProductFilter !== "all" ||
+    adCreatorFilter !== "all" ||
+    adEditorFilter !== "all" ||
+    adStageFilter !== "all" ||
+    adDownloadFilter !== "all";
+
+  const resetAdFilters = () => {
+    setAdSearch("");
+    setAdCampaignFilter("all");
+    setAdProductFilter("all");
+    setAdCreatorFilter("all");
+    setAdEditorFilter("all");
+    setAdStageFilter("all");
+    setAdDownloadFilter("all");
+  };
+
   // Overall KPIs rollup
   const totals = useMemo(() => {
     let totalGoal = 0;
@@ -221,7 +485,9 @@ export function CampaignsDashboardClient({
     let totalPurchases = 0;
 
     for (const item of campaignOverviews) {
-      totalGoal += item.videoGoal;
+      if (item.videoGoal && item.videoGoal > 0) {
+        totalGoal += item.videoGoal;
+      }
       totalCreatives += item.totalCreatives;
       totalApproved += item.approvedCount;
       totalInCreation += item.inCreationCount;
@@ -230,7 +496,7 @@ export function CampaignsDashboardClient({
       totalPurchases += item.metrics.totalPurchases;
     }
 
-    const overallProgress = totalGoal > 0 ? Math.min(100, Math.round((totalApproved / totalGoal) * 100)) : 0;
+    const overallProgress = totalGoal > 0 ? Math.min(100, Math.round((totalApproved / totalGoal) * 100)) : null;
     return {
       totalCampaigns: campaignOverviews.length,
       totalGoal,
@@ -248,7 +514,7 @@ export function CampaignsDashboardClient({
     setEditingCampaign(null);
     setName("");
     setDescription("");
-    setVideoGoal(10);
+    setVideoGoal(null);
     setActive(true);
     setErrorMessage(null);
     setModalOpen(true);
@@ -259,7 +525,17 @@ export function CampaignsDashboardClient({
     setEditingCampaign(campaign);
     setName(campaign.name);
     setDescription(campaign.description ?? "");
-    setVideoGoal(campaign.video_goal ?? 10);
+    setVideoGoal(campaign.video_goal ?? null);
+    setActive(campaign.active);
+    setErrorMessage(null);
+    setModalOpen(true);
+  };
+
+  const handleDuplicateCampaign = (campaign: Campaign) => {
+    setEditingCampaign(null);
+    setName(`${campaign.name} (Copy)`);
+    setDescription(campaign.description ?? "");
+    setVideoGoal(campaign.video_goal ?? null);
     setActive(campaign.active);
     setErrorMessage(null);
     setModalOpen(true);
@@ -279,7 +555,7 @@ export function CampaignsDashboardClient({
           id: editingCampaign?.id,
           name: name.trim(),
           description: description.trim() || null,
-          videoGoal: Number(videoGoal) || 10,
+          videoGoal: videoGoal != null ? Number(videoGoal) : null,
           active
         })
       );
@@ -308,9 +584,31 @@ export function CampaignsDashboardClient({
     });
   };
 
-  // Excel columns definition
-  const columns: ExcelColumnDef<CampaignOverview>[] = useMemo(
+  // Excel columns definition for Campaigns View
+  const campaignColumns: ExcelColumnDef<CampaignOverview>[] = useMemo(
     () => [
+      {
+        id: "select",
+        header: "",
+        defaultWidth: 44,
+        minWidth: 44,
+        maxWidth: 44,
+        align: "center",
+        cell: (item) => (
+          <div
+            className="flex items-center justify-center size-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <input
+              type="checkbox"
+              checked={campaignsBulk.isSelected(item.campaign.id)}
+              onChange={() => campaignsBulk.toggleSelect(item.campaign.id)}
+              aria-label={`Select campaign ${item.campaign.name}`}
+              className="size-4 rounded border-border text-primary focus:ring-primary/20 cursor-pointer"
+            />
+          </div>
+        )
+      },
       {
         id: "name",
         header: "Campaign Name",
@@ -368,7 +666,11 @@ export function CampaignsDashboardClient({
         defaultWidth: 75,
         minWidth: 50,
         align: "center",
-        cell: (item) => <span className="font-mono font-bold text-xs text-foreground">{item.videoGoal}</span>
+        cell: (item) => (
+          <span className="font-mono font-bold text-xs text-foreground">
+            {item.videoGoal && item.videoGoal > 0 ? item.videoGoal : "—"}
+          </span>
+        )
       },
       {
         id: "creatives",
@@ -383,36 +685,45 @@ export function CampaignsDashboardClient({
         header: "Progress",
         defaultWidth: 130,
         minWidth: 80,
-        cell: (item) => (
-          <div className="space-y-1 w-full">
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="font-medium text-foreground">
-                {item.approvedCount}/{item.videoGoal}
+        cell: (item) => {
+          if (!item.videoGoal || item.videoGoal <= 0) {
+            return (
+              <span className="text-xs text-muted-foreground font-medium">
+                {item.approvedCount} approved
               </span>
-              <span
-                className={cn(
-                  "font-mono font-semibold text-[10px]",
-                  item.goalProgressPercent >= 100 ? "text-success" : "text-muted-foreground"
-                )}
-              >
-                {item.goalProgressPercent}%
-              </span>
+            );
+          }
+          return (
+            <div className="space-y-1 w-full">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="font-medium text-foreground">
+                  {item.approvedCount}/{item.videoGoal}
+                </span>
+                <span
+                  className={cn(
+                    "font-mono font-semibold text-[10px]",
+                    (item.goalProgressPercent ?? 0) >= 100 ? "text-success" : "text-muted-foreground"
+                  )}
+                >
+                  {item.goalProgressPercent ?? 0}%
+                </span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all",
+                    (item.goalProgressPercent ?? 0) >= 100
+                      ? "bg-success"
+                      : (item.goalProgressPercent ?? 0) >= 50
+                      ? "bg-primary"
+                      : "bg-warning"
+                  )}
+                  style={{ width: `${item.goalProgressPercent ?? 0}%` }}
+                />
+              </div>
             </div>
-            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-              <div
-                className={cn(
-                  "h-full rounded-full transition-all",
-                  item.goalProgressPercent >= 100
-                    ? "bg-success"
-                    : item.goalProgressPercent >= 50
-                    ? "bg-primary"
-                    : "bg-warning"
-                )}
-                style={{ width: `${item.goalProgressPercent}%` }}
-              />
-            </div>
-          </div>
-        )
+          );
+        }
       },
       {
         id: "approved",
@@ -559,30 +870,6 @@ export function CampaignsDashboardClient({
         )
       },
       {
-        id: "metrics_spend",
-        header: "Spend",
-        defaultWidth: 95,
-        minWidth: 55,
-        align: "right",
-        cell: (item) => (
-          <span className="font-mono text-xs text-foreground">
-            {item.metrics.totalSpend > 0 ? `₹${item.metrics.totalSpend.toLocaleString("en-IN")}` : "—"}
-          </span>
-        )
-      },
-      {
-        id: "metrics_cpa",
-        header: "CPA",
-        defaultWidth: 85,
-        minWidth: 50,
-        align: "right",
-        cell: (item) => (
-          <span className="font-mono text-xs text-foreground">
-            {item.metrics.averageCpa != null ? `₹${item.metrics.averageCpa.toFixed(1)}` : "—"}
-          </span>
-        )
-      },
-      {
         id: "status",
         header: "Status",
         defaultWidth: 80,
@@ -636,25 +923,369 @@ export function CampaignsDashboardClient({
         )
       }
     ],
-    [canManage]
+    [canManage, campaignsBulk.selectedIds, campaignsBulk.toggleSelect, campaignsBulk.isSelected]
+  );
+
+  // Excel columns definition for Ads View
+  const adColumns: ExcelColumnDef<AdWithRelations & { campaign?: Campaign }>[] = useMemo(
+    () => [
+      {
+        id: "select",
+        header: "",
+        defaultWidth: 44,
+        minWidth: 44,
+        maxWidth: 44,
+        align: "center",
+        cell: (ad) => (
+          <div
+            className="flex items-center justify-center size-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <input
+              type="checkbox"
+              checked={adsBulk.isSelected(ad.id)}
+              onChange={() => adsBulk.toggleSelect(ad.id)}
+              className="size-4 rounded border-border text-primary focus:ring-primary focus:ring-offset-background cursor-pointer"
+              aria-label={`Select ${ad.name}`}
+            />
+          </div>
+        )
+      },
+      {
+        id: "thumbnail",
+        header: "Video",
+        defaultWidth: 70,
+        minWidth: 55,
+        align: "center",
+        cell: (ad) => (
+          <div
+            className="flex items-center justify-center cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation();
+              setPreviewAd(ad);
+            }}
+          >
+            <MiniThumbnail ad={ad} />
+          </div>
+        )
+      },
+      {
+        id: "name",
+        header: "Ad / Creative Name",
+        defaultWidth: 200,
+        minWidth: 120,
+        cell: (ad) => {
+          const displayTags = (ad.tags ?? [])
+            .filter((tag) => tag.name.toLowerCase() !== "downloaded")
+            .slice(0, 2);
+          return (
+            <div className="space-y-0.5 overflow-hidden">
+              <Link
+                href={`/ads/${ad.id}`}
+                className="font-semibold text-foreground hover:text-primary transition-colors block truncate"
+              >
+                {ad.name}
+              </Link>
+              {displayTags.length > 0 ? (
+                <div className="flex flex-wrap gap-1">
+                  {displayTags.map((tag) => (
+                    <span
+                      key={tag.id}
+                      className="inline-block rounded bg-muted px-1 py-0.2 text-[9px] text-muted-foreground"
+                    >
+                      #{tag.name}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          );
+        }
+      },
+      {
+        id: "downloaded",
+        header: "Downloaded",
+        defaultWidth: 135,
+        minWidth: 110,
+        align: "center",
+        cell: (ad) => {
+          const downloaded = isDownloaded(ad);
+          const isUpdating = updatingDownloadedId === ad.id;
+          const isAdmin = profile.role === "admin";
+          return (
+            <div
+              className="flex items-center justify-center size-full"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {isAdmin ? (
+                <button
+                  type="button"
+                  disabled={isUpdating}
+                  onClick={() => void handleToggleDownloaded(ad)}
+                  className={cn(
+                    "group/dl inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-semibold transition-all duration-150 border cursor-pointer select-none",
+                    downloaded
+                      ? "border-success/40 bg-success/15 text-success hover:bg-success/25 hover:border-success/60"
+                      : "border-border/80 bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                  title={
+                    downloaded
+                      ? "Downloaded · Click to remove downloaded badge"
+                      : "Yet to download · Click to mark as downloaded"
+                  }
+                >
+                  {isUpdating ? (
+                    <Loader2 className="size-2.5 animate-spin shrink-0" />
+                  ) : downloaded ? (
+                    <Download className="size-2.5 shrink-0 text-success" />
+                  ) : (
+                    <Clock className="size-2.5 shrink-0 text-muted-foreground/70" />
+                  )}
+                  <span>{downloaded ? "Downloaded" : "Yet to download"}</span>
+                </button>
+              ) : (
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-semibold border",
+                    downloaded
+                      ? "border-success/40 bg-success/15 text-success"
+                      : "border-border/80 bg-muted/60 text-muted-foreground"
+                  )}
+                >
+                  {downloaded ? (
+                    <Download className="size-2.5 shrink-0 text-success" />
+                  ) : (
+                    <Clock className="size-2.5 shrink-0 text-muted-foreground/70" />
+                  )}
+                  <span>{downloaded ? "Downloaded" : "Yet to download"}</span>
+                </span>
+              )}
+            </div>
+          );
+        }
+      },
+      {
+        id: "campaign",
+        header: "Campaign",
+        defaultWidth: 170,
+        minWidth: 110,
+        cell: (ad) => (
+          <Link
+            href={`/campaigns/${ad.campaign_id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs font-medium text-foreground hover:bg-muted transition-colors max-w-full truncate group/camp"
+          >
+            <FolderKanban className="size-3 text-primary shrink-0" />
+            <span className="truncate">{ad.campaign?.name ?? "Campaign"}</span>
+            <ExternalLink className="size-2.5 text-muted-foreground opacity-0 group-hover/camp:opacity-100 transition-opacity shrink-0" />
+          </Link>
+        )
+      },
+      {
+        id: "product",
+        header: "Product",
+        defaultWidth: 130,
+        minWidth: 80,
+        cell: (ad) => (
+          <div className="flex items-center gap-1.5 overflow-hidden">
+            {ad.product?.image_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={ad.product.image_url}
+                alt={ad.product.name}
+                className="size-5 shrink-0 rounded object-cover border border-border"
+              />
+            ) : null}
+            <span className="font-medium text-foreground text-xs truncate">
+              {ad.product?.name ?? "—"}
+            </span>
+          </div>
+        )
+      },
+      {
+        id: "status",
+        header: "Status",
+        defaultWidth: 130,
+        minWidth: 90,
+        cell: (ad) => <CreativeStatusBadge ad={ad} />
+      },
+      {
+        id: "stage",
+        header: "Stage",
+        defaultWidth: 130,
+        minWidth: 80,
+        cell: (ad) => <ProductionStageBadge stage={ad.production_stage} role={profile.role} />
+      },
+      {
+        id: "creator",
+        header: "Creator",
+        defaultWidth: 130,
+        minWidth: 70,
+        cell: (ad) =>
+          ad.creator ? (
+            <div className="flex items-center gap-1.5 overflow-hidden">
+              <Avatar name={ad.creator.name} src={ad.creator.avatar_url} className="size-5 shrink-0" />
+              <span className="font-medium text-foreground text-xs truncate">{ad.creator.name}</span>
+            </div>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          )
+      },
+      {
+        id: "editor",
+        header: "Editor",
+        defaultWidth: 130,
+        minWidth: 70,
+        cell: (ad) =>
+          ad.editor ? (
+            <div className="flex items-center gap-1.5 overflow-hidden">
+              <Avatar name={ad.editor.name} src={ad.editor.avatar_url} className="size-5 shrink-0" />
+              <span className="font-medium text-foreground text-xs truncate">{ad.editor.name}</span>
+            </div>
+          ) : (
+            <span className="text-xs text-muted-foreground italic">Unassigned</span>
+          )
+      },
+      {
+        id: "script",
+        header: "Script",
+        defaultWidth: 200,
+        minWidth: 60,
+        cell: (ad) => {
+          const text = ad.script_text || "—";
+          const hasText = Boolean(ad.script_text);
+          return (
+            <div
+              onClick={(e) => {
+                if (hasText) {
+                  e.stopPropagation();
+                  setSelectedScriptAd(ad);
+                }
+              }}
+              className={cn(
+                "text-xs leading-relaxed text-foreground/90 font-normal whitespace-pre-wrap break-words line-clamp-2 w-full",
+                hasText && "cursor-pointer hover:text-primary transition-colors"
+              )}
+              title={hasText ? "Click to view full script" : undefined}
+            >
+              {text}
+            </div>
+          );
+        }
+      },
+      {
+        id: "deadline",
+        header: "Deadline",
+        defaultWidth: 100,
+        minWidth: 60,
+        cell: (ad) => (
+          <span className="text-xs font-mono text-muted-foreground">
+            {ad.deadline ? formatDateOnly(ad.deadline) : "—"}
+          </span>
+        )
+      },
+      {
+        id: "actions",
+        header: "Actions",
+        defaultWidth: 75,
+        minWidth: 50,
+        align: "center",
+        cell: (ad) => (
+          <div className="flex items-center justify-center gap-1">
+            <Link
+              href={`/ads/${ad.id}`}
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex size-6 items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              title="Open creative review"
+            >
+              <ArrowRight className="size-3.5" />
+            </Link>
+          </div>
+        )
+      }
+    ],
+    [profile.role, adsBulk.selectedIds, adsBulk.toggleSelect, adsBulk.isSelected, updatingDownloadedId, handleToggleDownloaded]
   );
 
   return (
     <main className="page-container space-y-5 pb-12">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <FolderKanban className="size-5" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">Campaigns</h1>
-          </div>
+      {/* Top Static Header with Folder-Type View Switcher on the Left */}
+      <div className="flex flex-col gap-3 border-b border-border pb-px sm:flex-row sm:items-center sm:justify-between">
+        {/* Left Side: Folder-type Tab Switcher replacing the title */}
+        <div className="flex items-end gap-1.5 -mb-px">
+          {/* Campaigns Folder Tab */}
+          <button
+            type="button"
+            onClick={() => setDashboardView("campaigns")}
+            className={cn(
+              "group relative flex items-center gap-2 rounded-t-lg px-4 py-2.5 text-sm transition-all duration-150",
+              dashboardView === "campaigns"
+                ? "border-t-2 border-primary border-x border-border bg-card text-foreground font-semibold shadow-2xs z-10"
+                : "border-t border-x border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40 font-medium"
+            )}
+          >
+            <div
+              className={cn(
+                "flex size-5 items-center justify-center rounded transition-colors",
+                dashboardView === "campaigns"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground group-hover:text-foreground"
+              )}
+            >
+              <FolderKanban className="size-3.5" />
+            </div>
+            <span className="text-base tracking-tight font-semibold">Campaigns</span>
+            <span
+              className={cn(
+                "ml-0.5 rounded-full px-1.5 py-0.2 text-[10px] font-mono",
+                dashboardView === "campaigns"
+                  ? "bg-primary/10 text-primary font-semibold"
+                  : "bg-muted text-muted-foreground"
+              )}
+            >
+              {campaignOverviews.length}
+            </span>
+          </button>
+
+          {/* Ads Folder Tab */}
+          <button
+            type="button"
+            onClick={() => setDashboardView("ads")}
+            className={cn(
+              "group relative flex items-center gap-2 rounded-t-lg px-4 py-2.5 text-sm transition-all duration-150",
+              dashboardView === "ads"
+                ? "border-t-2 border-primary border-x border-border bg-card text-foreground font-semibold shadow-2xs z-10"
+                : "border-t border-x border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40 font-medium"
+            )}
+          >
+            <div
+              className={cn(
+                "flex size-5 items-center justify-center rounded transition-colors",
+                dashboardView === "ads"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground group-hover:text-foreground"
+              )}
+            >
+              <AppWindow className="size-3.5" />
+            </div>
+            <span className="text-base tracking-tight font-semibold">Ads</span>
+            <span
+              className={cn(
+                "ml-0.5 rounded-full px-1.5 py-0.2 text-[10px] font-mono",
+                dashboardView === "ads"
+                  ? "bg-primary/10 text-primary font-semibold"
+                  : "bg-muted text-muted-foreground"
+              )}
+            >
+              {allCreatives.length}
+            </span>
+          </button>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Right Side: Standard Dashboard Action Buttons */}
+        <div className="flex items-center gap-2.5 pb-2 sm:pb-0">
           {canManage ? (
-            <Button onClick={openCreateModal} className="h-9 gap-1.5 shadow-sm">
+            <Button onClick={openCreateModal} className="h-9 gap-1.5 shadow-xs">
               <Plus className="size-4" />
               Create campaign
             </Button>
@@ -677,7 +1308,9 @@ export function CampaignsDashboardClient({
             <span className="text-xs font-medium">Video Goals</span>
             <Target className="size-4 text-warning" />
           </div>
-          <p className="mt-1 text-xl font-bold text-foreground">{totals.totalGoal}</p>
+          <p className="mt-1 text-xl font-bold text-foreground">
+            {totals.totalGoal > 0 ? totals.totalGoal : "—"}
+          </p>
         </div>
 
         <div className="rounded-xl border border-border bg-card p-3 shadow-xs">
@@ -713,158 +1346,470 @@ export function CampaignsDashboardClient({
         </div>
       </div>
 
-      {/* Top Filter Bar */}
-      <div className="rounded-xl border border-border bg-card p-3 shadow-xs space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 flex-1 min-w-[240px] max-w-md">
-            <div className="relative w-full">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search campaigns..."
-                className="pl-9 h-9 text-xs"
-              />
+      {/* VIEW 1: CAMPAIGNS VIEW */}
+      {dashboardView === "campaigns" && (
+        <>
+          {/* Filter Bar for Campaigns */}
+          <div className="rounded-xl border border-border bg-card p-3 shadow-xs space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2 flex-1 min-w-[240px] max-w-md">
+                <div className="relative w-full">
+                  <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search campaigns (e.g. Navratri, Diwali Sale)..."
+                    className="pl-9 h-9 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={campaignsBulk.selectedIds.size === 0}
+                  onClick={() => {
+                    const ids = Array.from(campaignsBulk.selectedIds);
+                    if (ids.length > 0) {
+                      const firstCamp = campaignOverviews.find((c) => c.campaign.id === ids[0]);
+                      if (firstCamp) {
+                        handleDuplicateCampaign(firstCamp.campaign);
+                      }
+                    }
+                  }}
+                  className="h-8 text-xs gap-1.5"
+                  title={campaignsBulk.selectedIds.size === 0 ? "Select a campaign to duplicate" : "Duplicate selected campaign"}
+                >
+                  <Copy className="size-3.5" />
+                  Duplicate
+                </Button>
+
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={campaignsBulk.selectedIds.size !== 1}
+                  onClick={() => {
+                    const id = Array.from(campaignsBulk.selectedIds)[0];
+                    const camp = campaignOverviews.find((c) => c.campaign.id === id);
+                    if (camp) openEditModal(camp.campaign);
+                  }}
+                  className="h-8 text-xs gap-1.5"
+                  title={campaignsBulk.selectedIds.size !== 1 ? "Select exactly one campaign to edit" : "Edit selected campaign"}
+                >
+                  <Edit2 className="size-3.5" />
+                  Edit
+                </Button>
+
+                <div className="flex rounded-lg border border-border bg-card p-0.5 text-xs">
+                  <button
+                    onClick={() => setFilterActive("all")}
+                    className={cn(
+                      "rounded-md px-2.5 py-1 font-medium transition-colors",
+                      filterActive === "all"
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    All ({campaignOverviews.length})
+                  </button>
+                  <button
+                    onClick={() => setFilterActive("active")}
+                    className={cn(
+                      "rounded-md px-2.5 py-1 font-medium transition-colors",
+                      filterActive === "active"
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Active
+                  </button>
+                  <button
+                    onClick={() => setFilterActive("inactive")}
+                    className={cn(
+                      "rounded-md px-2.5 py-1 font-medium transition-colors",
+                      filterActive === "inactive"
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Archived
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+
+                <Button
+                  size="sm"
+                  variant={showFilters ? "secondary" : "ghost"}
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="h-8 text-xs"
+                >
+                  <SlidersHorizontal className="size-3.5 mr-1.5" />
+                  Filters
+                  {hasActiveFilters && (
+                    <span className="ml-1.5 flex size-2 rounded-full bg-primary" />
+                  )}
+                </Button>
+
+                {hasActiveFilters && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={resetFilters}
+                    className="h-8 text-xs text-muted-foreground"
+                  >
+                    <RotateCcw className="size-3 mr-1" />
+                    Clear
+                  </Button>
+                )}
+              </div>
             </div>
-          </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded-lg border border-border bg-card p-0.5 text-xs">
-              <button
-                onClick={() => setFilterActive("all")}
-                className={cn(
-                  "rounded-md px-2.5 py-1 font-medium transition-colors",
-                  filterActive === "all" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                All ({campaignOverviews.length})
-              </button>
-              <button
-                onClick={() => setFilterActive("active")}
-                className={cn(
-                  "rounded-md px-2.5 py-1 font-medium transition-colors",
-                  filterActive === "active"
-                    ? "bg-muted text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Active
-              </button>
-              <button
-                onClick={() => setFilterActive("inactive")}
-                className={cn(
-                  "rounded-md px-2.5 py-1 font-medium transition-colors",
-                  filterActive === "inactive"
-                    ? "bg-muted text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Archived
-              </button>
-            </div>
+            {/* Collapsible Advanced Filters */}
+            {showFilters && (
+              <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border sm:grid-cols-4 text-xs">
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Product</label>
+                  <Select
+                    value={selectedProductId}
+                    onChange={(e) => setSelectedProductId(e.target.value)}
+                    className="h-8 text-xs"
+                  >
+                    <option value="all">All Products</option>
+                    {allProducts.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
 
-            <Button
-              size="sm"
-              variant={showFilters ? "secondary" : "ghost"}
-              onClick={() => setShowFilters(!showFilters)}
-              className="h-8 text-xs"
-            >
-              <SlidersHorizontal className="size-3.5 mr-1.5" />
-              Filters
-              {hasActiveFilters && (
-                <span className="ml-1.5 flex size-2 rounded-full bg-primary" />
-              )}
-            </Button>
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Creator</label>
+                  <Select
+                    value={selectedCreatorId}
+                    onChange={(e) => setSelectedCreatorId(e.target.value)}
+                    className="h-8 text-xs"
+                  >
+                    <option value="all">All Creators</option>
+                    {allCreators.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
 
-            {hasActiveFilters && (
-              <Button size="sm" variant="ghost" onClick={resetFilters} className="h-8 text-xs text-muted-foreground">
-                <RotateCcw className="size-3 mr-1" />
-                Clear
-              </Button>
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Editor</label>
+                  <Select
+                    value={selectedEditorId}
+                    onChange={(e) => setSelectedEditorId(e.target.value)}
+                    className="h-8 text-xs"
+                  >
+                    <option value="all">All Editors</option>
+                    {allEditors.map((ed) => (
+                      <option key={ed.id} value={ed.id}>
+                        {ed.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Goal Target</label>
+                  <Select
+                    value={selectedProgress}
+                    onChange={(e) => setSelectedProgress(e.target.value)}
+                    className="h-8 text-xs"
+                  >
+                    <option value="all">All Progress</option>
+                    <option value="completed">Goal Achieved (100%+)</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="empty">No Creatives</option>
+                  </Select>
+                </div>
+              </div>
             )}
           </div>
-        </div>
 
-        {/* Collapsible Advanced Filters */}
-        {showFilters && (
-          <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border sm:grid-cols-4 text-xs">
-            <div>
-              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Product</label>
-              <Select
-                value={selectedProductId}
-                onChange={(e) => setSelectedProductId(e.target.value)}
-                className="h-8 text-xs"
-              >
-                <option value="all">All Products</option>
-                {allProducts.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </Select>
+          {/* Excel Spreadsheet Table for Campaigns */}
+          <ExcelTable
+            columns={campaignColumns}
+            data={filteredOverviews}
+            getRowKey={(item) => item.campaign.id}
+            title="Campaigns Overview"
+            storageKey="campaigns_overview"
+            emptyMessage="No campaigns found matching your filter criteria."
+            onRowClick={(item) => {
+              router.push(`/campaigns/${item.campaign.id}`);
+            }}
+          />
+        </>
+      )}
+
+      {/* VIEW 2: ADS VIEW */}
+      {dashboardView === "ads" && (
+        <>
+          {/* Filter Bar for Ads */}
+          <div className="rounded-xl border border-border bg-card p-3 shadow-xs space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2 flex-1 min-w-[240px] max-w-md">
+                <div className="relative w-full">
+                  <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={adSearch}
+                    onChange={(e) => setAdSearch(e.target.value)}
+                    placeholder="Search ads (e.g. Navratri Hook, Diwali Offer, script)..."
+                    className="pl-9 h-9 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={adsBulk.selectedIds.size !== 1}
+                  onClick={() => {
+                    const id = Array.from(adsBulk.selectedIds)[0];
+                    if (id) router.push(`/ads/${id}`);
+                  }}
+                  className="h-8 text-xs gap-1.5"
+                  title={adsBulk.selectedIds.size !== 1 ? "Select exactly one ad to review" : "Open ad review"}
+                >
+                  <Edit2 className="size-3.5" />
+                  Edit
+                </Button>
+
+                <div className="flex rounded-lg border border-border bg-card p-0.5 text-xs">
+                  <button
+                    onClick={() => setAdStageFilter("all")}
+                    className={cn(
+                      "rounded-md px-2.5 py-1 font-medium transition-colors",
+                      adStageFilter === "all"
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    All ({allCreatives.length})
+                  </button>
+                  <button
+                    onClick={() => setAdStageFilter("approved")}
+                    className={cn(
+                      "rounded-md px-2.5 py-1 font-medium transition-colors",
+                      adStageFilter === "approved"
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Approved ({totals.totalApproved})
+                  </button>
+                  <button
+                    onClick={() => setAdStageFilter("in_review")}
+                    className={cn(
+                      "rounded-md px-2.5 py-1 font-medium transition-colors",
+                      adStageFilter === "in_review"
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Review ({totals.totalInReview})
+                  </button>
+                  <button
+                    onClick={() => setAdStageFilter("in_creation")}
+                    className={cn(
+                      "rounded-md px-2.5 py-1 font-medium transition-colors",
+                      adStageFilter === "in_creation"
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Creation ({totals.totalInCreation})
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant={showAdFilters ? "secondary" : "ghost"}
+                  onClick={() => setShowAdFilters(!showAdFilters)}
+                  className="h-8 text-xs"
+                >
+                  <SlidersHorizontal className="size-3.5 mr-1.5" />
+                  Filters
+                  {hasActiveAdFilters && (
+                    <span className="ml-1.5 flex size-2 rounded-full bg-primary" />
+                  )}
+                </Button>
+
+                <Button
+                  size="sm"
+                  variant={adsBulk.selectedIds.size > 0 ? "secondary" : "ghost"}
+                  onClick={() => {
+                    if (adsBulk.isAllSelected(filteredAds.map((a) => a.id))) {
+                      adsBulk.clearSelection();
+                    } else {
+                      adsBulk.selectAll(filteredAds.map((a) => a.id));
+                    }
+                  }}
+                  className="h-8 text-xs gap-1.5"
+                >
+                  <SquareCheck className="size-3.5" />
+                  {adsBulk.isAllSelected(filteredAds.map((a) => a.id))
+                    ? "Deselect all"
+                    : "Select all"}
+                </Button>
+
+                {hasActiveAdFilters && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={resetAdFilters}
+                    className="h-8 text-xs text-muted-foreground"
+                  >
+                    <RotateCcw className="size-3 mr-1" />
+                    Clear
+                  </Button>
+                )}
+              </div>
             </div>
 
-            <div>
-              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Creator</label>
-              <Select
-                value={selectedCreatorId}
-                onChange={(e) => setSelectedCreatorId(e.target.value)}
-                className="h-8 text-xs"
-              >
-                <option value="all">All Creators</option>
-                {allCreators.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
+            {/* Collapsible Advanced Filters for Ads */}
+            {showAdFilters && (
+              <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border sm:grid-cols-5 text-xs">
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Campaign</label>
+                  <Select
+                    value={adCampaignFilter}
+                    onChange={(e) => setAdCampaignFilter(e.target.value)}
+                    className="h-8 text-xs"
+                  >
+                    <option value="all">All Campaigns</option>
+                    {campaignOverviews.map((ov) => (
+                      <option key={ov.campaign.id} value={ov.campaign.id}>
+                        {ov.campaign.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
 
-            <div>
-              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Editor</label>
-              <Select
-                value={selectedEditorId}
-                onChange={(e) => setSelectedEditorId(e.target.value)}
-                className="h-8 text-xs"
-              >
-                <option value="all">All Editors</option>
-                {allEditors.map((ed) => (
-                  <option key={ed.id} value={ed.id}>
-                    {ed.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Download Status</label>
+                  <Select
+                    value={adDownloadFilter}
+                    onChange={(e) => setAdDownloadFilter(e.target.value as "all" | "downloaded" | "not_downloaded")}
+                    className="h-8 text-xs"
+                  >
+                    <option value="all">All Download States</option>
+                    <option value="downloaded">Downloaded</option>
+                    <option value="not_downloaded">Yet to download</option>
+                  </Select>
+                </div>
 
-            <div>
-              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Goal Target</label>
-              <Select
-                value={selectedProgress}
-                onChange={(e) => setSelectedProgress(e.target.value)}
-                className="h-8 text-xs"
-              >
-                <option value="all">All Progress</option>
-                <option value="completed">Goal Achieved (100%+)</option>
-                <option value="in_progress">In Progress</option>
-                <option value="empty">No Creatives</option>
-              </Select>
-            </div>
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Product</label>
+                  <Select
+                    value={adProductFilter}
+                    onChange={(e) => setAdProductFilter(e.target.value)}
+                    className="h-8 text-xs"
+                  >
+                    <option value="all">All Products</option>
+                    {allProducts.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Creator</label>
+                  <Select
+                    value={adCreatorFilter}
+                    onChange={(e) => setAdCreatorFilter(e.target.value)}
+                    className="h-8 text-xs"
+                  >
+                    <option value="all">All Creators</option>
+                    {allCreators.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Editor</label>
+                  <Select
+                    value={adEditorFilter}
+                    onChange={(e) => setAdEditorFilter(e.target.value)}
+                    className="h-8 text-xs"
+                  >
+                    <option value="all">All Editors</option>
+                    {allEditors.map((ed) => (
+                      <option key={ed.id} value={ed.id}>
+                        {ed.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      {/* Excel Spreadsheet Table */}
-      <ExcelTable
-        columns={columns}
-        data={filteredOverviews}
-        getRowKey={(item) => item.campaign.id}
-        title="Campaigns Overview"
-        storageKey="campaigns_overview"
-        emptyMessage="No campaigns found matching your filter criteria."
-        onRowClick={(item) => {
-          router.push(`/campaigns/${item.campaign.id}`);
-        }}
-      />
+          {/* Bulk Download Progress Status */}
+          {adsBulk.bulkExportJob || adsBulk.isDownloading ? (
+            <BulkDownloadProgress
+              job={adsBulk.bulkExportJob}
+              progress={adsBulk.bulkDownloadProgress}
+              count={adsBulk.bulkDownloadCount}
+              complete={adsBulk.bulkDownloadComplete}
+              onDismiss={adsBulk.dismissDownload}
+            />
+          ) : null}
+
+          {/* Bulk Actions Bar if ads selected */}
+          {adsBulk.selectedIds.size > 0 && (
+            <BulkActionsBar
+              selectedCount={adsBulk.selectedIds.size}
+              totalFilteredCount={filteredAds.length}
+              onSelectAll={() => adsBulk.selectAll(filteredAds.map((a) => a.id))}
+              onClear={adsBulk.clearSelection}
+              onDownloadZip={() => adsBulk.downloadZip("campaign-ads")}
+              isDownloading={adsBulk.isDownloading}
+              downloadPercent={adsBulk.bulkDownloadProgress?.percent}
+              onMarkDownloaded={profile.role === "admin" ? () => void handleBulkDownloaded(true) : undefined}
+              onRemoveDownloaded={profile.role === "admin" ? () => void handleBulkDownloaded(false) : undefined}
+              isUpdatingDownloaded={isBulkUpdatingDownloaded}
+            />
+          )}
+
+          {/* Excel Spreadsheet Table for Ads */}
+          <ExcelTable
+            columns={adColumns}
+            data={filteredAds}
+            getRowKey={(ad) => ad.id}
+            title="All Campaign Ads"
+            storageKey="campaigns_all_ads"
+            emptyMessage="No ads found matching your filter criteria."
+            onRowClick={(ad) => {
+              router.push(`/ads/${ad.id}`);
+            }}
+          />
+        </>
+      )}
+
+      {/* Video Preview Modal */}
+      {previewAd ? <AdPreviewModal ad={previewAd} onClose={() => setPreviewAd(null)} /> : null}
+
+      {/* Full Script Modal */}
+      {selectedScriptAd ? (
+        <AdScriptModal ad={selectedScriptAd} onClose={() => setSelectedScriptAd(null)} />
+      ) : null}
 
       {/* Create / Edit Campaign Modal */}
       {modalOpen ? (
@@ -913,12 +1858,12 @@ export function CampaignsDashboardClient({
               <div className="space-y-4">
                 <Field
                   label="Campaign Name *"
-                  hint="A clear, identifiable title for internal tracking and creative assignment."
+                  hint="A clear title like Navratri Sale 2026, Diwali Festive Special, or Pooja Gifting."
                 >
                   <Input
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g., Summer Launch 2026, TikTok UGC Blitz"
+                    placeholder="e.g., Navratri Sale 2026, Diwali Festive Special, Pooja Bundle Blast"
                     autoFocus
                     required
                     className="h-10 text-sm"
@@ -926,18 +1871,19 @@ export function CampaignsDashboardClient({
                 </Field>
 
                 <Field
-                  label="Number of Creatives *"
-                  hint="Target number of creative videos to produce for this campaign."
+                  label="Number of Creatives"
+                  hint="Target number of creative videos to produce for this campaign (optional)."
                 >
                   <div className="relative flex items-center">
                     <Input
                       type="number"
                       min="1"
                       step="1"
-                      value={videoGoal}
-                      onChange={(e) => setVideoGoal(Math.max(1, parseInt(e.target.value) || 1))}
-                      placeholder="10"
-                      required
+                      value={videoGoal === null ? "" : videoGoal}
+                      onChange={(e) =>
+                        setVideoGoal(e.target.value === "" ? null : Math.max(1, parseInt(e.target.value) || 1))
+                      }
+                      placeholder="e.g. 10 (optional)"
                       className="h-10 pr-24 font-mono text-sm"
                     />
                     <div className="pointer-events-none absolute right-3 flex items-center rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">

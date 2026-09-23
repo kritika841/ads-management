@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { PERFORMANCE_METRIC_KEYS, type HiddenMetricsByRole } from "@/lib/metric-visibility";
+import { PERFORMANCE_METRIC_KEYS, type HiddenMetricsByRole, type ManagerCreativeScope } from "@/lib/metric-visibility";
 import { writeMetricVisibilityFile } from "@/lib/metric-visibility-server";
 import type { UserRole } from "@/lib/types";
 
@@ -40,11 +40,14 @@ const hiddenMetricsSchema = z.object({
   manager: z.array(metricEnum).optional()
 }).optional();
 
+const managerCreativeScopeSchema = z.enum(["all", "own"]).optional();
+
 const settingsSchema = z.object({
   twoStepApproval: z.boolean(),
   deadlineReminderDays: z.number().int().min(1).max(30),
   maxConcurrentEdits: z.number().int().min(1).max(10),
   allowManagerFinalApproval: z.boolean().default(true),
+  managerCreativeScope: managerCreativeScopeSchema,
   hiddenMetricsByRole: hiddenMetricsSchema
 });
 
@@ -380,6 +383,7 @@ export async function updateSettings(payload: {
   deadlineReminderDays: number;
   maxConcurrentEdits: number;
   allowManagerFinalApproval?: boolean;
+  managerCreativeScope?: ManagerCreativeScope;
   hiddenMetricsByRole?: HiddenMetricsByRole;
 }) {
   const adminProfile = await requireRole(["admin"]);
@@ -393,8 +397,8 @@ export async function updateSettings(payload: {
     ? parsed.data.allowManagerFinalApproval
     : !parsed.data.twoStepApproval;
 
-  if (parsed.data.hiddenMetricsByRole) {
-    await writeMetricVisibilityFile(parsed.data.hiddenMetricsByRole);
+  if (parsed.data.hiddenMetricsByRole || parsed.data.managerCreativeScope) {
+    await writeMetricVisibilityFile(parsed.data.hiddenMetricsByRole ?? {}, parsed.data.managerCreativeScope);
   }
 
   const patch: Record<string, unknown> = {
@@ -404,11 +408,21 @@ export async function updateSettings(payload: {
     allow_manager_final_approval: allowManager
   };
 
+  if (parsed.data.managerCreativeScope) {
+    patch.manager_creative_scope = parsed.data.managerCreativeScope;
+  }
+
   if (parsed.data.hiddenMetricsByRole) {
     patch.hidden_metrics_by_role = parsed.data.hiddenMetricsByRole;
   }
 
   let { error } = await admin.from("app_settings").update(patch).eq("id", 1);
+
+  if (error && (error.code === "PGRST204" || error.message.includes("manager_creative_scope"))) {
+    delete patch.manager_creative_scope;
+    const retry = await admin.from("app_settings").update(patch).eq("id", 1);
+    error = retry.error;
+  }
 
   if (error && (error.code === "PGRST204" || error.message.includes("hidden_metrics_by_role"))) {
     delete patch.hidden_metrics_by_role;
@@ -432,7 +446,10 @@ export async function updateSettings(payload: {
   return { ok: true };
 }
 
-export async function updateMetricVisibilitySettings(payload: { hiddenMetricsByRole: HiddenMetricsByRole }) {
+export async function updateMetricVisibilitySettings(payload: {
+  hiddenMetricsByRole: HiddenMetricsByRole;
+  managerCreativeScope?: ManagerCreativeScope;
+}) {
   const adminProfile = await requireRole(["admin"]);
   const parsed = hiddenMetricsSchema.safeParse(payload.hiddenMetricsByRole);
   if (!parsed.success) {
@@ -440,14 +457,23 @@ export async function updateMetricVisibilitySettings(payload: { hiddenMetricsByR
   }
 
   const hiddenMetrics = parsed.data ?? {};
-  await writeMetricVisibilityFile(hiddenMetrics);
+  await writeMetricVisibilityFile(hiddenMetrics, payload.managerCreativeScope);
 
   const admin = createSupabaseAdminClient();
   const patch: Record<string, unknown> = {
     hidden_metrics_by_role: hiddenMetrics
   };
 
+  if (payload.managerCreativeScope) {
+    patch.manager_creative_scope = payload.managerCreativeScope;
+  }
+
   let { error } = await admin.from("app_settings").update(patch).eq("id", 1);
+  if (error && (error.code === "PGRST204" || error.message.includes("manager_creative_scope"))) {
+    delete patch.manager_creative_scope;
+    const retry = await admin.from("app_settings").update(patch).eq("id", 1);
+    error = retry.error;
+  }
   if (error && (error.code === "PGRST204" || error.message.includes("hidden_metrics_by_role"))) {
     error = null;
   }
@@ -456,10 +482,13 @@ export async function updateMetricVisibilitySettings(payload: { hiddenMetricsByR
     return { ok: false, message: error.message };
   }
 
-  await audit(adminProfile.id, "updated_metric_visibility", "app_settings", "1", hiddenMetrics);
+  await audit(adminProfile.id, "updated_metric_visibility", "app_settings", "1", {
+    hiddenMetrics,
+    managerCreativeScope: payload.managerCreativeScope
+  });
   revalidatePath("/incentives");
   revalidatePath("/admin/settings");
-  return { ok: true, message: "Ads performance metric visibility saved." };
+  return { ok: true, message: "Ads performance settings saved." };
 }
 
 export async function updateAnalyticsSlaTargets(payload: z.infer<typeof analyticsSlaSchema>) {

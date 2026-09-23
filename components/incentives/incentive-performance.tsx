@@ -96,6 +96,17 @@ function assetsForAd(ad: MetaAd) {
 function periodMetrics(rows: MetaDailyMetric[] | undefined, from: string, to: string) {
     return (rows ?? []).filter((row) => (!from || row.metric_date >= from) && (!to || row.metric_date <= to)).reduce((total, row) => ({ spend: total.spend + row.spend, impressions: total.impressions + row.impressions, reach: total.reach + row.reach, clicks: total.clicks + row.clicks, linkClicks: total.linkClicks + row.link_clicks, purchases: total.purchases + row.purchases, revenue: total.revenue + row.revenue }), { spend: 0, impressions: 0, reach: 0, clicks: 0, linkClicks: 0, purchases: 0, revenue: 0 });
 }
+function normalizedStatus(value?: string | null) { return value === "ACTIVE" ? "Active" : value === "IN_PROCESS" || value === "PENDING_REVIEW" ? "Learning" : "Paused"; }
+function deliveryStatus(ad?: MetaAd | null, from?: string, to?: string) {
+    if (!ad) return "Unknown";
+    if (from || to) {
+        const metrics = periodMetrics(ad.daily_metrics, from ?? "", to ?? "");
+        if (metrics.spend > 0 || metrics.impressions > 0 || metrics.clicks > 0) {
+            return "Active";
+        }
+    }
+    return normalizedStatus(ad.effective_status ?? ad.status);
+}
 
 export function IncentivePerformance({
     creatives,
@@ -128,8 +139,10 @@ export function IncentivePerformance({
         if (profile?.role === "manager") {
             return hiddenMetricsByRole?.manager?.includes(metric) ?? false;
         }
-        const roleHidden = hiddenMetricsByRole?.content_creator ?? hiddenMetricsByRole?.editor ?? [];
-        return roleHidden.includes(metric);
+        if (profile?.role === "editor") {
+            return hiddenMetricsByRole?.editor?.includes(metric) ?? false;
+        }
+        return hiddenMetricsByRole?.content_creator?.includes(metric) ?? false;
     };
     const [view, setView] = useState<View>("creative");
     const [campaignFilter, setCampaignFilter] = useState("");
@@ -184,7 +197,7 @@ export function IncentivePerformance({
         const decision = item.decision_status ?? (item.evaluation_status === "winner" ? "winner" : "unreviewed");
         const passedWinnerCriteria = meetsWinnerCriteria(item);
         const discontinued = isDiscontinuedMetaStatus(meta?.effective_status ?? meta?.status);
-        const delivery = normalizedStatus(meta?.effective_status ?? meta?.status);
+        const delivery = deliveryStatus(meta, dateFrom, dateTo);
         const tier = metaCampaignTier(meta?.campaign_id, destinationMap);
         const isBackfilled = Boolean(item.backfill_classified_at || item.decision_note?.startsWith("Backfilled "));
         const manualOverride = item.decision_source === "manual" && (decision === "winner" || decision === "loser");
@@ -330,14 +343,15 @@ function matchesMetaAd(ad: MetaAd, filters: {
     dateTo: string;
     mode: CreativeMode;
 }, destinationOverrides?: Record<string, string>) {
-    const delivery = normalizedStatus(ad.effective_status ?? ad.status);
+    const delivery = deliveryStatus(ad, filters.dateFrom, filters.dateTo);
     const haystack = `${ad.name} ${ad.id} ${ad.creative_id ?? ""} ${ad.campaign_name ?? ""} ${ad.adset_name ?? ""} ${ad.detected_tag ?? ""}`.toLowerCase();
     const tier = metaCampaignTier(ad.campaign_id, destinationOverrides);
     const isTesting = filters.mode === "testing" && (tier === "testing" || ad.manual_outcome === "keep_testing");
     const isScaling = filters.mode === "scaling" && (tier === "scaling" || ad.manual_outcome === "winner");
-    const hasDateMatch = !(filters.dateFrom || filters.dateTo) || (ad.daily_metrics?.length
-        ? ad.daily_metrics.some((row) => (!filters.dateFrom || row.metric_date >= filters.dateFrom) && (!filters.dateTo || row.metric_date <= filters.dateTo))
-        : (!ad.insights_from || !filters.dateTo || ad.insights_from <= filters.dateTo) && (!ad.insights_to || !filters.dateFrom || ad.insights_to >= filters.dateFrom));
+    const hasPeriodMetrics = ad.daily_metrics?.some((row) => (!filters.dateFrom || row.metric_date >= filters.dateFrom) && (!filters.dateTo || row.metric_date <= filters.dateTo) && (Number(row.spend) > 0 || Number(row.impressions) > 0));
+    const hasDateMatch = !(filters.dateFrom || filters.dateTo)
+        || hasPeriodMetrics
+        || (!ad.daily_metrics?.length && (!ad.insights_from || !filters.dateTo || ad.insights_from <= filters.dateTo) && (!ad.insights_to || !filters.dateFrom || ad.insights_to >= filters.dateFrom));
     return hasDateMatch && (!filters.query || haystack.includes(filters.query.toLowerCase())) && (!filters.campaignFilter || ad.campaign_name === filters.campaignFilter) && (!filters.adsetFilter || ad.adset_name === filters.adsetFilter) && (!filters.statusFilter || delivery === filters.statusFilter) && (filters.mode === "all" || isTesting || isScaling || (filters.mode === "active" && delivery === "Active") || (filters.mode === "paused" && delivery === "Paused"));
 }
 function matchesCreativeFilters(creatives: IncentiveCreative[], filters: Pick<IncentiveFilters, "productFilter" | "decisionFilter" | "incentiveFilter" | "payoutFilter">, ad: MetaAd) {
@@ -382,7 +396,7 @@ function metaSortValue(ad: MetaAd, column: SortColumn, from: string, to: string)
     const metrics = reportMetrics(ad, from, to);
     if (column === "creative") return ad.name ?? "";
     if (column === "campaign") return `${ad.campaign_name ?? ""} ${ad.adset_name ?? ""}`;
-    if (column === "delivery") return normalizedStatus(ad.effective_status ?? ad.status);
+    if (column === "delivery") return deliveryStatus(ad, from, to);
     if (column === "cpa") return metrics.purchases ? metrics.spend / metrics.purchases : Infinity;
     if (column === "roas") return metrics.spend ? metrics.revenue / metrics.spend : 0;
     if (column === "ctr") return metrics.impressions ? metrics.clicks / metrics.impressions : 0;
@@ -502,7 +516,7 @@ function CreativeAssetsTable({ ads, creatives, libraryAds, reviewer, selected, a
         const metrics = metricsForRow(row);
         if (column === "creative") return cleanMediaTitle(row.asset?.asset_label ?? row.libraryAd?.name ?? row.ad.name ?? "");
         if (column === "campaign") return `${row.ad.campaign_name ?? ""} ${row.ad.adset_name ?? ""}`;
-        if (column === "delivery") return normalizedStatus(row.ad.effective_status ?? row.ad.status);
+        if (column === "delivery") return deliveryStatus(row.ad, dateFrom, dateTo);
         if (column === "cpa") return metrics.purchases ? metrics.spend / metrics.purchases : Infinity;
         if (column === "roas") return metrics.spend ? metrics.revenue / metrics.spend : 0;
         if (column === "ctr") return metrics.impressions ? metrics.clicks / metrics.impressions : 0;
@@ -545,7 +559,7 @@ function CreativeAssetsTable({ ads, creatives, libraryAds, reviewer, selected, a
             const roas = metrics.spend ? metrics.revenue / metrics.spend : 0;
             const ctr = metrics.impressions ? metrics.clicks / metrics.impressions * 100 : 0;
             const cpm = metrics.impressions ? metrics.spend / metrics.impressions * 1000 : 0;
-            const delivery = normalizedStatus(ad.effective_status ?? ad.status);
+            const delivery = deliveryStatus(ad, dateFrom, dateTo);
             const knownAssets = assetsForAd(ad);
             const playableAsset = asset ? knownAssets.find((candidate) => candidate.id === asset.id || candidate.key === asset.id || candidate.name === asset.asset_label) : knownAssets.length === 1 ? knownAssets[0] : undefined;
             const imageSources = [libraryAd?.drive_file_id ? `/api/ads/${libraryAd.id}/thumbnail` : null, libraryAd?.thumbnail_url, playableAsset?.thumbnail, asset?.thumbnail_url, ad.thumbnail_url];
@@ -732,7 +746,6 @@ function Detail({ label, value }: {
     label: string;
     value: string;
 }) { return <div className="rounded-lg border border-border bg-muted/30 p-3"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 break-words text-sm font-medium text-foreground">{value}</p></div>; }
-function normalizedStatus(value?: string | null) { return value === "ACTIVE" ? "Active" : value === "IN_PROCESS" || value === "PENDING_REVIEW" ? "Learning" : "Paused"; }
 function metric(creative: IncentiveCreative, meta: MetaAd | undefined, sort: string) { const spend = meta?.spend ?? creative.latest_spend; const purchases = meta?.purchases ?? creative.latest_purchases; const revenue = meta?.revenue ?? 0; return sort === "purchases" ? purchases : sort === "cpa" ? (purchases ? -spend / purchases : -Infinity) : sort === "roas" ? (spend ? revenue / spend : 0) : sort === "revenue" ? revenue : spend; }
 function money(value: number) { return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value || 0); }
 function number(value: number) { return new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(value || 0); }

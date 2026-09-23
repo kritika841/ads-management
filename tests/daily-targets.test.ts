@@ -112,6 +112,36 @@ const noSundayCarryMigration = readFileSync("supabase/migrations/20260921140000_
     expect(summary.cells["2026-09-02"].target).toBe(7);
     expect(summary.cells["2026-09-02"].completed).toBe(7);
   });
+
+  it("reconciles surplus work on base tasks against carried forward deficits so 6/6 is complete with 0 short", () => {
+    // Day 1: 5 assigned, 4 completed (1 short)
+    // Day 2: 5 assigned, 6 completed on base task; 1 carried forward task with 0 completed initially
+    const summary = summarizeTargets([creator], [
+      target("day1", "2026-09-01", "Script writing", 5, 4),
+      target("day2_base", "2026-09-02", "Script writing", 5, 6),
+      {
+        ...target("day2_carried", "2026-09-02", "Script writing (carried forward)", 1, 0),
+        carried_from_target_id: "day1"
+      }
+    ], "2026-09", "2026-09-03")[0];
+
+    // Day 1 was missed (4/5)
+    expect(summary.cells["2026-09-01"].status).toBe("missed");
+    expect(summary.cells["2026-09-01"].shortTasks).toEqual(["Script writing"]);
+
+    // Day 2: 5 base + 1 carried = 6 target. 6 completed on base covers carried deficit!
+    expect(summary.cells["2026-09-02"].target).toBe(6);
+    expect(summary.cells["2026-09-02"].completed).toBe(6);
+    expect(summary.cells["2026-09-02"].shortTasks).toEqual([]);
+    expect(summary.cells["2026-09-02"].status).toBe("complete");
+  });
+
+  it("includes surplus reconciliation migration and database functions", () => {
+    const surplusMigration = readFileSync("supabase/migrations/20260923110000_daily_targets_carry_reconciliation_and_triggers.sql", "utf8");
+    expect(surplusMigration).toContain("reconcile_daily_target_surplus");
+    expect(surplusMigration).toContain("materialize_daily_task_rules");
+    expect(surplusMigration).toContain("sync_daily_target_progress_from_ad");
+  });
 });
 
 function profile(id: string, role: Profile["role"]): Profile {

@@ -1,27 +1,46 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { DEFAULT_HIDDEN_METRICS, type HiddenMetricsByRole } from "@/lib/metric-visibility";
+import { DEFAULT_HIDDEN_METRICS, DEFAULT_MANAGER_CREATIVE_SCOPE, type HiddenMetricsByRole, type ManagerCreativeScope } from "@/lib/metric-visibility";
 
 const METRIC_VISIBILITY_FILE = path.join(process.cwd(), "data", "metric-visibility.json");
 
-export async function readMetricVisibilityFile(): Promise<HiddenMetricsByRole> {
+export type MetricVisibilityConfig = HiddenMetricsByRole & {
+  manager_creative_scope?: ManagerCreativeScope;
+};
+
+export async function readMetricVisibilityFile(): Promise<MetricVisibilityConfig> {
   try {
     const raw = await fs.readFile(METRIC_VISIBILITY_FILE, "utf-8");
-    const parsed = JSON.parse(raw) as HiddenMetricsByRole;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const scope = parsed.manager_creative_scope === "own" ? "own" : "all";
     return {
-      content_creator: Array.isArray(parsed.content_creator) ? parsed.content_creator : [],
-      editor: Array.isArray(parsed.editor) ? parsed.editor : [],
-      manager: Array.isArray(parsed.manager) ? parsed.manager : []
+      content_creator: Array.isArray(parsed.content_creator) ? (parsed.content_creator as any) : [],
+      editor: Array.isArray(parsed.editor) ? (parsed.editor as any) : [],
+      manager: Array.isArray(parsed.manager) ? (parsed.manager as any) : [],
+      manager_creative_scope: scope
     };
   } catch {
-    return { ...DEFAULT_HIDDEN_METRICS };
+    return {
+      ...DEFAULT_HIDDEN_METRICS,
+      manager_creative_scope: DEFAULT_MANAGER_CREATIVE_SCOPE
+    };
   }
 }
 
-export async function writeMetricVisibilityFile(data: HiddenMetricsByRole): Promise<void> {
+export async function writeMetricVisibilityFile(
+  data: HiddenMetricsByRole,
+  managerCreativeScope?: ManagerCreativeScope
+): Promise<void> {
   try {
+    const existing = await readMetricVisibilityFile();
+    const payload = {
+      content_creator: Array.isArray(data.content_creator) ? data.content_creator : existing.content_creator ?? [],
+      editor: Array.isArray(data.editor) ? data.editor : existing.editor ?? [],
+      manager: Array.isArray(data.manager) ? data.manager : existing.manager ?? [],
+      manager_creative_scope: managerCreativeScope ?? existing.manager_creative_scope ?? DEFAULT_MANAGER_CREATIVE_SCOPE
+    };
     await fs.mkdir(path.dirname(METRIC_VISIBILITY_FILE), { recursive: true });
-    await fs.writeFile(METRIC_VISIBILITY_FILE, JSON.stringify(data, null, 2), "utf-8");
+    await fs.writeFile(METRIC_VISIBILITY_FILE, JSON.stringify(payload, null, 2), "utf-8");
   } catch (error) {
     console.error("Failed to write metric-visibility.json:", error);
   }

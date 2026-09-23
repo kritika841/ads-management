@@ -2,7 +2,6 @@ import "server-only";
 
 import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, stat, unlink } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
@@ -12,13 +11,20 @@ import { getDriveFolderContents, getDriveMedia, getDriveMetadata } from "@/lib/d
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Profile } from "@/lib/types";
 import type { ExportJobFile, ExportJobSnapshot } from "@/lib/export-job-types";
+import {
+  createDownloadLog,
+  updateDownloadLog,
+  getDownloadLogById,
+  cleanupExpiredDownloadLogs,
+  type DownloadLogSource
+} from "@/lib/download-logs";
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
-const JOB_LIFETIME_MS = 60 * 60 * 1000;
-const EXPORT_DIR = path.join(tmpdir(), "adflow-export-jobs");
+export const JOB_LIFETIME_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+const EXPORT_DIR = path.join(process.cwd(), "storage", "export-zips");
 
 type InternalFile = ExportJobFile & { driveFileId: string; tempPath?: string };
-type InternalJob = Omit<ExportJobSnapshot, "files"> & {
+export type InternalJob = Omit<ExportJobSnapshot, "files"> & {
   ownerId: string;
   files: InternalFile[];
   outputPath: string;
@@ -29,13 +35,26 @@ type ExportJobStore = { jobs: Map<string, InternalJob> };
 const globalStore = globalThis as typeof globalThis & { __adflowExportJobs?: ExportJobStore };
 const store = globalStore.__adflowExportJobs ??= { jobs: new Map() };
 
-export async function createExportJob(profile: Profile, ids: string[]) {
+export async function createExportJob(
+  profile: Profile,
+  ids: string[],
+  metadata?: {
+    source?: DownloadLogSource;
+    title?: string;
+    campaignId?: string | null;
+    campaignName?: string | null;
+  }
+) {
   const uniqueIds = [...new Set(ids.filter(Boolean))];
   if (!uniqueIds.length) throw new Error("Choose at least one creative.");
 
   await mkdir(EXPORT_DIR, { recursive: true });
-  cleanupExpiredJobs();
+  void cleanupExpiredJobs();
   const id = randomUUID();
+  const filename = `creatives-${new Date().toISOString().slice(0, 10)}.zip`;
+  const outputPath = path.join(EXPORT_DIR, `${id}.zip`);
+  const expiresAt = Date.now() + JOB_LIFETIME_MS;
+
   const job: InternalJob = {
     id,
     ownerId: profile.id,
@@ -48,23 +67,105 @@ export async function createExportJob(profile: Profile, ids: string[]) {
     zipSizeBytes: null,
     error: null,
     createdAt: new Date().toISOString(),
-    outputPath: path.join(EXPORT_DIR, `${id}.zip`),
-    expiresAt: Date.now() + JOB_LIFETIME_MS,
+    outputPath,
+    expiresAt,
   };
   store.jobs.set(id, job);
+
+  // Initialize download log in persistent storage
+  await createDownloadLog({
+    id,
+    userId: profile.id,
+    userName: profile.name,
+    userRole: profile.role,
+    title: metadata?.title || `Creative Export (${uniqueIds.length} items)`,
+    source: metadata?.source || "creative_library",
+    campaignId: metadata?.campaignId,
+    campaignName: metadata?.campaignName,
+    creativeCount: uniqueIds.length,
+    creativeIds: uniqueIds,
+    creativeNames: [],
+    zipFilename: filename,
+    zipFilePath: outputPath,
+  }).catch((err) => {
+    console.error("Failed to create download log record:", err);
+  });
+
+  // Run detached in background so client tab closure doesn't cancel it
   void prepareAndBuild(job, profile, uniqueIds);
   return snapshot(job);
 }
 
-export function getExportJob(id: string, ownerId: string) {
-  cleanupExpiredJobs();
-  const job = store.jobs.get(id);
-  return job?.ownerId === ownerId ? job : null;
+export async function getExportJob(id: string, user: { id: string; role?: string } | string): Promise<InternalJob | null> {
+  void cleanupExpiredJobs();
+  const userId = typeof user === "string" ? user : user.id;
+  const userRole = typeof user === "string" ? undefined : user.role;
+
+  // 1. Check in-memory store
+  const inMemory = store.jobs.get(id);
+  if (inMemory) {
+    const isAuthorized = inMemory.ownerId === userId || userRole === "admin" || userRole === "manager";
+    if (isAuthorized) return inMemory;
+  }
+
+  // 2. Check persistent log store (e.g. after server restart or for another admin)
+  const log = await getDownloadLogById(id);
+  if (log) {
+    const isAuthorized = log.user_id === userId || userRole === "admin" || userRole === "manager";
+    if (!isAuthorized) return null;
+
+    const outputPath = log.zip_file_path || path.join(EXPORT_DIR, `${log.id}.zip`);
+    const fileStat = await stat(outputPath).catch(() => null);
+
+    if (fileStat) {
+      const recoveredJob: InternalJob = {
+        id: log.id,
+        ownerId: log.user_id,
+        phase: (log.status === "building" || log.status === "preparing") ? log.status : (log.status === "failed" ? "failed" : "ready"),
+        requestedCount: log.creative_count,
+        inspectedCount: log.creative_count,
+        files: [],
+        sourceTotalBytes: log.zip_size_bytes ?? fileStat.size,
+        sourceProcessedBytes: log.zip_size_bytes ?? fileStat.size,
+        zipSizeBytes: log.zip_size_bytes ?? fileStat.size,
+        error: log.error,
+        createdAt: log.created_at,
+        outputPath,
+        expiresAt: new Date(log.expires_at).getTime(),
+      };
+      // Cache back into memory store
+      store.jobs.set(id, recoveredJob);
+      return recoveredJob;
+    }
+  }
+
+  return null;
 }
 
-export function getExportJobSnapshot(id: string, ownerId: string) {
-  const job = getExportJob(id, ownerId);
-  return job ? snapshot(job) : null;
+export async function getExportJobSnapshot(id: string, user: { id: string; role?: string } | string): Promise<ExportJobSnapshot | null> {
+  const job = await getExportJob(id, user);
+  if (job) return snapshot(job);
+
+  // If in-progress or failed in log but no file yet
+  const userId = typeof user === "string" ? user : user.id;
+  const userRole = typeof user === "string" ? undefined : user.role;
+  const log = await getDownloadLogById(id);
+  if (log && (log.user_id === userId || userRole === "admin" || userRole === "manager")) {
+    return {
+      id: log.id,
+      phase: log.status,
+      requestedCount: log.creative_count,
+      inspectedCount: log.creative_count,
+      files: [],
+      sourceTotalBytes: log.zip_size_bytes ?? 0,
+      sourceProcessedBytes: log.zip_size_bytes ?? 0,
+      zipSizeBytes: log.zip_size_bytes,
+      error: log.error,
+      createdAt: log.created_at,
+    };
+  }
+
+  return null;
 }
 
 function snapshot(job: InternalJob): ExportJobSnapshot {
@@ -95,6 +196,14 @@ async function prepareAndBuild(job: InternalJob, profile: Profile, ids: string[]
     const ads = await loadAuthorizedAds(profile, ids);
     const names = new Set<string>();
     const authorizedIds = new Set(ads.map((ad) => ad.id));
+
+    // Update download log with found creative names and status
+    const creativeNames = ads.map((ad) => ad.name);
+    await updateDownloadLog(job.id, {
+      creative_names: creativeNames,
+      status: "preparing",
+    }).catch(() => undefined);
+
     for (const missingId of ids.filter((id) => !authorizedIds.has(id))) {
       job.files.push({ id: randomUUID(), adId: missingId, driveFileId: "", name: `Unavailable creative ${missingId.slice(0, 8)}`, sizeBytes: 0, processedBytes: 0, state: "skipped", message: "The creative does not exist or you cannot download it." });
       job.inspectedCount += 1;
@@ -127,14 +236,28 @@ async function prepareAndBuild(job: InternalJob, profile: Profile, ids: string[]
       }
     }
     if (!job.files.some((file) => file.state === "queued")) throw new Error("None of the selected creatives could be downloaded.");
+    
     job.phase = "building";
+    await updateDownloadLog(job.id, { status: "building" }).catch(() => undefined);
+
     await buildZip(job);
     const output = await stat(job.outputPath);
     job.zipSizeBytes = output.size;
     job.phase = "ready";
+
+    // Mark ready in persistent download log with final file size and path
+    await updateDownloadLog(job.id, {
+      status: "ready",
+      zip_size_bytes: output.size,
+      zip_file_path: job.outputPath,
+    }).catch(() => undefined);
   } catch (cause) {
     job.phase = "failed";
     job.error = cause instanceof Error ? cause.message : String(cause);
+    await updateDownloadLog(job.id, {
+      status: "failed",
+      error: job.error,
+    }).catch(() => undefined);
     await unlink(job.outputPath).catch(() => undefined);
   }
 }
@@ -268,12 +391,21 @@ function publicDriveDownloadUrl(fileId: string) {
   return `https://drive.usercontent.google.com/download?id=${encodeURIComponent(fileId)}&export=download`;
 }
 
-function cleanupExpiredJobs() {
+export async function deleteExportJob(id: string) {
+  const inMemory = store.jobs.get(id);
+  store.jobs.delete(id);
+  if (inMemory?.outputPath) {
+    await unlink(inMemory.outputPath).catch(() => undefined);
+  }
+}
+
+async function cleanupExpiredJobs() {
   for (const [id, job] of store.jobs) {
     if (job.expiresAt > Date.now()) continue;
     store.jobs.delete(id);
     void unlink(job.outputPath).catch(() => undefined);
   }
+  await cleanupExpiredDownloadLogs().catch(() => undefined);
 }
 
 function requiredSize(value: string | number | null | undefined) {

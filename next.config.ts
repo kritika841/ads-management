@@ -23,6 +23,19 @@ export default function nextConfig(phase: string): NextConfig {
       ]
     },
     async headers() {
+      if (phase === PHASE_DEVELOPMENT_SERVER) {
+        return [
+          {
+            source: "/_next/static/:path*",
+            headers: [
+              {
+                key: "Cache-Control",
+                value: "no-cache, no-store, must-revalidate"
+              }
+            ]
+          }
+        ];
+      }
       return [
         {
           source: "/_next/static/:path*",

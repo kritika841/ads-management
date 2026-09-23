@@ -15,11 +15,16 @@ export type PerformanceMetricKey = (typeof PERFORMANCE_METRIC_KEYS)[number];
 
 export type ConfigurableMetricRole = "content_creator" | "editor" | "manager";
 
+export type ManagerCreativeScope = "all" | "own";
+
+export const DEFAULT_MANAGER_CREATIVE_SCOPE: ManagerCreativeScope = "all";
+
 export type HiddenMetricsByRole = {
   content_creator?: PerformanceMetricKey[];
   editor?: PerformanceMetricKey[];
   manager?: PerformanceMetricKey[];
 };
+
 
 export const PERFORMANCE_METRICS_INFO: Record<
   PerformanceMetricKey,

@@ -46,25 +46,31 @@ describe("incentive evaluation", () => {
     const adminUser = { id: "admin-uuid", role: "admin" as const };
 
     const sampleCreatives = [
-      { id: "c1", creator_id: "creator-uuid", editor_id: "other-editor", ad_id: "ad-1" },
-      { id: "c2", creator_id: "other-creator", editor_id: "editor-uuid", ad_id: "ad-2" },
-      { id: "c3", creator_id: "creator-uuid", editor_id: "editor-uuid", ad_id: "ad-3" },
-      { id: "c4", creator_id: "other-creator", editor_id: "other-editor", ad_id: "ad-4" }
+      { id: "c1", creator_id: "creator-uuid", editor_id: "other-editor", ad_id: "ad-1", meta_ad_id: "m-1" },
+      { id: "c2", creator_id: "other-creator", editor_id: "editor-uuid", ad_id: "ad-2", meta_ad_id: "m-2" },
+      { id: "c3", creator_id: "creator-uuid", editor_id: "editor-uuid", ad_id: "ad-3", meta_ad_id: "m-3" },
+      { id: "c4", creator_id: "manager-uuid", editor_id: "other-editor", ad_id: "ad-4", meta_ad_id: "m-4" },
+      { id: "c5", creator_id: "other-creator", editor_id: "other-editor", ad_id: "ad-5", meta_ad_id: "m-5" }
     ];
 
     const filterCreativesForRole = (
       user: { id: string; role: string },
       creatives: typeof sampleCreatives,
-      userAdIds: Set<string>
+      userAdIds: Set<string>,
+      managerCreativeScope: "all" | "own" = "all"
     ) => {
-      const isReviewer = user.role === "admin" || user.role === "manager";
-      if (isReviewer) return creatives;
+      const isManagerScoped = user.role === "manager" && managerCreativeScope === "own";
+      const isScoped = user.role === "content_creator" || user.role === "editor" || isManagerScoped;
+      if (!isScoped) return creatives;
       return creatives.filter((c) => {
         if (user.role === "content_creator") {
           return c.creator_id === user.id || userAdIds.has(c.ad_id);
         }
         if (user.role === "editor") {
           return c.editor_id === user.id || userAdIds.has(c.ad_id);
+        }
+        if (user.role === "manager") {
+          return c.creator_id === user.id || c.editor_id === user.id || userAdIds.has(c.ad_id);
         }
         return false;
       });
@@ -84,14 +90,52 @@ describe("incentive evaluation", () => {
       expect(visible.some((c) => c.editor_id === "other-editor")).toBe(false);
     });
 
-    it("managers see all team creatives in ads performance", () => {
-      const visible = filterCreativesForRole(managerUser, sampleCreatives, new Set());
-      expect(visible).toHaveLength(4);
+    it("managers see all team creatives when managerCreativeScope is 'all'", () => {
+      const visible = filterCreativesForRole(managerUser, sampleCreatives, new Set(), "all");
+      expect(visible).toHaveLength(5);
+    });
+
+    it("managers only see their own creatives when managerCreativeScope is 'own'", () => {
+      const managerAdIds = new Set(["ad-4"]);
+      const visible = filterCreativesForRole(managerUser, sampleCreatives, managerAdIds, "own");
+      expect(visible.map((c) => c.id)).toEqual(["c4"]);
     });
 
     it("admins see all team creatives in ads performance", () => {
       const visible = filterCreativesForRole(adminUser, sampleCreatives, new Set());
-      expect(visible).toHaveLength(4);
+      expect(visible).toHaveLength(5);
+    });
+
+    it("evaluates metric visibility separately for creator, editor, and manager", () => {
+      const hiddenSettings = {
+        content_creator: ["spend", "revenue"] as const,
+        editor: ["cpa", "roas"] as const,
+        manager: ["impressions"] as const
+      };
+
+      const isHidden = (role: string, metric: string) => {
+        if (role === "admin") return false;
+        if (role === "manager") return (hiddenSettings.manager as readonly string[]).includes(metric);
+        if (role === "editor") return (hiddenSettings.editor as readonly string[]).includes(metric);
+        return (hiddenSettings.content_creator as readonly string[]).includes(metric);
+      };
+
+      // Spend: hidden for creator, visible for editor & manager & admin
+      expect(isHidden("content_creator", "spend")).toBe(true);
+      expect(isHidden("editor", "spend")).toBe(false);
+      expect(isHidden("manager", "spend")).toBe(false);
+      expect(isHidden("admin", "spend")).toBe(false);
+
+      // CPA: hidden for editor, visible for creator & manager & admin
+      expect(isHidden("content_creator", "cpa")).toBe(false);
+      expect(isHidden("editor", "cpa")).toBe(true);
+      expect(isHidden("manager", "cpa")).toBe(false);
+
+      // Impressions: hidden for manager, visible for others
+      expect(isHidden("manager", "impressions")).toBe(true);
+      expect(isHidden("content_creator", "impressions")).toBe(false);
+      expect(isHidden("editor", "impressions")).toBe(false);
+      expect(isHidden("admin", "impressions")).toBe(false);
     });
   });
 });

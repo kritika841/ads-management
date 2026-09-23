@@ -4,7 +4,9 @@ import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  AlertCircle,
   AlertTriangle,
+  AppWindow,
   ArrowLeft,
   ArrowUpRight,
   Camera,
@@ -18,6 +20,7 @@ import {
   Film,
   Filter,
   FolderKanban,
+  Loader2,
   Maximize2,
   Minimize2,
   Pencil,
@@ -27,20 +30,30 @@ import {
   Scissors,
   Search,
   SlidersHorizontal,
+  SquareCheck,
   Target,
   Video,
   X
 } from "lucide-react";
 import { ExcelColumnDef, ExcelTable } from "@/components/campaigns/excel-table";
+import {
+  useBulkDownload,
+  BulkDownloadProgress,
+  BulkActionsBar
+} from "@/components/campaigns/bulk-download-progress";
 import { AdPreviewModal } from "@/components/dashboard/ad-preview-modal";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Input, Select } from "@/components/ui/field";
+import { Field, Input, Select } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
+import { useToast } from "@/components/ui/toast";
 import { CreatorItemForm } from "@/components/workflow/creator-item-form";
 import { ProductionStageBadge } from "@/components/workflow/production-stage";
+import { bulkSetDownloadedBadge } from "@/app/actions/ads";
+import { saveInternalCampaign } from "@/app/actions/campaigns";
+import { runServerAction } from "@/lib/client-action";
 import type { AdWithRelations, Campaign, CampaignOverview, Product, Profile } from "@/lib/types";
-import { cn, formatDateOnly } from "@/lib/utils";
+import { cn, formatDateOnly, isDownloaded } from "@/lib/utils";
 
 function getAdThumbnailUrl(ad: AdWithRelations): string {
   if (ad.id) {
@@ -320,27 +333,118 @@ export function CampaignDetailClient({
   editorWorkloads?: Record<string, number>;
 }) {
   const router = useRouter();
+  const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState<string>("all");
   const [creatorFilter, setCreatorFilter] = useState<string>("all");
   const [editorFilter, setEditorFilter] = useState<string>("all");
   const [productFilter, setProductFilter] = useState<string>("all");
+  const [downloadFilter, setDownloadFilter] = useState<"all" | "downloaded" | "not_downloaded">("all");
   const [showFilters, setShowFilters] = useState(false);
+
+  const [updatingDownloadedId, setUpdatingDownloadedId] = useState<string | null>(null);
+  const [isBulkUpdatingDownloaded, setIsBulkUpdatingDownloaded] = useState(false);
 
   const [previewAd, setPreviewAd] = useState<AdWithRelations | null>(null);
   const [selectedScriptAd, setSelectedScriptAd] = useState<AdWithRelations | null>(null);
   const [editingAd, setEditingAd] = useState<AdWithRelations | null>(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const bulk = useBulkDownload();
 
   const creators = useMemo(() => profiles.filter((p) => p.role === "content_creator"), [profiles]);
   const editors = useMemo(() => profiles.filter((p) => p.role === "editor"), [profiles]);
 
   const canAddCreative =
     profile.role === "content_creator" || profile.role === "admin" || profile.role === "manager";
+  const canEditCampaign = profile.role === "admin" || profile.role === "manager";
+
+  const [editCampaignModalOpen, setEditCampaignModalOpen] = useState(false);
+  const [campaignName, setCampaignName] = useState(overview.campaign.name);
+  const [campaignDescription, setCampaignDescription] = useState(overview.campaign.description ?? "");
+  const [campaignVideoGoal, setCampaignVideoGoal] = useState<number | null>(overview.campaign.video_goal ?? null);
+  const [campaignActive, setCampaignActive] = useState(overview.campaign.active);
+  const [isSavingCampaign, setIsSavingCampaign] = useState(false);
+
+  const handleSaveCampaign = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!campaignName.trim()) {
+      toast({ title: "Campaign name is required", tone: "error" });
+      return;
+    }
+    setIsSavingCampaign(true);
+    try {
+      const res = await runServerAction(() =>
+        saveInternalCampaign({
+          id: overview.campaign.id,
+          name: campaignName.trim(),
+          description: campaignDescription.trim() || null,
+          videoGoal: campaignVideoGoal != null && campaignVideoGoal > 0 ? campaignVideoGoal : null,
+          active: campaignActive
+        })
+      );
+      if (!res.ok) {
+        toast({ title: "Failed to save campaign", description: res.message, tone: "error" });
+        return;
+      }
+      toast({ title: "Campaign updated successfully", tone: "success" });
+      setEditCampaignModalOpen(false);
+      router.refresh();
+    } finally {
+      setIsSavingCampaign(false);
+    }
+  };
+
+  const handleToggleDownloaded = async (ad: AdWithRelations) => {
+    if (profile.role !== "admin" || updatingDownloadedId) return;
+    const currentlyDownloaded = isDownloaded(ad);
+    setUpdatingDownloadedId(ad.id);
+    try {
+      const res = await runServerAction(() => bulkSetDownloadedBadge([ad.id], !currentlyDownloaded));
+      if (!res.ok) {
+        toast({ title: "Could not update downloaded badge", description: res.message ?? "Try again.", tone: "error" });
+        return;
+      }
+      toast({
+        title: !currentlyDownloaded ? `Marked "${ad.name}" as downloaded` : `Removed downloaded badge from "${ad.name}"`,
+        tone: "success"
+      });
+      router.refresh();
+    } finally {
+      setUpdatingDownloadedId(null);
+    }
+  };
+
+  const handleBulkDownloaded = async (downloaded: boolean) => {
+    if (profile.role !== "admin" || !bulk.selectedIds.size || isBulkUpdatingDownloaded) return;
+    setIsBulkUpdatingDownloaded(true);
+    try {
+      const ids = Array.from(bulk.selectedIds);
+      const res = await runServerAction(() => bulkSetDownloadedBadge(ids, downloaded));
+      if (!res.ok) {
+        toast({ title: "Could not update downloaded badges", description: res.message ?? "Try again.", tone: "error" });
+        return;
+      }
+      toast({
+        title: downloaded
+          ? `Marked ${res.count} creative${res.count === 1 ? "" : "s"} as downloaded`
+          : `Removed downloaded badge from ${res.count} creative${res.count === 1 ? "" : "s"}`,
+        tone: "success"
+      });
+      router.refresh();
+    } finally {
+      setIsBulkUpdatingDownloaded(false);
+    }
+  };
 
   // Filter creatives
   const filteredCreatives = useMemo(() => {
     return overview.creatives.filter((creative) => {
+      if (downloadFilter !== "all") {
+        const dl = isDownloaded(creative);
+        if (downloadFilter === "downloaded" && !dl) return false;
+        if (downloadFilter === "not_downloaded" && dl) return false;
+      }
+
       if (stageFilter !== "all") {
         if (stageFilter === "approved" && creative.production_stage !== "approved" && creative.status !== "approved") {
           return false;
@@ -365,33 +469,54 @@ export function CampaignDetailClient({
           stageFilter !== "changes_requested_all" &&
           stageFilter !== "in_review" &&
           stageFilter !== "in_creation" &&
-          creative.production_stage !== stageFilter
+          creative.production_stage !== stageFilter &&
+          creative.status !== stageFilter
         ) {
           return false;
         }
       }
 
-      if (creatorFilter !== "all" && creative.creator_id !== creatorFilter) return false;
-      if (editorFilter !== "all" && creative.editor_id !== editorFilter) return false;
-      if (productFilter !== "all" && creative.product_id !== productFilter) return false;
+      if (creatorFilter !== "all" && creative.creator_id !== creatorFilter) {
+        return false;
+      }
+
+      if (editorFilter !== "all" && creative.editor_id !== editorFilter) {
+        return false;
+      }
+
+      if (productFilter !== "all" && creative.product_id !== productFilter) {
+        return false;
+      }
 
       if (search.trim()) {
         const q = search.toLowerCase();
         const matchName = creative.name.toLowerCase().includes(q);
         const matchScript = creative.script_text?.toLowerCase().includes(q);
+        const matchNotes = creative.notes?.toLowerCase().includes(q);
+        const matchProduct = creative.product?.name.toLowerCase().includes(q);
         const matchCreator = creative.creator?.name.toLowerCase().includes(q);
         const matchEditor = creative.editor?.name.toLowerCase().includes(q);
-        const matchProduct = creative.product?.name.toLowerCase().includes(q);
-        const matchNotes = creative.notes?.toLowerCase().includes(q);
-        if (!matchName && !matchScript && !matchCreator && !matchEditor && !matchProduct && !matchNotes) return false;
+        const matchTags = creative.tags?.some((t) => t.name.toLowerCase().includes(q));
+        if (!matchName && !matchScript && !matchNotes && !matchProduct && !matchCreator && !matchEditor && !matchTags) {
+          return false;
+        }
       }
 
       return true;
     });
-  }, [overview.creatives, stageFilter, creatorFilter, editorFilter, productFilter, search]);
+  }, [
+    overview.creatives,
+    downloadFilter,
+    stageFilter,
+    creatorFilter,
+    editorFilter,
+    productFilter,
+    search
+  ]);
 
   const hasActiveFilters =
     search.trim() !== "" ||
+    downloadFilter !== "all" ||
     stageFilter !== "all" ||
     creatorFilter !== "all" ||
     editorFilter !== "all" ||
@@ -399,6 +524,7 @@ export function CampaignDetailClient({
 
   const resetFilters = () => {
     setSearch("");
+    setDownloadFilter("all");
     setStageFilter("all");
     setCreatorFilter("all");
     setEditorFilter("all");
@@ -451,6 +577,28 @@ export function CampaignDetailClient({
   const columns: ExcelColumnDef<AdWithRelations>[] = useMemo(
     () => [
       {
+        id: "select",
+        header: "",
+        defaultWidth: 44,
+        minWidth: 44,
+        maxWidth: 44,
+        align: "center",
+        cell: (ad) => (
+          <div
+            className="flex items-center justify-center size-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <input
+              type="checkbox"
+              checked={bulk.isSelected(ad.id)}
+              onChange={() => bulk.toggleSelect(ad.id)}
+              className="size-4 rounded border-border text-primary focus:ring-primary focus:ring-offset-background cursor-pointer"
+              aria-label={`Select ${ad.name}`}
+            />
+          </div>
+        )
+      },
+      {
         id: "thumbnail",
         header: "Video",
         defaultWidth: 80,
@@ -463,28 +611,95 @@ export function CampaignDetailClient({
         header: "Creative Name",
         defaultWidth: 170,
         minWidth: 80,
-        cell: (ad) => (
-          <div className="space-y-0.5 overflow-hidden">
-            <Link
-              href={`/ads/${ad.id}`}
-              className="font-semibold text-foreground hover:text-primary transition-colors block truncate"
+        cell: (ad) => {
+          const displayTags = (ad.tags ?? [])
+            .filter((tag) => tag.name.toLowerCase() !== "downloaded")
+            .slice(0, 2);
+          return (
+            <div className="space-y-0.5 overflow-hidden">
+              <Link
+                href={`/ads/${ad.id}`}
+                className="font-semibold text-foreground hover:text-primary transition-colors block truncate"
+              >
+                {ad.name}
+              </Link>
+              {displayTags.length > 0 ? (
+                <div className="flex flex-wrap gap-1">
+                  {displayTags.map((tag) => (
+                    <span
+                      key={tag.id}
+                      className="inline-block rounded bg-muted px-1 py-0.2 text-[9px] text-muted-foreground"
+                    >
+                      #{tag.name}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          );
+        }
+      },
+      {
+        id: "downloaded",
+        header: "Downloaded",
+        defaultWidth: 135,
+        minWidth: 110,
+        align: "center",
+        cell: (ad) => {
+          const downloaded = isDownloaded(ad);
+          const isUpdating = updatingDownloadedId === ad.id;
+          const isAdmin = profile.role === "admin";
+          return (
+            <div
+              className="flex items-center justify-center size-full"
+              onClick={(e) => e.stopPropagation()}
             >
-              {ad.name}
-            </Link>
-            {ad.tags && ad.tags.length > 0 ? (
-              <div className="flex flex-wrap gap-1">
-                {ad.tags.slice(0, 2).map((tag) => (
-                  <span
-                    key={tag.id}
-                    className="inline-block rounded bg-muted px-1 py-0.2 text-[9px] text-muted-foreground"
-                  >
-                    #{tag.name}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        )
+              {isAdmin ? (
+                <button
+                  type="button"
+                  disabled={isUpdating}
+                  onClick={() => void handleToggleDownloaded(ad)}
+                  className={cn(
+                    "group/dl inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-semibold transition-all duration-150 border cursor-pointer select-none",
+                    downloaded
+                      ? "border-success/40 bg-success/15 text-success hover:bg-success/25 hover:border-success/60"
+                      : "border-border/80 bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                  title={
+                    downloaded
+                      ? "Downloaded · Click to remove downloaded badge"
+                      : "Yet to download · Click to mark as downloaded"
+                  }
+                >
+                  {isUpdating ? (
+                    <Loader2 className="size-2.5 animate-spin shrink-0" />
+                  ) : downloaded ? (
+                    <Download className="size-2.5 shrink-0 text-success" />
+                  ) : (
+                    <Clock className="size-2.5 shrink-0 text-muted-foreground/70" />
+                  )}
+                  <span>{downloaded ? "Downloaded" : "Yet to download"}</span>
+                </button>
+              ) : (
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-semibold border",
+                    downloaded
+                      ? "border-success/40 bg-success/15 text-success"
+                      : "border-border/80 bg-muted/60 text-muted-foreground"
+                  )}
+                >
+                  {downloaded ? (
+                    <Download className="size-2.5 shrink-0 text-success" />
+                  ) : (
+                    <Clock className="size-2.5 shrink-0 text-muted-foreground/70" />
+                  )}
+                  <span>{downloaded ? "Downloaded" : "Yet to download"}</span>
+                </span>
+              )}
+            </div>
+          );
+        }
       },
       {
         id: "status",
@@ -706,20 +921,73 @@ export function CampaignDetailClient({
         )
       }
     ],
-    [profile.role, canAddCreative]
+    [profile.role, canAddCreative, bulk.selectedIds, bulk.toggleSelect, bulk.isSelected, updatingDownloadedId, handleToggleDownloaded]
   );
 
   return (
-    <main className="page-container space-y-4 pb-12">
-      {/* Back link & Header */}
-      <div>
-        <Link
-          href="/campaigns"
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors mb-2"
-        >
-          <ArrowLeft className="size-3.5" />
-          <span>Back to campaigns</span>
-        </Link>
+    <main className="page-container space-y-5 pb-12">
+      {/* Top Static Header with Folder-Type View Switcher on the Left */}
+      <div className="flex flex-col gap-3 border-b border-border pb-px sm:flex-row sm:items-center sm:justify-between">
+        {/* Left Side: Folder-type Tab Switcher matching overview page exactly */}
+        <div className="flex items-end gap-1.5 -mb-px">
+          {/* Campaigns Folder Tab */}
+          <Link
+            href="/campaigns"
+            className={cn(
+              "group relative flex items-center gap-2 rounded-t-lg px-4 py-2.5 text-sm transition-all duration-150 border-t border-x border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40 font-medium"
+            )}
+          >
+            <div className="flex size-5 items-center justify-center rounded bg-muted text-muted-foreground group-hover:text-foreground transition-colors">
+              <FolderKanban className="size-3.5" />
+            </div>
+            <span className="text-base tracking-tight font-semibold">Campaigns</span>
+          </Link>
+
+          {/* Ads Folder Tab (Active) */}
+          <div
+            className={cn(
+              "group relative flex items-center gap-2 rounded-t-lg px-4 py-2.5 text-sm transition-all duration-150 border-t-2 border-primary border-x border-border bg-card text-foreground font-semibold shadow-2xs z-10"
+            )}
+          >
+            <div className="flex size-5 items-center justify-center rounded bg-primary text-primary-foreground">
+              <AppWindow className="size-3.5" />
+            </div>
+            <span className="text-base tracking-tight font-semibold">Ads</span>
+            <span className="ml-0.5 rounded-full px-1.5 py-0.2 text-[10px] font-mono bg-primary/10 text-primary font-semibold">
+              {overview.totalCreatives}
+            </span>
+          </div>
+        </div>
+
+        {/* Right Side: Action Buttons matching the overview layout */}
+        <div className="flex items-center gap-2.5 pb-2 sm:pb-0">
+          <Button
+            variant={bulk.selectedIds.size > 0 ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => {
+              if (bulk.isAllSelected(filteredCreatives.map((c) => c.id))) {
+                bulk.clearSelection();
+              } else {
+                bulk.selectAll(filteredCreatives.map((c) => c.id));
+              }
+            }}
+            className="h-9 text-xs gap-1.5"
+          >
+            <SquareCheck className="size-3.5" />
+            {bulk.isAllSelected(filteredCreatives.map((c) => c.id)) ? "Deselect all" : "Select all"}
+          </Button>
+          <Button variant="secondary" size="sm" onClick={exportToCsv} className="h-9 text-xs">
+            <Download className="size-3.5 mr-1" />
+            Export CSV
+          </Button>
+          {canAddCreative ? (
+            <Button onClick={() => setAddModalOpen(true)} className="h-9 gap-1.5 text-xs shadow-xs">
+              <Plus className="size-4" />
+              Add Creative
+            </Button>
+          ) : null}
+        </div>
+      </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2.5">
@@ -737,24 +1005,30 @@ export function CampaignDetailClient({
                 >
                   {overview.campaign.active ? "Active" : "Archived"}
                 </span>
+                {canEditCampaign ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setCampaignName(overview.campaign.name);
+                      setCampaignDescription(overview.campaign.description ?? "");
+                      setCampaignVideoGoal(overview.campaign.video_goal ?? null);
+                      setCampaignActive(overview.campaign.active);
+                      setEditCampaignModalOpen(true);
+                    }}
+                    className="h-6 px-2 text-[11px] gap-1 text-muted-foreground hover:text-foreground"
+                  >
+                    <Pencil className="size-3" />
+                    Edit
+                  </Button>
+                ) : null}
               </div>
+              {overview.campaign.description && (
+                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{overview.campaign.description}</p>
+              )}
             </div>
           </div>
-
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={exportToCsv} className="h-8 text-xs">
-              <Download className="size-3.5 mr-1" />
-              Export
-            </Button>
-            {canAddCreative ? (
-              <Button onClick={() => setAddModalOpen(true)} className="h-8 text-xs shadow-sm">
-                <Plus className="size-3.5 mr-1" />
-                Add Creative
-              </Button>
-            ) : null}
-          </div>
         </div>
-      </div>
 
       {/* Goal Progress Bar */}
       <div className="rounded-xl border border-border bg-card p-3 shadow-xs">
@@ -764,15 +1038,26 @@ export function CampaignDetailClient({
               <Target className="size-4" />
             </div>
             <div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-base font-bold text-foreground">
-                  {overview.approvedCount} / {overview.videoGoal}
-                </span>
-                <span className="text-xs text-muted-foreground">approved videos</span>
-                <span className="font-mono text-xs font-bold text-success">
-                  ({overview.goalProgressPercent}%)
-                </span>
-              </div>
+              {overview.videoGoal && overview.videoGoal > 0 ? (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-base font-bold text-foreground">
+                    {overview.approvedCount} / {overview.videoGoal}
+                  </span>
+                  <span className="text-xs text-muted-foreground">approved videos</span>
+                  {overview.goalProgressPercent != null ? (
+                    <span className="font-mono text-xs font-bold text-success">
+                      ({overview.goalProgressPercent}%)
+                    </span>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-base font-bold text-foreground">
+                    {overview.approvedCount}
+                  </span>
+                  <span className="text-xs text-muted-foreground">approved videos (No goal set)</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -792,19 +1077,21 @@ export function CampaignDetailClient({
           </div>
         </div>
 
-        <div className="mt-2.5 h-1.5 w-full rounded-full bg-muted overflow-hidden">
-          <div
-            className={cn(
-              "h-full rounded-full transition-all",
-              overview.goalProgressPercent >= 100
-                ? "bg-success"
-                : overview.goalProgressPercent >= 50
-                ? "bg-primary"
-                : "bg-warning"
-            )}
-            style={{ width: `${overview.goalProgressPercent}%` }}
-          />
-        </div>
+        {overview.goalProgressPercent != null ? (
+          <div className="mt-2.5 h-1.5 w-full rounded-full bg-muted overflow-hidden">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all",
+                overview.goalProgressPercent >= 100
+                  ? "bg-success"
+                  : overview.goalProgressPercent >= 50
+                  ? "bg-primary"
+                  : "bg-warning"
+              )}
+              style={{ width: `${overview.goalProgressPercent}%` }}
+            />
+          </div>
+        ) : null}
       </div>
 
       {/* Top Filter Bar */}
@@ -816,7 +1103,7 @@ export function CampaignDetailClient({
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search creatives by name, script, notes..."
+                placeholder="Search creatives (e.g. Navratri Offer, Diwali Hook, script)..."
                 className="pl-9 h-8 text-xs"
               />
             </div>
@@ -901,7 +1188,7 @@ export function CampaignDetailClient({
 
         {/* Collapsible Dropdowns */}
         {showFilters && (
-          <div className="grid grid-cols-2 gap-3 pt-2.5 border-t border-border sm:grid-cols-4 text-xs">
+          <div className="grid grid-cols-2 gap-3 pt-2.5 border-t border-border sm:grid-cols-5 text-xs">
             <div>
               <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Stage & Status</label>
               <Select
@@ -923,6 +1210,19 @@ export function CampaignDetailClient({
                 <option value="shoot_complete">Shoot Complete (Clips Done)</option>
                 <option value="ready_to_shoot">Ready to Shoot</option>
                 <option value="script_writing">Script in Progress</option>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Download Status</label>
+              <Select
+                value={downloadFilter}
+                onChange={(e) => setDownloadFilter(e.target.value as "all" | "downloaded" | "not_downloaded")}
+                className="h-8 text-xs"
+              >
+                <option value="all">All Download States</option>
+                <option value="downloaded">Downloaded</option>
+                <option value="not_downloaded">Yet to download</option>
               </Select>
             </div>
 
@@ -976,6 +1276,37 @@ export function CampaignDetailClient({
           </div>
         )}
       </div>
+
+      {/* Bulk Download Progress Status */}
+      {bulk.bulkExportJob || bulk.isDownloading ? (
+        <BulkDownloadProgress
+          job={bulk.bulkExportJob}
+          progress={bulk.bulkDownloadProgress}
+          count={bulk.bulkDownloadCount}
+          complete={bulk.bulkDownloadComplete}
+          onDismiss={bulk.dismissDownload}
+        />
+      ) : null}
+
+      {/* Bulk Actions Bar if items selected */}
+      {bulk.selectedIds.size > 0 && (
+        <BulkActionsBar
+          selectedCount={bulk.selectedIds.size}
+          totalFilteredCount={filteredCreatives.length}
+          onSelectAll={() => bulk.selectAll(filteredCreatives.map((c) => c.id))}
+          onClear={bulk.clearSelection}
+          onDownloadZip={() =>
+            bulk.downloadZip(
+              overview.campaign.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")
+            )
+          }
+          isDownloading={bulk.isDownloading}
+          downloadPercent={bulk.bulkDownloadProgress?.percent}
+          onMarkDownloaded={profile.role === "admin" ? () => void handleBulkDownloaded(true) : undefined}
+          onRemoveDownloaded={profile.role === "admin" ? () => void handleBulkDownloaded(false) : undefined}
+          isUpdatingDownloaded={isBulkUpdatingDownloaded}
+        />
+      )}
 
       {/* Creatives Excel Table */}
       <ExcelTable
@@ -1057,6 +1388,133 @@ export function CampaignDetailClient({
               />
             </div>
           </section>
+        </Modal>
+      ) : null}
+
+      {/* Edit Campaign Modal */}
+      {editCampaignModalOpen ? (
+        <Modal
+          open
+          labelledBy="edit-campaign-title"
+          onClose={() => setEditCampaignModalOpen(false)}
+          className="flex items-center justify-center p-4 sm:p-6"
+        >
+          <div className="w-full max-w-lg rounded-2xl border border-border bg-card shadow-float overflow-hidden animate-in fade-in-0 zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-border px-6 py-5 bg-muted/20">
+              <div className="flex items-center gap-3">
+                <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary shrink-0">
+                  <FolderKanban className="size-5" />
+                </div>
+                <div>
+                  <h3 id="edit-campaign-title" className="text-base font-semibold text-foreground">
+                    Edit Campaign
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Update campaign metadata, description, video targets, and active status.
+                  </p>
+                </div>
+              </div>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-8 rounded-lg text-muted-foreground hover:text-foreground"
+                onClick={() => setEditCampaignModalOpen(false)}
+              >
+                <X className="size-4" />
+                <span className="sr-only">Close</span>
+              </Button>
+            </div>
+
+            <form onSubmit={handleSaveCampaign} className="p-6 space-y-5">
+              <div className="space-y-4">
+                <Field
+                  label="Campaign Name *"
+                  hint="A clear title like Navratri Sale 2026, Diwali Festive Special, or Pooja Gifting."
+                >
+                  <Input
+                    value={campaignName}
+                    onChange={(e) => setCampaignName(e.target.value)}
+                    placeholder="e.g., Navratri Sale 2026, Diwali Festive Special"
+                    autoFocus
+                    required
+                    className="h-10 text-sm"
+                  />
+                </Field>
+
+                <Field
+                  label="Number of Creatives (Goal)"
+                  hint="Target number of approved video creatives to produce for this campaign (optional)."
+                >
+                  <div className="relative flex items-center">
+                    <Input
+                      type="number"
+                      min="1"
+                      value={campaignVideoGoal ?? ""}
+                      onChange={(e) =>
+                        setCampaignVideoGoal(e.target.value === "" ? null : Math.max(1, parseInt(e.target.value) || 1))
+                      }
+                      placeholder="e.g., 10 (Leave empty for no target)"
+                      className="h-10 text-sm font-mono pr-20"
+                    />
+                    <div className="absolute right-3 text-xs text-muted-foreground pointer-events-none">
+                      videos
+                    </div>
+                  </div>
+                </Field>
+
+                <Field
+                  label="Description / Brief"
+                  hint="Strategic objectives, target audiences, or guidelines for this campaign."
+                >
+                  <textarea
+                    value={campaignDescription}
+                    onChange={(e) => setCampaignDescription(e.target.value)}
+                    placeholder="Add any briefing notes, audience guidelines, or production goals..."
+                    rows={3}
+                    className="w-full rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm text-foreground shadow-2xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+                  />
+                </Field>
+
+                <div className="flex items-center justify-between rounded-xl border border-border bg-muted/20 p-3.5">
+                  <div>
+                    <span className="text-xs font-semibold text-foreground">Campaign Status</span>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Archived campaigns are hidden from creative upload dropdowns.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={campaignActive}
+                      onChange={(e) => setCampaignActive(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary" />
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2 border-t border-border">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setEditCampaignModalOpen(false)}
+                  disabled={isSavingCampaign}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isSavingCampaign} className="shadow-sm">
+                  {isSavingCampaign ? (
+                    <>
+                      <Loader2 className="size-3.5 mr-1.5 animate-spin" /> Saving...
+                    </>
+                  ) : (
+                    "Save Changes"
+                  )}
+                </Button>
+              </div>
+            </form>
+          </div>
         </Modal>
       ) : null}
     </main>

@@ -37,6 +37,17 @@ describe("approval hierarchy and changes requested visibility", () => {
     expect(getProductionStageLabel("final_review", "manager", true)).toBe("Final review");
   });
 
+  it("allows both admin and manager to reopen approved creatives", () => {
+    function canUserReopenApproved(role: UserRole): boolean {
+      return role === "admin" || role === "manager";
+    }
+
+    expect(canUserReopenApproved("admin")).toBe(true);
+    expect(canUserReopenApproved("manager")).toBe(true);
+    expect(canUserReopenApproved("editor")).toBe(false);
+    expect(canUserReopenApproved("content_creator")).toBe(false);
+  });
+
   it("contains approval hierarchy migration with database safeguards", () => {
     const migration = readFileSync(
       "supabase/migrations/20260921120000_admin_approval_hierarchy.sql",
@@ -45,5 +56,12 @@ describe("approval hierarchy and changes requested visibility", () => {
     expect(migration).toContain("allow_manager_final_approval");
     expect(migration).toContain("function public.final_review_ad_atomic");
     expect(migration).toContain("Final approval is restricted to administrators");
+
+    const safeguardsMigration = readFileSync(
+      "supabase/migrations/20260923100000_manager_reopen_and_approval_safeguards.sql",
+      "utf8"
+    );
+    expect(safeguardsMigration).toContain("actor_role in ('admin', 'manager')");
+    expect(safeguardsMigration).toContain("approved_ad_reopened");
   });
 });

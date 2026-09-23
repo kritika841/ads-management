@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { AlertTriangle, ArrowDown, ArrowRight, ArrowUp, CalendarClock, Check, ChevronsUpDown, Download, Eye, Filter, Grid2X2, ListFilter, Loader2, Maximize2, Play, Plus, Search, Square, SquareCheck, Table2, Tags, UserCheck, Video, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowRight, ArrowUp, CalendarClock, Check, ChevronsUpDown, Download, ExternalLink, Eye, Filter, Grid2X2, ListFilter, Loader2, Maximize2, Play, Plus, Search, Square, SquareCheck, Table2, Tags, UserCheck, Video, X } from "lucide-react";
 import { assignEditor, bulkAddTags, bulkSetDownloadedBadge, dismissDownloadedBadge, reviewAd } from "@/app/actions/ads";
 import { AdPreviewModal } from "@/components/dashboard/ad-preview-modal";
 import { DeleteAdButton } from "@/components/dashboard/delete-ad-button";
@@ -400,7 +400,11 @@ export function DashboardClient({
       const created = await fetch("/api/ads/export-jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+        body: JSON.stringify({
+          ids: Array.from(selectedIds),
+          source: "creative_library",
+          title: `Creative Library (${selectedCount} creatives)`,
+        }),
       });
       if (!created.ok) throw new Error(await created.text());
       let job = await created.json() as ExportJobSnapshot;
@@ -639,6 +643,19 @@ export function DashboardClient({
         )}
       </div>
     </div>
+    {bulkExportJob || isDownloading || bulkDownloadComplete ? (
+      <BulkDownloadProgress
+        job={bulkExportJob}
+        progress={bulkDownloadProgress}
+        count={bulkDownloadCount}
+        complete={bulkDownloadComplete}
+        onDismiss={() => {
+          setBulkExportJob(null);
+          setBulkDownloadProgress(null);
+          setBulkDownloadComplete(false);
+        }}
+      />
+    ) : null}
     {filteredAds.length ? view === "grid" ? <><section className="mt-3 grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">{visibleGridAds.map((ad) => <WorkflowCard key={ad.id} ad={ad} mediaToken={mediaTokens[ad.id]} profile={profile} canApprove={canApprove} allowManagerFinalApproval={allowManagerFinalApproval} editors={editors} editorWorkloads={editorWorkloads} pending={actingAdId === ad.id} playing={playingAdIds.has(ad.id)} selected={selectedIds.has(ad.id)} downloading={downloadingIds.has(ad.id)} downloadProgress={downloadProgress[ad.id]} onToggleSelect={() => toggleSelect(ad.id)} onPlay={() => playVideo(ad)} onStopPlaying={() => stopVideo(ad.id)} onPlaybackError={() => { stopVideo(ad.id); toast({ title: "Video unavailable", description: `${ad.name} could not be played.`, tone: "error" }); }} onQuickPreview={() => setPreviewAd(ad)} onOpenDrive={() => { if (ad.drive_url) window.open(ad.drive_url, "_blank", "noopener,noreferrer"); }} onDownload={() => downloadOne(ad)} onEdit={() => openCreatorForm(ad)} onApprove={() => decide(ad, "approve")} onRequestChanges={() => setCancelAd(ad)} onAssignEditor={(editorId, deadline) => assign(ad, editorId, deadline)} />)}</section>{hasMoreGridAds ? <div ref={loadMoreRef} className="flex h-20 items-center justify-center" role="status" aria-label="Loading more creatives"><Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden /><span className="sr-only">Loading more creatives</span></div> : null}</> : <WorkflowTable ads={filteredAds} profile={profile} canApprove={canApprove} allowManagerFinalApproval={allowManagerFinalApproval} pendingId={actingAdId} selectedIds={selectedIds} downloadingIds={downloadingIds} downloadProgress={downloadProgress} onToggleSelect={toggleSelect} onApprove={(ad) => decide(ad, "approve")} onRequestChanges={setCancelAd} onDownload={downloadOne} /> : <EmptyQueue canCreate={canCreate} createBlocked={createBlocked} onCreate={handleCreateClick} />}
 
     {formOpen ? <Modal open labelledBy="creator-form-title" onClose={() => { setFormOpen(false); setEditingAd(null); }} className="p-0 sm:p-6"><section className="mx-auto min-h-full w-full bg-card shadow-float sm:min-h-0 sm:max-w-5xl sm:rounded-xl"><div className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-border bg-card px-5 sm:rounded-t-lg"><div><h2 id="creator-form-title" className="text-lg font-semibold text-foreground">{editingAd ? (editingAd && !creatorEditableStages.includes(editingAd.production_stage as (typeof creatorEditableStages)[number]) && (profile.role === "admin" || profile.role === "manager") ? "Override edit creative" : "Update creative") : "Add creative"}</h2><p className="text-xs text-muted-foreground">{editingAd && !creatorEditableStages.includes(editingAd.production_stage as (typeof creatorEditableStages)[number]) && (profile.role === "admin" || profile.role === "manager") ? "Admin/manager override — all fields editable." : "Set the current preparation status and save."}</p></div><Button size="icon" variant="ghost" title="Close" onClick={() => { setFormOpen(false); setEditingAd(null); }}><X className="size-5" aria-hidden /></Button></div><div className="p-5"><CreatorItemForm profile={profile} creators={creators} editors={editors} campaigns={campaigns.filter((item) => item.active)} products={products.filter((item) => item.active)} initialAd={editingAd} availableTags={availableTags} editorWorkloads={editorWorkloads} overrideMode={Boolean(editingAd && !creatorEditableStages.includes(editingAd.production_stage as (typeof creatorEditableStages)[number]) && (profile.role === "admin" || profile.role === "manager"))} onSaved={() => { setFormOpen(false); setEditingAd(null); router.refresh(); }} /></div></section></Modal> : null}
@@ -778,15 +795,25 @@ function WorkflowCard({ ad, mediaToken, profile, canApprove = true, allowManager
         <div className="mt-4 grid grid-cols-2 gap-3 border-y border-border py-3"><Person label="Creator" person={ad.creator} /><Person label="Editor" person={ad.editor} /></div>
         <div className="mt-3 flex items-center justify-between gap-3 text-xs"><span className="font-medium text-muted-foreground" suppressHydrationWarning>{workflowStageAgeLabel(ad.production_stage, ad.workflow_status_changed_at)}</span><Deadline deadline={ad.deadline} status={ad.status} /></div>
 
-        {(ad.production_stage === "creator_changes_requested" || ad.production_stage === "changes_requested") ? (
+        {(ad.production_stage === "creator_changes_requested" ||
+          ad.production_stage === "changes_requested" ||
+          ((ad.production_stage === "creator_review" || ad.production_stage === "final_review" || ad.status === "pending_review") && Boolean(ad.latest_change_request?.note))) ? (
           <div className="mt-3 rounded-lg border border-primary/30 bg-primary/10 p-2.5">
             <div className="flex items-center justify-between gap-2 text-xs font-semibold text-primary">
               <span className="inline-flex items-center gap-1.5">
                 <span className="size-1.5 rounded-full bg-primary" />
-                {ad.production_stage === "creator_changes_requested" ? "Changes requested to Creator" : "Changes requested to Editor"}
+                {ad.production_stage === "creator_changes_requested"
+                  ? "Changes requested to Creator"
+                  : ad.production_stage === "changes_requested"
+                  ? "Changes requested to Editor"
+                  : ad.latest_change_request?.target_role === "creator"
+                  ? "Revisions submitted · Previously requested to Creator"
+                  : "Revisions submitted · Previously requested to Editor"}
               </span>
               <span className="truncate text-[11px] font-normal text-muted-foreground">
-                {ad.production_stage === "creator_changes_requested" ? (ad.creator?.name ?? "Creator") : (ad.editor?.name ?? "Editor")}
+                {ad.production_stage === "creator_changes_requested" || ad.latest_change_request?.target_role === "creator"
+                  ? (ad.creator?.name ?? "Creator")
+                  : (ad.editor?.name ?? "Editor")}
               </span>
             </div>
             {ad.latest_change_request?.note ? (
@@ -916,9 +943,13 @@ function WorkflowTable({ ads, profile, canApprove = true, allowManagerFinalAppro
                     <span className="mt-1 block text-[11px] font-medium text-primary">To: {ad.creator?.name ?? "Creator"}</span>
                   ) : ad.production_stage === "changes_requested" ? (
                     <span className="mt-1 block text-[11px] font-medium text-primary">To: {ad.editor?.name ?? "Editor"}</span>
+                  ) : ad.latest_change_request?.note && (ad.production_stage === "creator_review" || ad.production_stage === "final_review") ? (
+                    <span className="mt-1 block text-[11px] font-medium text-primary">
+                      Revisions: {ad.latest_change_request?.target_role === "creator" ? (ad.creator?.name ?? "Creator") : (ad.editor?.name ?? "Editor")}
+                    </span>
                   ) : null}
                   {ad.latest_change_request?.note ? (
-                    <span className="mt-0.5 block max-w-[200px] truncate text-[11px] text-muted-foreground" title={ad.latest_change_request.note}>
+                    <span className="mt-0.5 block max-w-[200px] truncate text-[11px] text-muted-foreground" title={ad.latest_change_request.reviewer?.name ? `"${ad.latest_change_request.note}" (Requested by ${ad.latest_change_request.reviewer.name})` : ad.latest_change_request.note}>
                       &ldquo;{ad.latest_change_request.note}&rdquo;
                     </span>
                   ) : null}
@@ -960,7 +991,23 @@ function BulkDownloadProgress({ job, progress, count, complete, onDismiss }: { j
     <div className="flex items-start justify-between gap-4">
       <div className="flex min-w-0 items-start gap-3">
         <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">{complete ? <Check className="size-4" aria-hidden /> : <Loader2 className="size-4 animate-spin" aria-hidden />}</span>
-        <div><p className="text-sm font-semibold text-foreground">{title}</p><p className="mt-0.5 text-xs text-muted-foreground">{detail}</p>{job?.zipSizeBytes ? <p className="mt-1 text-xs font-medium text-foreground">Final ZIP size: {formatDownloadBytes(job.zipSizeBytes)} · {included} included{skipped ? ` · ${skipped} skipped/failed` : ""}</p> : null}</div>
+        <div>
+          <p className="text-sm font-semibold text-foreground">{title}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {detail}
+            <span className="block mt-1 text-[11px] text-muted-foreground/90">
+              {preparing ? "Zipping continues in the background if you close this tab. " : ""}The archive is saved for 3 days in{" "}
+              <Link
+                href="/admin/settings#downloads"
+                className="inline-flex items-center gap-0.5 font-medium text-primary hover:underline"
+              >
+                Settings &gt; Download Logs <ExternalLink className="size-2.5" />
+              </Link>
+              .
+            </span>
+          </p>
+          {job?.zipSizeBytes ? <p className="mt-1 text-xs font-medium text-foreground">Final ZIP size: {formatDownloadBytes(job.zipSizeBytes)} · {included} included{skipped ? ` · ${skipped} skipped/failed` : ""}</p> : null}
+        </div>
       </div>
       <div className="flex items-center gap-2">{progress || complete ? <span className="shrink-0 text-sm font-semibold text-primary">{`${percent}%`}</span> : null}{complete || failed ? <button type="button" className="rounded p-1 text-muted-foreground hover:bg-muted" onClick={onDismiss} aria-label="Dismiss download status"><X className="size-4" /></button> : null}</div>
     </div>

@@ -4,12 +4,16 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireProfile } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { deleteCampaignGoal, writeCampaignGoal } from "@/lib/campaign-goals";
 
 const campaignPayloadSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().trim().min(1, "Campaign name is required.").max(120),
   description: z.string().trim().max(1000).optional().nullable(),
-  videoGoal: z.coerce.number().int().min(0).default(10),
+  videoGoal: z.preprocess(
+    (val) => (val === "" || val === undefined || val === null ? null : val),
+    z.coerce.number().int().min(1).nullable().optional()
+  ),
   active: z.boolean().default(true)
 });
 
@@ -26,7 +30,7 @@ export async function saveInternalCampaign(payload: z.input<typeof campaignPaylo
   const fullPatch = {
     name: data.name,
     description: data.description || null,
-    video_goal: data.videoGoal,
+    video_goal: (data.videoGoal != null && data.videoGoal > 0) ? data.videoGoal : null,
     active: data.active
   };
 
@@ -35,8 +39,8 @@ export async function saveInternalCampaign(payload: z.input<typeof campaignPaylo
     ? await admin.from("campaigns").update(fullPatch).eq("id", data.id).select("*").single()
     : await admin.from("campaigns").insert(fullPatch).select("*").single();
 
-  // If column doesn't exist on remote yet, fallback gracefully
-  if (error && (error.message?.includes("video_goal") || error.code === "PGRST204" || error.code === "42703")) {
+  // If column doesn't exist or has a not-null constraint on remote yet, fallback gracefully
+  if (error && (error.message?.includes("video_goal") || error.code === "PGRST204" || error.code === "42703" || error.code === "23502")) {
     const fallbackPatch = {
       name: data.name,
       description: data.description || null,
@@ -56,9 +60,18 @@ export async function saveInternalCampaign(payload: z.input<typeof campaignPaylo
     };
   }
 
+  const campaignId = savedCampaign?.id ?? data.id;
+  if (campaignId) {
+    await writeCampaignGoal(campaignId, data.videoGoal != null && data.videoGoal > 0 ? data.videoGoal : null);
+  }
+
+  if (savedCampaign) {
+    savedCampaign.video_goal = data.videoGoal != null && data.videoGoal > 0 ? data.videoGoal : null;
+  }
+
   revalidatePath("/campaigns");
-  if (data.id) {
-    revalidatePath(`/campaigns/${data.id}`);
+  if (campaignId) {
+    revalidatePath(`/campaigns/${campaignId}`);
   }
   revalidatePath("/dashboard");
   revalidatePath("/library");
@@ -82,6 +95,8 @@ export async function deleteInternalCampaign(id: string) {
   if (error) {
     return { ok: false, message: error.message };
   }
+
+  await deleteCampaignGoal(parsedId.data);
 
   revalidatePath("/campaigns");
   revalidatePath("/dashboard");

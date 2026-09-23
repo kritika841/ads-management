@@ -94,79 +94,136 @@ export function ReviewPanel({
           {permissionMessage ? (
             <p className="rounded-md bg-warning/15 px-3 py-2 text-sm text-warning">{permissionMessage}</p>
           ) : null}
-          {canReviewNow && ad.production_stage === "creator_review" ? <p className="rounded-md bg-accent px-3 py-2 text-sm text-accent-foreground">The content creator has not approved yet. You can still provide direct final approval.</p> : null}
-          {canReviewNow ? <Field label="Review note">
-            <Textarea
-              className="min-h-24"
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              placeholder="Approval note or specific requested changes"
-            />
-          </Field> : null}
-          {canChooseChangeTarget ? (
-            <Field label="Change target" hint={canReopenApproved ? "Choose where the reopened creative should go next." : "Choose whether the request goes back to the creator or the editor."}>
-              <Select value={changeTarget} onChange={(event) => setChangeTarget(event.target.value as "creator" | "editor" | "") }>
-                <option value="">Choose target</option>
-                <option value="creator">Creator</option>
-                <option value="editor">Editor</option>
-              </Select>
-            </Field>
-          ) : null}
-          {managerApprovedPendingAdmin ? (
-            <p className="rounded-md bg-accent px-3 py-2 text-xs text-accent-foreground flex items-center gap-1.5">
-              <CheckCircle2 className="size-3.5 text-primary shrink-0" aria-hidden />
-              You approved this creative. It is currently waiting for administrator final approval.
-            </p>
-          ) : !allowManagerFinalApproval && isAdmin && ad.approval_stage === "admin_final" ? (
-            <p className="rounded-md bg-accent px-3 py-2 text-xs text-accent-foreground flex items-center gap-1.5">
-              <CheckCircle2 className="size-3.5 text-primary shrink-0" aria-hidden />
-              Manager review completed. Awaiting your final administrator approval.
-            </p>
-          ) : !allowManagerFinalApproval && isManager ? (
-            <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-              Your approval will forward this creative to an administrator for final approval.
+          {canReviewNow && ad.production_stage === "creator_review" ? (
+            <p className="rounded-md bg-accent px-3 py-2 text-sm text-accent-foreground">
+              The content creator has not approved yet. You can still provide direct final approval.
             </p>
           ) : null}
-          <div className="grid gap-2">
-            {managerApprovedPendingAdmin ? (
-              <Button disabled variant="secondary" className="gap-1.5">
-                <Check className="size-4 text-primary" aria-hidden />
-                Approved · Waiting for Admin
-              </Button>
-            ) : (
-              <Button disabled={isPending || approvalQueued || !canReviewNow} onClick={() => decide("approve")}>
-                {isPending || approvalQueued ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" aria-hidden />}
-                {!allowManagerFinalApproval && isManager ? "Approve & Submit to Admin" : isAdmin && !allowManagerFinalApproval && ad.approval_stage === "admin_final" ? "Grant final approval" : "Final approve"}
-              </Button>
-            )}
-            <Button
-              variant="secondary"
-              disabled={isPending || approvalQueued || !canReviewNow || !note.trim() || (canChooseChangeTarget && !changeTarget) || (canReopenApproved && !changeTarget)}
-              onClick={() => decide("request_changes")}
-            >
-              <Send className="size-4" aria-hidden />
-              Request changes
-            </Button>
-          </div>
+
+          {canReviewNow ? (
+            <>
+              {ad.latest_change_request?.note ? (
+                <div className="rounded-lg border border-primary/30 bg-primary/10 p-3">
+                  <div className="flex items-center justify-between gap-2 text-xs font-semibold text-primary">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="size-1.5 rounded-full bg-primary" />
+                      Previously requested changes ({ad.latest_change_request.target_role === "creator" ? "Creator" : "Editor"})
+                    </span>
+                    {ad.latest_change_request.reviewer?.name ? (
+                      <span className="text-[11px] font-normal text-muted-foreground">
+                        By {ad.latest_change_request.reviewer.name}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-1.5 rounded bg-card/80 px-2.5 py-1.5 text-xs text-foreground shadow-xs">
+                    &ldquo;{ad.latest_change_request.note}&rdquo;
+                  </p>
+                </div>
+              ) : null}
+
+              <Field label="Review note">
+                <Textarea
+                  className="min-h-24"
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                  placeholder="Approval note or specific requested changes"
+                />
+              </Field>
+
+              <Field
+                label="Change target"
+                hint="Choose whether requested changes go back to the creator or the editor."
+              >
+                <Select
+                  value={changeTarget}
+                  onChange={(event) => setChangeTarget(event.target.value as "creator" | "editor" | "")}
+                >
+                  <option value="">Choose target (required for changes)</option>
+                  <option value="creator">Creator</option>
+                  <option value="editor">Editor</option>
+                </Select>
+              </Field>
+
+              {managerApprovedPendingAdmin ? (
+                <p className="rounded-md bg-accent px-3 py-2 text-xs text-accent-foreground flex items-center gap-1.5">
+                  <CheckCircle2 className="size-3.5 text-primary shrink-0" aria-hidden />
+                  You approved this creative. It is currently waiting for administrator final approval. You can still request changes below if needed.
+                </p>
+              ) : !allowManagerFinalApproval && isAdmin && ad.approval_stage === "admin_final" ? (
+                <p className="rounded-md bg-accent px-3 py-2 text-xs text-accent-foreground flex items-center gap-1.5">
+                  <CheckCircle2 className="size-3.5 text-primary shrink-0" aria-hidden />
+                  Manager review completed. Awaiting your final administrator approval.
+                </p>
+              ) : !allowManagerFinalApproval && isManager ? (
+                <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+                  Your approval will forward this creative to an administrator for final approval.
+                </p>
+              ) : null}
+
+              <div className="grid gap-2">
+                {managerApprovedPendingAdmin ? (
+                  <Button disabled variant="secondary" className="gap-1.5">
+                    <Check className="size-4 text-primary" aria-hidden />
+                    Approved · Waiting for Admin
+                  </Button>
+                ) : (
+                  <Button disabled={isPending || approvalQueued} onClick={() => decide("approve")}>
+                    {isPending || approvalQueued ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" aria-hidden />}
+                    {!allowManagerFinalApproval && isManager
+                      ? "Approve & Submit to Admin"
+                      : isAdmin && !allowManagerFinalApproval && ad.approval_stage === "admin_final"
+                      ? "Grant final approval"
+                      : "Final approve"}
+                  </Button>
+                )}
+                <Button
+                  variant="secondary"
+                  disabled={isPending || approvalQueued || !note.trim() || !changeTarget}
+                  onClick={() => decide("request_changes")}
+                  title={!note.trim() || !changeTarget ? "Add a review note and choose a change target to request changes" : undefined}
+                >
+                  <Send className="size-4" aria-hidden />
+                  Request changes
+                </Button>
+              </div>
+            </>
+          ) : null}
 
           {canReopenApproved ? (
-            <div className="space-y-3 rounded-md border border-warning/30 bg-warning/15 p-4">
-              <p className="text-sm text-warning">This ad is already approved. As an admin, you can reopen it and send it back for changes.</p>
+            <div className="space-y-3 rounded-lg border border-warning/30 bg-warning/10 p-4">
+              <div className="flex items-center gap-2 text-sm font-semibold text-warning">
+                <RotateCcw className="size-4" aria-hidden />
+                Reopen creative for editing
+              </div>
+              <p className="text-xs text-muted-foreground">
+                This creative is currently approved. You can reopen it and return it to either the creator or editor for further revisions.
+              </p>
+              <Field label="Return to" hint="Select who should receive this creative to make changes.">
+                <Select
+                  value={changeTarget}
+                  onChange={(event) => setChangeTarget(event.target.value as "creator" | "editor" | "")}
+                >
+                  <option value="">Choose target</option>
+                  <option value="creator">Creator ({ad.creator?.name ?? "Creator"})</option>
+                  <option value="editor">Editor ({ad.editor?.name ?? "Editor"})</option>
+                </Select>
+              </Field>
               <Field label="What needs to change?">
                 <Textarea
                   className="min-h-24"
                   value={note}
                   onChange={(event) => setNote(event.target.value)}
-                  placeholder="Describe the required changes"
+                  placeholder="Describe the required changes in detail..."
                 />
               </Field>
               <Button
                 variant="secondary"
                 disabled={isPending || !note.trim() || !changeTarget}
                 onClick={() => decide("request_changes")}
+                className="w-full"
               >
                 {isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Send className="size-4" aria-hidden />}
-                Reopen and request changes to creator
+                {changeTarget ? `Reopen & return to ${changeTarget}` : "Reopen & request changes"}
               </Button>
             </div>
           ) : null}

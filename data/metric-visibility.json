@@ -1,9 +1,39 @@
 {
   "content_creator": [
-    "spend"
+    "spend",
+    "impressions",
+    "reach",
+    "clicks",
+    "purchases",
+    "revenue",
+    "cpa",
+    "roas",
+    "ctr",
+    "cpm"
   ],
   "editor": [
-    "spend"
+    "spend",
+    "impressions",
+    "reach",
+    "clicks",
+    "purchases",
+    "revenue",
+    "cpa",
+    "roas",
+    "ctr",
+    "cpm"
   ],
-  "manager": []
+  "manager": [
+    "spend",
+    "impressions",
+    "reach",
+    "clicks",
+    "purchases",
+    "revenue",
+    "cpa",
+    "roas",
+    "ctr",
+    "cpm"
+  ],
+  "manager_creative_scope": "all"
 }

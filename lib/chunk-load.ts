@@ -1,8 +1,10 @@
 const CHUNK_FAILURE_PATTERNS = [
   /chunkloaderror/i,
   /loading chunk .* failed/i,
+  /loading css chunk .* failed/i,
   /failed to fetch dynamically imported module/i,
-  /importing a module script failed/i
+  /importing a module script failed/i,
+  /failed to load resource: .*_next\/static/i
 ];
 
 const STALE_ACTION_PATTERNS = [

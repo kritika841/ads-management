@@ -141,6 +141,11 @@ export async function saveDailyProgress(input: z.infer<typeof progressInput>) {
   const taskName = canonicalTaskName(person.role, parsed.data.taskName);
   const { data: saved, error } = await admin.rpc("save_daily_target_progress", { p_actor_id: actor.id, p_target_id: parsed.data.id ?? null, p_user_id: parsed.data.userId, p_target_date: parsed.data.date, p_task_name: taskName, p_quantity: parsed.data.quantity });
   if (error) return { ok: false, message: error.message };
+  try {
+    await admin.rpc("reconcile_daily_target_surplus", { p_user_id: parsed.data.userId, p_date: parsed.data.date });
+  } catch {
+    // Graceful fallback if RPC migration has not yet been applied
+  }
   await admin.from("audit_logs").insert({ actor_id: actor.id, action: "updated_daily_progress", target_type: "daily_team_target", target_id: saved?.id ?? null, metadata: { ...parsed.data, taskName } });
   revalidate();
   return { ok: true, message: undefined };

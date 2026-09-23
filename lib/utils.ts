@@ -88,3 +88,8 @@ export function dateOnlyDaysFromToday(value: string) {
   const todayUtc = Date.UTC(part("year"), part("month") - 1, part("day"));
   return Math.round((Date.UTC(year, month - 1, day) - todayUtc) / 86_400_000);
 }
+
+export function isDownloaded(ad: { tags?: { name: string }[]; [key: string]: unknown } | null | undefined): boolean {
+  if (!ad?.tags) return false;
+  return ad.tags.some((tag) => tag.name.toLowerCase() === "downloaded");
+}

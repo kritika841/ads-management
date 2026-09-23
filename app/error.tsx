@@ -15,6 +15,7 @@ export default function ApplicationError({
   reset: () => void;
 }) {
   const [reloading, setReloading] = useState(false);
+  const isStale = isStaleApplicationFailure(error);
 
   const forceHardReload = () => {
     setReloading(true);
@@ -25,19 +26,43 @@ export default function ApplicationError({
   };
 
   useEffect(() => {
+    // Only attempt automatic hard-reload if this is genuinely a stale application failure
+    // (e.g. ChunkLoadError or unrecognized server action after a deployment).
+    if (!isStale) return;
+
     const lastReload = sessionStorage.getItem(RELOAD_KEY);
     const now = Date.now();
-    const shouldAutoReload =
-      isStaleApplicationFailure(error) ||
-      Boolean(error.digest) ||
-      error.message?.includes("Server Components");
 
-    // Automatically recover once without blocking user on update
-    if (shouldAutoReload && (!lastReload || now - Number(lastReload) > 15_000)) {
+    if (!lastReload || now - Number(lastReload) > 15_000) {
       sessionStorage.setItem(RELOAD_KEY, String(now));
       forceHardReload();
     }
-  }, [error]);
+  }, [isStale]);
+
+  if (isStale) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background p-5">
+        <section className="w-full max-w-md rounded-xl border border-border bg-card p-6 text-center shadow-soft dark:shadow-none">
+          <span className="mx-auto flex size-11 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <RefreshCw className="size-5" aria-hidden />
+          </span>
+          <h1 className="mt-4 text-lg font-semibold text-foreground">Update Available</h1>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            A new version of AdFlow was deployed while this tab was open. Reload to connect to the latest version.
+          </p>
+          <div className="mt-5 flex justify-center gap-2">
+            <Button variant="secondary" onClick={reset} disabled={reloading}>
+              Try again
+            </Button>
+            <Button onClick={forceHardReload} disabled={reloading}>
+              <RefreshCw className={`size-4 ${reloading ? "animate-spin" : ""}`} aria-hidden />
+              {reloading ? "Reloading..." : "Reload page"}
+            </Button>
+          </div>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-background p-5">
@@ -45,19 +70,23 @@ export default function ApplicationError({
         <span className="mx-auto flex size-11 items-center justify-center rounded-full bg-destructive/10 text-destructive">
           <AlertTriangle className="size-5" aria-hidden />
         </span>
-        <h1 className="mt-4 text-lg font-semibold text-foreground">This page needs to reload</h1>
+        <h1 className="mt-4 text-lg font-semibold text-foreground">Something went wrong</h1>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          AdFlow was updated while this page was open. Reload to reconnect to the latest version.
+          An unexpected error occurred while loading this page.
         </p>
         <div className="mt-5 flex justify-center gap-2">
-          <Button variant="secondary" onClick={reset} disabled={reloading}>
+          <Button variant="secondary" onClick={() => window.location.assign("/dashboard")}>
+            Dashboard
+          </Button>
+          <Button onClick={reset} disabled={reloading}>
             Try again
           </Button>
-          <Button onClick={forceHardReload} disabled={reloading}>
-            <RefreshCw className={`size-4 ${reloading ? "animate-spin" : ""}`} aria-hidden />
-            {reloading ? "Reloading..." : "Reload"}
-          </Button>
         </div>
+        {error?.digest ? (
+          <p className="mt-4 text-xs font-mono text-muted-foreground/60 select-all">
+            Reference: {error.digest}
+          </p>
+        ) : null}
       </section>
     </main>
   );

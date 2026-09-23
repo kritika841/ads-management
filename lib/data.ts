@@ -4,6 +4,7 @@ import { activeEditorStages, inProgressEditingStages } from "@/lib/production-wo
 import { sanitizeScriptHtml } from "@/lib/sanitize";
 import { DEFAULT_HIDDEN_METRICS, type HiddenMetricsByRole } from "@/lib/metric-visibility";
 import { readMetricVisibilityFile } from "@/lib/metric-visibility-server";
+import { readCampaignGoals } from "@/lib/campaign-goals";
 import type {
   ActivityLog,
   AdVersion,
@@ -44,16 +45,19 @@ export async function getNotifications(userId: string) {
 
 export async function getCampaigns() {
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase
-    .from("campaigns")
-    .select("*")
-    .order("name", { ascending: true });
+  const [campaignsResult, campaignGoals] = await Promise.all([
+    supabase.from("campaigns").select("*").order("name", { ascending: true }),
+    readCampaignGoals()
+  ]);
 
-  if (error) {
-    throw error;
+  if (campaignsResult.error) {
+    throw campaignsResult.error;
   }
 
-  return (data ?? []) as Campaign[];
+  return (campaignsResult.data ?? []).map((c: Campaign) => ({
+    ...c,
+    video_goal: (c.video_goal && c.video_goal > 0) ? c.video_goal : campaignGoals[c.id] ?? null
+  })) as Campaign[];
 }
 
 export async function getProducts() {
@@ -185,12 +189,14 @@ export async function getAppSettings() {
     hidden_metrics_by_role?: HiddenMetricsByRole;
   };
   const hiddenMetrics = record.hidden_metrics_by_role || fileMetrics || DEFAULT_HIDDEN_METRICS;
+  const managerCreativeScope = record.manager_creative_scope ?? fileMetrics.manager_creative_scope ?? "all";
 
   return {
     ...record,
     allow_manager_final_approval: record.allow_manager_final_approval !== undefined
       ? record.allow_manager_final_approval
       : !record.two_step_approval,
+    manager_creative_scope: managerCreativeScope,
     hidden_metrics_by_role: {
       content_creator: hiddenMetrics.content_creator ?? [],
       editor: hiddenMetrics.editor ?? [],
@@ -318,7 +324,8 @@ export async function getAdDetail(adId: string) {
       id: latestChangeAction.id,
       note: latestChangeAction.note,
       created_at: latestChangeAction.created_at,
-      reviewer: latestChangeAction.reviewer
+      reviewer: latestChangeAction.reviewer,
+      target_role: normalizedAd.review_submission_type === "creator_resubmission" ? "creator" : "editor"
     };
   }
 
@@ -434,7 +441,10 @@ function normalizeAds(rows: unknown[]) {
       ...record,
       script_html: sanitizeScriptHtml(record.script_html) || null,
       version_count: record.ad_versions?.length ?? record.version_count,
-      latest_change_request: latestChange,
+      latest_change_request: latestChange ? {
+        ...latestChange,
+        target_role: reviewSubmissionType === "creator_resubmission" ? "creator" : "editor"
+      } : null,
       review_submission_type: reviewSubmissionType,
       tags: (record.ad_tags ?? [])
         .map((item) => item.tags)
@@ -558,7 +568,7 @@ export async function getEditorAverageEditTimes(): Promise<Record<string, number
 
 export async function getCampaignsWithOverview(): Promise<CampaignOverview[]> {
   const admin = createSupabaseAdminClient();
-  const [campaignsResult, adsResult, incentiveResult] = await Promise.all([
+  const [campaignsResult, adsResult, incentiveResult, campaignGoals] = await Promise.all([
     admin.from("campaigns").select("*").order("name", { ascending: true }),
     admin
       .from("ads")
@@ -574,14 +584,19 @@ export async function getCampaignsWithOverview(): Promise<CampaignOverview[]> {
         `
       )
       .order("updated_at", { ascending: false }),
-    admin.from("incentive_creatives").select("ad_id,latest_spend,latest_purchases,latest_cpa")
+    admin.from("incentive_creatives").select("ad_id,latest_spend,latest_purchases,latest_cpa"),
+    readCampaignGoals()
   ]);
 
   if (campaignsResult.error) {
     throw campaignsResult.error;
   }
 
-  const campaigns = (campaignsResult.data ?? []) as Campaign[];
+  const rawCampaigns = (campaignsResult.data ?? []) as Campaign[];
+  const campaigns = rawCampaigns.map((c) => ({
+    ...c,
+    video_goal: (c.video_goal && c.video_goal > 0) ? c.video_goal : campaignGoals[c.id] ?? null
+  }));
   const ads = normalizeAds(adsResult.data ?? []);
   const incentiveMap = new Map<string, { latest_spend?: number; latest_purchases?: number; latest_cpa?: number }>();
   if (incentiveResult.data) {
@@ -615,7 +630,7 @@ export async function getCampaignsWithOverview(): Promise<CampaignOverview[]> {
 
   return campaigns.map((campaign) => {
     const creatives = adsByCampaign.get(campaign.id) ?? [];
-    const videoGoal = campaign.video_goal && campaign.video_goal > 0 ? campaign.video_goal : 10;
+    const videoGoal = campaign.video_goal && campaign.video_goal > 0 ? campaign.video_goal : null;
     const totalCreatives = creatives.length;
 
     let approvedCount = 0;
@@ -664,7 +679,8 @@ export async function getCampaignsWithOverview(): Promise<CampaignOverview[]> {
       }
     }
 
-    const goalProgressPercent = videoGoal > 0 ? Math.min(100, Math.round((approvedCount / videoGoal) * 100)) : 0;
+    const goalProgressPercent =
+      videoGoal && videoGoal > 0 ? Math.min(100, Math.round((approvedCount / videoGoal) * 100)) : null;
     const averageCpa = cpaCount > 0 ? Number((cpaSum / cpaCount).toFixed(2)) : null;
 
     return {
