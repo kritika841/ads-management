@@ -259,28 +259,84 @@ export async function getDashboardAds(): Promise<DashboardAdSummaryItem[]> {
 
 export async function getAds() {
   const supabase = await createSupabaseServerClient();
-  const query = supabase
-    .from("ads")
-    .select(
-      `
-        *,
+
+  const [adsResult, reviewsResult, activityResult] = await Promise.all([
+    supabase
+      .from("ads")
+      .select(`
+        id, name, campaign_id, editor_id, creator_id, status, approval_stage, production_stage,
+        drive_url, drive_file_id, preview_url, thumbnail_url, script_html, script_text,
+        ad_type, platforms, deadline, notes, live_url, submitted_at, approved_at, published_at,
+        created_at, updated_at, raw_footage_url, script_ready_at, shoot_completed_at,
+        raw_footage_shared_at, editing_started_at, creator_reviewed_at, final_approved_at,
+        workflow_status_changed_at, editor_notes, product_id, assigned_at,
         creator:profiles!ads_creator_id_fkey(id,name,email,avatar_url,role),
         editor:profiles!ads_editor_id_fkey(id,name,email,avatar_url,role),
         campaign:campaigns(id,name),
         product:products(id,name,sku,image_url),
-        ad_tags(tags(id,name)),
-        review_actions(id,decision,note,created_at,reviewer:profiles!review_actions_reviewer_id_fkey(id,name,role)),
-        activity_logs(id,action,actor_id,metadata,created_at)
-      `
-    )
-    .order("updated_at", { ascending: false });
+        ad_tags(tags(id,name))
+      `)
+      .order("updated_at", { ascending: false }),
+    supabase
+      .from("review_actions")
+      .select("id,ad_id,decision,note,created_at,reviewer:profiles!review_actions_reviewer_id_fkey(id,name,role)")
+      .eq("decision", "request_changes")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("activity_logs")
+      .select("id,ad_id,actor_id,action,metadata,created_at")
+      .in("action", [
+        "creator_item_created",
+        "creator_changes_requested",
+        "final_changes_requested_to_creator",
+        "final_changes_requested_to_editor",
+        "creator_requested_changes",
+        "final_changes_requested"
+      ])
+      .order("created_at", { ascending: false })
+  ]);
 
-  const { data, error } = await query;
-  if (error) {
-    throw error;
+  if (adsResult.error) {
+    console.error("[getAds] Query error:", adsResult.error.message || adsResult.error);
+    throw adsResult.error;
   }
 
-  return normalizeAds(data ?? []);
+  const reviewMap = new Map<string, Array<{ id: string; decision: string; note: string | null; created_at: string; reviewer?: Pick<Profile, "id" | "name" | "role"> | null }>>();
+  for (const review of (reviewsResult.data ?? [])) {
+    if (!review.ad_id) continue;
+    const reviewerObj = (Array.isArray(review.reviewer) ? review.reviewer[0] : review.reviewer) as Pick<Profile, "id" | "name" | "role"> | undefined;
+    const list = reviewMap.get(review.ad_id) ?? [];
+    list.push({
+      id: review.id,
+      decision: review.decision,
+      note: review.note,
+      created_at: review.created_at,
+      reviewer: reviewerObj ?? null
+    });
+    reviewMap.set(review.ad_id, list);
+  }
+
+  const activityMap = new Map<string, Array<{ id: string; action: string; actor_id?: string | null; metadata?: Record<string, unknown> | null; created_at: string }>>();
+  for (const log of (activityResult.data ?? [])) {
+    if (!log.ad_id) continue;
+    const list = activityMap.get(log.ad_id) ?? [];
+    list.push({
+      id: log.id,
+      action: log.action,
+      actor_id: log.actor_id ?? null,
+      metadata: (log.metadata as Record<string, unknown> | null) ?? null,
+      created_at: log.created_at
+    });
+    activityMap.set(log.ad_id, list);
+  }
+
+  const adsWithNested = (adsResult.data ?? []).map((ad) => ({
+    ...ad,
+    review_actions: reviewMap.get(ad.id) ?? [],
+    activity_logs: activityMap.get(ad.id) ?? []
+  }));
+
+  return normalizeAds(adsWithNested);
 }
 
 export async function getAllAdsForAnalytics() {
