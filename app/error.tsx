@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, RefreshCw } from "lucide-react";
+import { AlertTriangle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { isStaleApplicationFailure } from "@/lib/chunk-load";
 
 const RELOAD_KEY = "adflow_auto_reload_timestamp";
+const RELOAD_COUNT_KEY = "adflow_auto_reload_count";
 
 export default function ApplicationError({
   error,
@@ -30,11 +31,14 @@ export default function ApplicationError({
     // (e.g. ChunkLoadError or unrecognized server action after a deployment).
     if (!isStale) return;
 
-    const lastReload = sessionStorage.getItem(RELOAD_KEY);
     const now = Date.now();
+    const lastReload = sessionStorage.getItem(RELOAD_KEY);
+    const count = Number(sessionStorage.getItem(RELOAD_COUNT_KEY) || "0");
 
-    if (!lastReload || now - Number(lastReload) > 15_000) {
+    // Loop prevention: allow up to 2 automatic reloads in a 20-second window
+    if (!lastReload || now - Number(lastReload) > 20_000 || count < 2) {
       sessionStorage.setItem(RELOAD_KEY, String(now));
+      sessionStorage.setItem(RELOAD_COUNT_KEY, String(count + 1));
       forceHardReload();
     }
   }, [isStale]);
@@ -42,24 +46,10 @@ export default function ApplicationError({
   if (isStale) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-background p-5">
-        <section className="w-full max-w-md rounded-xl border border-border bg-card p-6 text-center shadow-soft dark:shadow-none">
-          <span className="mx-auto flex size-11 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <RefreshCw className="size-5" aria-hidden />
-          </span>
-          <h1 className="mt-4 text-lg font-semibold text-foreground">Update Available</h1>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            A new version of AdFlow was deployed while this tab was open. Reload to connect to the latest version.
-          </p>
-          <div className="mt-5 flex justify-center gap-2">
-            <Button variant="secondary" onClick={reset} disabled={reloading}>
-              Try again
-            </Button>
-            <Button onClick={forceHardReload} disabled={reloading}>
-              <RefreshCw className={`size-4 ${reloading ? "animate-spin" : ""}`} aria-hidden />
-              {reloading ? "Reloading..." : "Reload page"}
-            </Button>
-          </div>
-        </section>
+        <div className="flex flex-col items-center justify-center gap-3 text-center">
+          <Loader2 className="size-6 animate-spin text-primary" aria-hidden />
+          <p className="text-sm font-medium text-muted-foreground">Updating dashboard...</p>
+        </div>
       </main>
     );
   }

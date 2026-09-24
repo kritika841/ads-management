@@ -9,7 +9,9 @@ export async function runServerAction<T extends ActionResponse>(action: () => Pr
     return await action();
   } catch (error) {
     if (isStaleApplicationFailure(error)) {
-      window.location.reload();
+      const url = new URL(window.location.href);
+      url.searchParams.set("_v", Date.now().toString());
+      window.location.replace(url.toString());
       return new Promise<T>(() => undefined);
     }
 
@@ -26,7 +28,9 @@ export async function runServerMutation(action: () => Promise<void>) {
     return true;
   } catch (error) {
     if (isStaleApplicationFailure(error)) {
-      window.location.reload();
+      const url = new URL(window.location.href);
+      url.searchParams.set("_v", Date.now().toString());
+      window.location.replace(url.toString());
       return new Promise<boolean>(() => undefined);
     }
     return false;

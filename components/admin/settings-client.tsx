@@ -7,6 +7,7 @@ import {
   FolderArchive,
   FolderKanban,
   Loader2,
+  Megaphone,
   Power,
   ScrollText,
   Sliders,
@@ -16,16 +17,21 @@ import { deleteCampaign, saveCampaign, updateSettings } from "@/app/actions/admi
 import { runServerAction } from "@/lib/client-action";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
-import type { AppSettings, AuditLog, Campaign } from "@/lib/types";
+import type { AppSettings, AuditLog, Campaign, Profile } from "@/lib/types";
 import type { DownloadLog } from "@/lib/download-logs";
+import type { Announcement } from "@/lib/announcements";
 import { cn, formatDateTime } from "@/lib/utils";
 import { DownloadLogsPanel } from "@/components/admin/download-logs-panel";
+import { AnnouncementsDashboard } from "@/components/announcements/announcements-dashboard";
 
-function resolveSettingsTab(): "workflow" | "downloads" | "audit" {
+type SettingsTab = "workflow" | "downloads" | "audit" | "announcements";
+
+function resolveSettingsTab(): SettingsTab {
   if (typeof window === "undefined") return "workflow";
   const rawHash = (window.location.hash || "").replace(/^#/, "").toLowerCase();
   if (rawHash === "downloads" || rawHash.startsWith("download")) return "downloads";
   if (rawHash === "audit") return "audit";
+  if (rawHash === "announcements" || rawHash === "announcement") return "announcements";
   if (rawHash === "workflow") return "workflow";
 
   try {
@@ -33,6 +39,7 @@ function resolveSettingsTab(): "workflow" | "downloads" | "audit" {
     const tabParam = (params.get("tab") || params.get("section") || "").toLowerCase();
     if (tabParam === "downloads" || tabParam.startsWith("download")) return "downloads";
     if (tabParam === "audit") return "audit";
+    if (tabParam === "announcements" || tabParam === "announcement") return "announcements";
     if (tabParam === "workflow") return "workflow";
   } catch {
     // ignore
@@ -45,14 +52,20 @@ export function SettingsClient({
   settings,
   campaigns,
   auditLogs = [],
-  downloadLogs = []
+  downloadLogs = [],
+  announcements = [],
+  allProfiles = [],
+  profile
 }: {
   settings: AppSettings;
   campaigns: Campaign[];
   auditLogs?: AuditLog[];
   downloadLogs?: DownloadLog[];
+  announcements?: Announcement[];
+  allProfiles?: Profile[];
+  profile?: Profile;
 }) {
-  const [activeTab, setActiveTab] = useState<"workflow" | "downloads" | "audit">(resolveSettingsTab);
+  const [activeTab, setActiveTab] = useState<SettingsTab>(resolveSettingsTab);
   const [deadlineReminderDays, setDeadlineReminderDays] = useState(settings.deadline_reminder_days);
   const [maxConcurrentEdits, setMaxConcurrentEdits] = useState(settings.max_concurrent_edits);
   const [allowManagerFinalApproval, setAllowManagerFinalApproval] = useState(settings.allow_manager_final_approval ?? true);
@@ -75,7 +88,7 @@ export function SettingsClient({
     };
   }, []);
 
-  function handleTabClick(tab: "workflow" | "downloads" | "audit") {
+  function handleTabClick(tab: SettingsTab) {
     setActiveTab(tab);
     if (typeof window !== "undefined") {
       window.location.hash = `#${tab}`;
@@ -143,6 +156,25 @@ export function SettingsClient({
 
         <button
           type="button"
+          onClick={() => handleTabClick("announcements")}
+          className={cn(
+            "flex items-center gap-2 border-b-2 px-3.5 py-2.5 text-xs sm:text-sm font-medium transition -mb-px whitespace-nowrap",
+            activeTab === "announcements"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <Megaphone className="size-4" />
+          Announcements
+          {announcements.length > 0 && (
+            <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary">
+              {announcements.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
           onClick={() => handleTabClick("downloads")}
           className={cn(
             "flex items-center gap-2 border-b-2 px-3.5 py-2.5 text-xs sm:text-sm font-medium transition -mb-px whitespace-nowrap",
@@ -182,6 +214,12 @@ export function SettingsClient({
 
       {activeTab === "downloads" ? (
         <DownloadLogsPanel initialLogs={downloadLogs} />
+      ) : activeTab === "announcements" ? (
+        <AnnouncementsDashboard
+          announcements={announcements}
+          allProfiles={allProfiles}
+          profile={profile ?? { id: "admin", name: "Admin", email: "admin@example.com", role: "admin", active: true, avatar_url: null, deleted_at: null, created_at: "", updated_at: "" }}
+        />
       ) : activeTab === "audit" ? (
         <section className="panel overflow-hidden">
           <div className="border-b border-border p-5">

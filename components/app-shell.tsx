@@ -13,6 +13,7 @@ import {
   House,
   LayoutDashboard,
   LogOut,
+  Megaphone,
   Menu,
   Package,
   Settings,
@@ -28,6 +29,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { NotificationBell } from "@/components/notification-bell";
 import { RealtimeSync } from "@/components/realtime-sync";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { AnnouncementOverlay } from "@/components/announcements/announcement-overlay";
 import { cn } from "@/lib/utils";
 
 type NavItem = { href: string; label: string; icon: LucideIcon; children?: Array<{ href: string; label: string }> };
@@ -71,6 +73,9 @@ export function AppShell({
     ...(profile.role === "admin" || profile.role === "manager"
       ? [{ href: "/analytics", label: "Analytics", icon: BarChart3 }]
       : []),
+    ...(profile.role === "admin" || profile.role === "manager"
+      ? [{ href: "/announcements", label: "Announcements", icon: Megaphone }]
+      : []),
     ...(profile.role === "manager"
       ? [{ href: "/admin/performance", label: "Editor Performance", icon: BarChart2 }]
       : [])
@@ -88,6 +93,7 @@ export function AppShell({
             children: [
               { href: "/admin/settings#workflow", label: "Workflow & Campaigns" },
               { href: "/admin/settings#downloads", label: "Download Logs" },
+              { href: "/admin/settings#announcements", label: "Announcements" },
               { href: "/admin/settings#audit", label: "Audit Log" }
             ]
           }
@@ -172,6 +178,7 @@ export function AppShell({
           </div>
         </header>
         {children}
+        <AnnouncementOverlay profile={profile} />
       </div>
     </div>
   );

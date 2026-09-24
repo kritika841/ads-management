@@ -4,13 +4,19 @@ const CHUNK_FAILURE_PATTERNS = [
   /loading css chunk .* failed/i,
   /failed to fetch dynamically imported module/i,
   /importing a module script failed/i,
-  /failed to load resource: .*_next\/static/i
+  /failed to load resource: .*_next\/static/i,
+  /failed to load resource: the server responded with a status of 404.*_next/i,
+  /failed to fetch rsc payload/i,
+  /unexpected token '<', "<!DOCTYPE "/i,
+  /unexpected token '<', "<html>"/i,
+  /e\[t\]\.call is not a function/i
 ];
 
 const STALE_ACTION_PATTERNS = [
   /unrecognizedactionerror/i,
   /server action .* was not found on the server/i,
-  /failed to find server action/i
+  /failed to find server action/i,
+  /could not find server action/i
 ];
 
 function errorText(value: unknown): string {
@@ -34,5 +40,10 @@ export function isStaleApplicationFailure(value: unknown) {
 }
 
 export function isNextChunkUrl(value: unknown) {
-  return typeof value === "string" && value.includes("/_next/static/chunks/");
+  if (typeof value !== "string") return false;
+  return (
+    value.includes("/_next/static/chunks/") ||
+    value.includes("/_next/static/css/") ||
+    value.includes("/_next/static/media/")
+  );
 }

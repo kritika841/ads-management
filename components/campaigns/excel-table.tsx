@@ -1,21 +1,39 @@
 "use client";
 
-import React, { useState, useRef, useCallback, useEffect } from "react";
-import { RotateCcw, Table as TableIcon } from "lucide-react";
+import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { ArrowDown, ArrowDownUp, ArrowUp, RotateCcw, Table as TableIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export type ExcelColumnDef<T> = {
   id: string;
-  header: string;
+  header: React.ReactNode;
   defaultWidth?: number;
   minWidth?: number;
   maxWidth?: number;
   align?: "left" | "center" | "right";
   cell: (item: T, rowIndex: number) => React.ReactNode;
   headerTooltip?: string;
-  sortableValue?: (item: T) => string | number;
+  sortable?: boolean;
+  sortableValue?: (item: T) => unknown;
 };
+
+function compareValues(left: unknown, right: unknown, direction: "asc" | "desc"): number {
+  if (left === right) return 0;
+  if (left === null || left === undefined || left === "") return 1;
+  if (right === null || right === undefined || right === "") return -1;
+  if (typeof left === "number" && typeof right === "number") {
+    return direction === "asc" ? left - right : right - left;
+  }
+  if (typeof left === "boolean" && typeof right === "boolean") {
+    const l = left ? 1 : 0;
+    const r = right ? 1 : 0;
+    return direction === "asc" ? l - r : r - l;
+  }
+  const leftStr = String(left).toLowerCase();
+  const rightStr = String(right).toLowerCase();
+  return direction === "asc" ? leftStr.localeCompare(rightStr) : rightStr.localeCompare(leftStr);
+}
 
 export function getExcelColumnLetter(colIndex: number): string {
   let temp = colIndex;
@@ -76,7 +94,11 @@ export function ExcelTable<T>({
   const resizingRow = useRef<{ rowIndex: number; startY: number; startHeight: number } | null>(null);
   const [activeRowResizeIndex, setActiveRowResizeIndex] = useState<number | null>(null);
 
-  // Load saved widths and individual row heights from localStorage if key provided
+  // Sorting state (matching Ads Performance)
+  const [sortColId, setSortColId] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+
+  // Load saved widths, individual row heights, and sort from localStorage if key provided
   useEffect(() => {
     if (!storageKey || typeof window === "undefined") return;
     try {
@@ -97,10 +119,70 @@ export function ExcelTable<T>({
       if (savedMode && ["compact", "standard", "tall", "autofit"].includes(savedMode)) {
         setRowHeightMode(savedMode);
       }
+      const savedSort = localStorage.getItem(`excel_sort_${storageKey}`);
+      if (savedSort) {
+        const parsed = JSON.parse(savedSort);
+        if (parsed?.colId && (parsed.dir === "asc" || parsed.dir === "desc")) {
+          setSortColId(parsed.colId);
+          setSortDirection(parsed.dir);
+        }
+      }
     } catch {
       // ignore
     }
   }, [storageKey]);
+
+  const handleSort = useCallback(
+    (colId: string) => {
+      setSortColId((currentCol) => {
+        let nextDir: "asc" | "desc" = "asc";
+        if (currentCol === colId) {
+          setSortDirection((prevDir) => {
+            nextDir = prevDir === "asc" ? "desc" : "asc";
+            if (storageKey && typeof window !== "undefined") {
+              try {
+                localStorage.setItem(`excel_sort_${storageKey}`, JSON.stringify({ colId, dir: nextDir }));
+              } catch {
+                // ignore
+              }
+            }
+            return nextDir;
+          });
+          return colId;
+        }
+
+        // New column sort: detect default direction (desc for numeric/progress/dates/counts)
+        const targetCol = columns.find((c) => c.id === colId);
+        const isDefaultDesc = ["goal", "creatives", "progress", "approved", "waiting", "editing", "shoot", "changes", "versions", "deadline", "created", "downloaded", "spend", "impressions", "reach", "clicks", "purchases", "revenue", "cpa", "roas", "ctr", "cpm"].includes(colId);
+        nextDir = isDefaultDesc ? "desc" : "asc";
+        setSortDirection(nextDir);
+        if (storageKey && typeof window !== "undefined") {
+          try {
+            localStorage.setItem(`excel_sort_${storageKey}`, JSON.stringify({ colId, dir: nextDir }));
+          } catch {
+            // ignore
+          }
+        }
+        return colId;
+      });
+    },
+    [columns, storageKey]
+  );
+
+  const sortedData = useMemo(() => {
+    if (!sortColId) return data;
+    const targetCol = columns.find((c) => c.id === sortColId);
+    if (!targetCol) return data;
+    return [...data].sort((a, b) => {
+      const leftVal = targetCol.sortableValue
+        ? targetCol.sortableValue(a)
+        : (a as Record<string, unknown>)[targetCol.id];
+      const rightVal = targetCol.sortableValue
+        ? targetCol.sortableValue(b)
+        : (b as Record<string, unknown>)[targetCol.id];
+      return compareValues(leftVal, rightVal, sortDirection);
+    });
+  }, [data, columns, sortColId, sortDirection]);
 
   // Save widths
   const saveColWidths = useCallback(
@@ -246,12 +328,15 @@ export function ExcelTable<T>({
     setBaseRowHeight(defaultRowHeight);
     setRowHeights({});
     setRowHeightMode("standard");
+    setSortColId(null);
+    setSortDirection("asc");
     if (storageKey && typeof window !== "undefined") {
       try {
         localStorage.removeItem(`excel_cols_${storageKey}`);
         localStorage.removeItem(`excel_base_h_${storageKey}`);
         localStorage.removeItem(`excel_row_heights_${storageKey}`);
         localStorage.removeItem(`excel_row_m_${storageKey}`);
+        localStorage.removeItem(`excel_sort_${storageKey}`);
       } catch {
         // ignore
       }
@@ -361,7 +446,7 @@ export function ExcelTable<T>({
             ))}
           </colgroup>
 
-          {/* Table Header (clean, without A B C D letters) */}
+          {/* Table Header (clean, with sorting indicators) */}
           <thead>
             <tr className="border-b border-border bg-muted/70 text-muted-foreground font-semibold sticky top-0 z-20 shadow-2xs">
               {/* Row number corner */}
@@ -370,25 +455,56 @@ export function ExcelTable<T>({
               </th>
               {columns.map((col) => {
                 const colW = colWidths[col.id] ?? col.defaultWidth ?? 160;
+                const isSortable = col.sortable !== false && col.id !== "select" && typeof col.header === "string";
+                const isSorted = sortColId === col.id;
+                const SortIcon = isSorted ? (sortDirection === "asc" ? ArrowUp : ArrowDown) : ArrowDownUp;
                 return (
                   <th
                     key={col.id}
-                    title={col.headerTooltip ?? col.header}
+                    title={col.headerTooltip ?? (typeof col.header === "string" ? col.header : undefined)}
                     style={{
                       width: `${colW}px`,
                       minWidth: `${colW}px`,
                       maxWidth: `${colW}px`
                     }}
-                    className="relative border-r border-border px-2.5 py-2.5 text-left font-semibold text-xs select-none group bg-muted/70 hover:bg-muted overflow-hidden"
+                    className={cn(
+                      "relative border-r border-border px-2.5 py-2 text-left font-semibold text-xs select-none group bg-muted/70 hover:bg-muted overflow-hidden",
+                      isSortable && "cursor-pointer"
+                    )}
+                    onClick={isSortable ? () => handleSort(col.id) : undefined}
                   >
-                    <div className="flex items-center overflow-hidden">
-                      <span className="truncate font-semibold text-foreground text-xs">{col.header}</span>
+                    <div
+                      className={cn(
+                        "flex items-center overflow-hidden gap-1",
+                        col.align === "center" && "justify-center",
+                        col.align === "right" && "justify-end"
+                      )}
+                    >
+                      {typeof col.header === "string" ? (
+                        <span className="truncate font-semibold text-foreground text-xs">{col.header}</span>
+                      ) : (
+                        col.header
+                      )}
+                      {isSortable ? (
+                        <SortIcon
+                          className={cn(
+                            "size-3.5 shrink-0 transition-opacity",
+                            isSorted ? "text-foreground opacity-100" : "text-muted-foreground/60 opacity-0 group-hover:opacity-100"
+                          )}
+                          aria-hidden="true"
+                        />
+                      ) : null}
                     </div>
 
                     {/* Column Resize Handle - Resizes ONLY this column */}
                     <div
-                      onMouseDown={(e) => startColResize(col.id, e)}
-                      onDoubleClick={() => {
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        startColResize(col.id, e);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
                         setColWidths((prev) => ({ ...prev, [col.id]: col.defaultWidth ?? 160 }));
                       }}
                       title="Drag to resize this column (double-click to reset)"
@@ -406,14 +522,14 @@ export function ExcelTable<T>({
 
           {/* Table Body */}
           <tbody className="divide-y divide-border">
-            {data.length === 0 ? (
+            {sortedData.length === 0 ? (
               <tr>
                 <td colSpan={columns.length + 1} className="py-12 text-center text-sm text-muted-foreground">
                   {emptyMessage}
                 </td>
               </tr>
             ) : (
-              data.map((item, rowIndex) => {
+              sortedData.map((item, rowIndex) => {
                 const thisRowHeight =
                   rowHeightMode === "autofit"
                     ? undefined

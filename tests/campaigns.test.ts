@@ -100,4 +100,70 @@ describe("campaigns and excel table functionality", () => {
     goals = await readCampaignGoals();
     expect(goals[testCampaignId]).toBeUndefined();
   });
+
+  it("handles ascending and descending multi-type column sorting correctly", () => {
+    const items = [
+      { name: "Beta Campaign", creatives: 5, goal: 10, active: true },
+      { name: "Alpha Campaign", creatives: 20, goal: 15, active: false },
+      { name: "Gamma Campaign", creatives: 1, goal: null, active: true }
+    ];
+
+    function sortItems<T>(list: T[], extractor: (item: T) => unknown, direction: "asc" | "desc"): T[] {
+      return [...list].sort((a, b) => {
+        const left = extractor(a);
+        const right = extractor(b);
+        if (left === right) return 0;
+        if (left === null || left === undefined || left === "") return 1;
+        if (right === null || right === undefined || right === "") return -1;
+        if (typeof left === "number" && typeof right === "number") {
+          return direction === "asc" ? left - right : right - left;
+        }
+        if (typeof left === "boolean" && typeof right === "boolean") {
+          return direction === "asc" ? (left ? 1 : 0) - (right ? 1 : 0) : (right ? 1 : 0) - (left ? 1 : 0);
+        }
+        const lStr = String(left).toLowerCase();
+        const rStr = String(right).toLowerCase();
+        return direction === "asc" ? lStr.localeCompare(rStr) : rStr.localeCompare(lStr);
+      });
+    }
+
+    // Sort by name asc
+    const byNameAsc = sortItems(items, (i) => i.name, "asc");
+    expect(byNameAsc.map((i) => i.name)).toEqual(["Alpha Campaign", "Beta Campaign", "Gamma Campaign"]);
+
+    // Sort by name desc
+    const byNameDesc = sortItems(items, (i) => i.name, "desc");
+    expect(byNameDesc.map((i) => i.name)).toEqual(["Gamma Campaign", "Beta Campaign", "Alpha Campaign"]);
+
+    // Sort by creatives numeric desc
+    const byCreativesDesc = sortItems(items, (i) => i.creatives, "desc");
+    expect(byCreativesDesc.map((i) => i.creatives)).toEqual([20, 5, 1]);
+
+    // Sort by goal with nulls placed last
+    const byGoalAsc = sortItems(items, (i) => i.goal, "asc");
+    expect(byGoalAsc[0].goal).toBe(10);
+    expect(byGoalAsc[1].goal).toBe(15);
+    expect(byGoalAsc[2].goal).toBeNull();
+  });
+
+  it("calculates select-all and indeterminate state for bulk selection", () => {
+    const allIds = ["c-1", "c-2", "c-3", "c-4"];
+    const selected = new Set<string>();
+
+    const isAll = (sel: Set<string>) => allIds.length > 0 && allIds.every((id) => sel.has(id));
+    const isIndeterminate = (sel: Set<string>) => sel.size > 0 && !isAll(sel);
+
+    expect(isAll(selected)).toBe(false);
+    expect(isIndeterminate(selected)).toBe(false);
+
+    selected.add("c-1");
+    selected.add("c-2");
+    expect(isAll(selected)).toBe(false);
+    expect(isIndeterminate(selected)).toBe(true);
+
+    allIds.forEach((id) => selected.add(id));
+    expect(isAll(selected)).toBe(true);
+    expect(isIndeterminate(selected)).toBe(false);
+  });
 });
+

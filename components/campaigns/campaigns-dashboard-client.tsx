@@ -584,12 +584,43 @@ export function CampaignsDashboardClient({
     });
   };
 
+  const allCampaignIds = useMemo(() => filteredOverviews.map((item) => item.campaign.id), [filteredOverviews]);
+  const isAllCampaignsSelected = allCampaignIds.length > 0 && allCampaignIds.every((id) => campaignsBulk.isSelected(id));
+  const hasSomeCampaignsSelected = campaignsBulk.selectedIds.size > 0 && !isAllCampaignsSelected;
+
+  const allAdIds = useMemo(() => filteredAds.map((ad) => ad.id), [filteredAds]);
+  const isAllAdsSelected = allAdIds.length > 0 && allAdIds.every((id) => adsBulk.isSelected(id));
+  const hasSomeAdsSelected = adsBulk.selectedIds.size > 0 && !isAllAdsSelected;
+
   // Excel columns definition for Campaigns View
   const campaignColumns: ExcelColumnDef<CampaignOverview>[] = useMemo(
     () => [
       {
         id: "select",
-        header: "",
+        header: (
+          <div
+            className="flex items-center justify-center size-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <input
+              type="checkbox"
+              ref={(el) => {
+                if (el) el.indeterminate = hasSomeCampaignsSelected;
+              }}
+              checked={isAllCampaignsSelected}
+              onChange={() => {
+                if (isAllCampaignsSelected) {
+                  campaignsBulk.clearSelection();
+                } else {
+                  campaignsBulk.selectAll(allCampaignIds);
+                }
+              }}
+              aria-label="Select all campaigns"
+              className="size-4 rounded border-border text-primary focus:ring-primary/20 cursor-pointer"
+            />
+          </div>
+        ),
+        sortable: false,
         defaultWidth: 44,
         minWidth: 44,
         maxWidth: 44,
@@ -612,6 +643,7 @@ export function CampaignsDashboardClient({
       {
         id: "name",
         header: "Campaign Name",
+        sortableValue: (item) => item.campaign.name,
         defaultWidth: 230,
         minWidth: 140,
         cell: (item) => (
@@ -639,6 +671,7 @@ export function CampaignsDashboardClient({
       {
         id: "thumbnails",
         header: "Videos",
+        sortableValue: (item) => item.creatives.length,
         defaultWidth: 120,
         minWidth: 80,
         cell: (item) => {
@@ -663,6 +696,7 @@ export function CampaignsDashboardClient({
       {
         id: "goal",
         header: "Goal",
+        sortableValue: (item) => item.videoGoal ?? 0,
         defaultWidth: 75,
         minWidth: 50,
         align: "center",
@@ -675,6 +709,7 @@ export function CampaignsDashboardClient({
       {
         id: "creatives",
         header: "Total",
+        sortableValue: (item) => item.totalCreatives,
         defaultWidth: 75,
         minWidth: 50,
         align: "center",
@@ -683,6 +718,7 @@ export function CampaignsDashboardClient({
       {
         id: "progress",
         header: "Progress",
+        sortableValue: (item) => item.goalProgressPercent ?? (item.videoGoal && item.videoGoal > 0 ? Math.round((item.approvedCount / item.videoGoal) * 100) : item.approvedCount),
         defaultWidth: 130,
         minWidth: 80,
         cell: (item) => {
@@ -728,6 +764,7 @@ export function CampaignsDashboardClient({
       {
         id: "approved",
         header: "Approved",
+        sortableValue: (item) => item.approvedCount,
         defaultWidth: 85,
         minWidth: 50,
         align: "center",
@@ -741,6 +778,7 @@ export function CampaignsDashboardClient({
       {
         id: "in_creation",
         header: "Creation",
+        sortableValue: (item) => item.inCreationCount,
         defaultWidth: 85,
         minWidth: 50,
         align: "center",
@@ -754,6 +792,7 @@ export function CampaignsDashboardClient({
       {
         id: "in_review",
         header: "Review",
+        sortableValue: (item) => item.inReviewCount,
         defaultWidth: 85,
         minWidth: 50,
         align: "center",
@@ -768,6 +807,7 @@ export function CampaignsDashboardClient({
       {
         id: "stage_script",
         header: "Script",
+        sortableValue: (item) => item.stageBreakdown.script_writing || 0,
         defaultWidth: 70,
         minWidth: 40,
         align: "center",
@@ -778,6 +818,7 @@ export function CampaignsDashboardClient({
       {
         id: "stage_shoot_ready",
         header: "Shoot Ready",
+        sortableValue: (item) => item.stageBreakdown.ready_to_shoot || 0,
         defaultWidth: 85,
         minWidth: 45,
         align: "center",
@@ -788,6 +829,7 @@ export function CampaignsDashboardClient({
       {
         id: "stage_shot",
         header: "Shot",
+        sortableValue: (item) => item.stageBreakdown.shoot_complete || 0,
         defaultWidth: 70,
         minWidth: 40,
         align: "center",
@@ -798,6 +840,7 @@ export function CampaignsDashboardClient({
       {
         id: "stage_handoff",
         header: "Handoff",
+        sortableValue: (item) => item.stageBreakdown.ready_for_edit || 0,
         defaultWidth: 75,
         minWidth: 45,
         align: "center",
@@ -808,6 +851,7 @@ export function CampaignsDashboardClient({
       {
         id: "stage_editing",
         header: "Editing",
+        sortableValue: (item) => item.stageBreakdown.editing || 0,
         defaultWidth: 75,
         minWidth: 45,
         align: "center",
@@ -818,6 +862,7 @@ export function CampaignsDashboardClient({
       {
         id: "stage_creator_review",
         header: "Creator Rev",
+        sortableValue: (item) => item.stageBreakdown.creator_review || 0,
         defaultWidth: 85,
         minWidth: 45,
         align: "center",
@@ -828,6 +873,7 @@ export function CampaignsDashboardClient({
       {
         id: "stage_final_review",
         header: "Final Rev",
+        sortableValue: (item) => item.stageBreakdown.final_review || 0,
         defaultWidth: 80,
         minWidth: 45,
         align: "center",
@@ -838,6 +884,7 @@ export function CampaignsDashboardClient({
       {
         id: "stage_creator_changes",
         header: "Creator Chg",
+        sortableValue: (item) => item.stageBreakdown.creator_changes_requested || 0,
         defaultWidth: 85,
         minWidth: 45,
         align: "center",
@@ -855,6 +902,7 @@ export function CampaignsDashboardClient({
       {
         id: "stage_editor_changes",
         header: "Editor Chg",
+        sortableValue: (item) => item.stageBreakdown.changes_requested || 0,
         defaultWidth: 85,
         minWidth: 45,
         align: "center",
@@ -872,6 +920,7 @@ export function CampaignsDashboardClient({
       {
         id: "status",
         header: "Status",
+        sortableValue: (item) => (item.campaign.active ? 1 : 0),
         defaultWidth: 80,
         minWidth: 50,
         align: "center",
@@ -889,6 +938,7 @@ export function CampaignsDashboardClient({
       {
         id: "actions",
         header: "Actions",
+        sortable: false,
         defaultWidth: 100,
         minWidth: 60,
         align: "center",
@@ -923,7 +973,7 @@ export function CampaignsDashboardClient({
         )
       }
     ],
-    [canManage, campaignsBulk.selectedIds, campaignsBulk.toggleSelect, campaignsBulk.isSelected]
+    [canManage, campaignsBulk.selectedIds, campaignsBulk.toggleSelect, campaignsBulk.isSelected, campaignsBulk.clearSelection, campaignsBulk.selectAll, allCampaignIds, isAllCampaignsSelected, hasSomeCampaignsSelected]
   );
 
   // Excel columns definition for Ads View
@@ -931,7 +981,30 @@ export function CampaignsDashboardClient({
     () => [
       {
         id: "select",
-        header: "",
+        header: (
+          <div
+            className="flex items-center justify-center size-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <input
+              type="checkbox"
+              ref={(el) => {
+                if (el) el.indeterminate = hasSomeAdsSelected;
+              }}
+              checked={isAllAdsSelected}
+              onChange={() => {
+                if (isAllAdsSelected) {
+                  adsBulk.clearSelection();
+                } else {
+                  adsBulk.selectAll(allAdIds);
+                }
+              }}
+              className="size-4 rounded border-border text-primary focus:ring-primary focus:ring-offset-background cursor-pointer"
+              aria-label="Select all ads"
+            />
+          </div>
+        ),
+        sortable: false,
         defaultWidth: 44,
         minWidth: 44,
         maxWidth: 44,
@@ -954,6 +1027,7 @@ export function CampaignsDashboardClient({
       {
         id: "thumbnail",
         header: "Video",
+        sortable: false,
         defaultWidth: 70,
         minWidth: 55,
         align: "center",
@@ -972,6 +1046,7 @@ export function CampaignsDashboardClient({
       {
         id: "name",
         header: "Ad / Creative Name",
+        sortableValue: (ad) => ad.name,
         defaultWidth: 200,
         minWidth: 120,
         cell: (ad) => {
@@ -1005,6 +1080,7 @@ export function CampaignsDashboardClient({
       {
         id: "downloaded",
         header: "Downloaded",
+        sortableValue: (ad) => (isDownloaded(ad) ? 1 : 0),
         defaultWidth: 135,
         minWidth: 110,
         align: "center",
@@ -1067,6 +1143,7 @@ export function CampaignsDashboardClient({
       {
         id: "campaign",
         header: "Campaign",
+        sortableValue: (ad) => ad.campaign?.name ?? "",
         defaultWidth: 170,
         minWidth: 110,
         cell: (ad) => (
@@ -1084,6 +1161,7 @@ export function CampaignsDashboardClient({
       {
         id: "product",
         header: "Product",
+        sortableValue: (ad) => ad.product?.name ?? "",
         defaultWidth: 130,
         minWidth: 80,
         cell: (ad) => (
@@ -1105,6 +1183,7 @@ export function CampaignsDashboardClient({
       {
         id: "status",
         header: "Status",
+        sortableValue: (ad) => ad.status,
         defaultWidth: 130,
         minWidth: 90,
         cell: (ad) => <CreativeStatusBadge ad={ad} />
@@ -1112,6 +1191,7 @@ export function CampaignsDashboardClient({
       {
         id: "stage",
         header: "Stage",
+        sortableValue: (ad) => ad.production_stage,
         defaultWidth: 130,
         minWidth: 80,
         cell: (ad) => <ProductionStageBadge stage={ad.production_stage} role={profile.role} />
@@ -1119,6 +1199,7 @@ export function CampaignsDashboardClient({
       {
         id: "creator",
         header: "Creator",
+        sortableValue: (ad) => ad.creator?.name ?? "",
         defaultWidth: 130,
         minWidth: 70,
         cell: (ad) =>
@@ -1134,6 +1215,7 @@ export function CampaignsDashboardClient({
       {
         id: "editor",
         header: "Editor",
+        sortableValue: (ad) => ad.editor?.name ?? "",
         defaultWidth: 130,
         minWidth: 70,
         cell: (ad) =>
@@ -1149,6 +1231,7 @@ export function CampaignsDashboardClient({
       {
         id: "script",
         header: "Script",
+        sortableValue: (ad) => ad.script_text ?? "",
         defaultWidth: 200,
         minWidth: 60,
         cell: (ad) => {
@@ -1176,6 +1259,7 @@ export function CampaignsDashboardClient({
       {
         id: "deadline",
         header: "Deadline",
+        sortableValue: (ad) => (ad.deadline ? new Date(ad.deadline).getTime() : 0),
         defaultWidth: 100,
         minWidth: 60,
         cell: (ad) => (
@@ -1187,6 +1271,7 @@ export function CampaignsDashboardClient({
       {
         id: "actions",
         header: "Actions",
+        sortable: false,
         defaultWidth: 75,
         minWidth: 50,
         align: "center",
@@ -1204,7 +1289,7 @@ export function CampaignsDashboardClient({
         )
       }
     ],
-    [profile.role, adsBulk.selectedIds, adsBulk.toggleSelect, adsBulk.isSelected, updatingDownloadedId, handleToggleDownloaded]
+    [profile.role, adsBulk.selectedIds, adsBulk.toggleSelect, adsBulk.isSelected, adsBulk.clearSelection, adsBulk.selectAll, allAdIds, isAllAdsSelected, hasSomeAdsSelected, updatingDownloadedId, handleToggleDownloaded]
   );
 
   return (

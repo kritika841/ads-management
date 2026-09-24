@@ -573,12 +573,39 @@ export function CampaignDetailClient({
     document.body.removeChild(link);
   };
 
+  const allCreativeIds = useMemo(() => filteredCreatives.map((ad) => ad.id), [filteredCreatives]);
+  const isAllCreativesSelected = allCreativeIds.length > 0 && allCreativeIds.every((id) => bulk.isSelected(id));
+  const hasSomeCreativesSelected = bulk.selectedIds.size > 0 && !isAllCreativesSelected;
+
   // Excel columns definition for Creatives
   const columns: ExcelColumnDef<AdWithRelations>[] = useMemo(
     () => [
       {
         id: "select",
-        header: "",
+        header: (
+          <div
+            className="flex items-center justify-center size-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <input
+              type="checkbox"
+              ref={(el) => {
+                if (el) el.indeterminate = hasSomeCreativesSelected;
+              }}
+              checked={isAllCreativesSelected}
+              onChange={() => {
+                if (isAllCreativesSelected) {
+                  bulk.clearSelection();
+                } else {
+                  bulk.selectAll(allCreativeIds);
+                }
+              }}
+              className="size-4 rounded border-border text-primary focus:ring-primary focus:ring-offset-background cursor-pointer"
+              aria-label="Select all creatives"
+            />
+          </div>
+        ),
+        sortable: false,
         defaultWidth: 44,
         minWidth: 44,
         maxWidth: 44,
@@ -601,6 +628,7 @@ export function CampaignDetailClient({
       {
         id: "thumbnail",
         header: "Video",
+        sortable: false,
         defaultWidth: 80,
         minWidth: 55,
         align: "center",
@@ -609,6 +637,7 @@ export function CampaignDetailClient({
       {
         id: "name",
         header: "Creative Name",
+        sortableValue: (ad) => ad.name,
         defaultWidth: 170,
         minWidth: 80,
         cell: (ad) => {
@@ -642,6 +671,7 @@ export function CampaignDetailClient({
       {
         id: "downloaded",
         header: "Downloaded",
+        sortableValue: (ad) => (isDownloaded(ad) ? 1 : 0),
         defaultWidth: 135,
         minWidth: 110,
         align: "center",
@@ -704,6 +734,7 @@ export function CampaignDetailClient({
       {
         id: "status",
         header: "Status",
+        sortableValue: (ad) => ad.status,
         defaultWidth: 155,
         minWidth: 100,
         cell: (ad) => (
@@ -715,6 +746,7 @@ export function CampaignDetailClient({
       {
         id: "stage",
         header: "Stage",
+        sortableValue: (ad) => ad.production_stage,
         defaultWidth: 125,
         minWidth: 70,
         cell: (ad) => (
@@ -726,6 +758,7 @@ export function CampaignDetailClient({
       {
         id: "product",
         header: "Product",
+        sortableValue: (ad) => ad.product?.name ?? "",
         defaultWidth: 120,
         minWidth: 60,
         cell: (ad) => (
@@ -749,6 +782,7 @@ export function CampaignDetailClient({
       {
         id: "script",
         header: "Script",
+        sortableValue: (ad) => ad.script_text ?? "",
         defaultWidth: 260,
         minWidth: 40,
         cell: (ad) => {
@@ -786,6 +820,7 @@ export function CampaignDetailClient({
       {
         id: "raw_footage",
         header: "Raw Clips",
+        sortableValue: (ad) => (ad.raw_footage_url ? 1 : 0),
         defaultWidth: 100,
         minWidth: 50,
         cell: (ad) => {
@@ -811,6 +846,7 @@ export function CampaignDetailClient({
       {
         id: "creator",
         header: "Creator",
+        sortableValue: (ad) => ad.creator?.name ?? "",
         defaultWidth: 130,
         minWidth: 60,
         cell: (ad) => {
@@ -830,6 +866,7 @@ export function CampaignDetailClient({
       {
         id: "editor",
         header: "Editor",
+        sortableValue: (ad) => ad.editor?.name ?? "",
         defaultWidth: 130,
         minWidth: 60,
         cell: (ad) => {
@@ -849,6 +886,7 @@ export function CampaignDetailClient({
       {
         id: "performance",
         header: "Meta Metrics",
+        sortableValue: (ad) => (ad as unknown as { performance?: { latest_spend?: number } }).performance?.latest_spend ?? 0,
         defaultWidth: 120,
         minWidth: 70,
         cell: (ad) => {
@@ -871,6 +909,7 @@ export function CampaignDetailClient({
       {
         id: "deadline",
         header: "Deadline",
+        sortableValue: (ad) => (ad.deadline ? new Date(ad.deadline).getTime() : 0),
         defaultWidth: 100,
         minWidth: 60,
         cell: (ad) => {
@@ -891,6 +930,7 @@ export function CampaignDetailClient({
       {
         id: "actions",
         header: "Actions",
+        sortable: false,
         defaultWidth: 100,
         minWidth: 60,
         align: "center",
@@ -921,7 +961,7 @@ export function CampaignDetailClient({
         )
       }
     ],
-    [profile.role, canAddCreative, bulk.selectedIds, bulk.toggleSelect, bulk.isSelected, updatingDownloadedId, handleToggleDownloaded]
+    [profile.role, canAddCreative, bulk.selectedIds, bulk.toggleSelect, bulk.isSelected, bulk.clearSelection, bulk.selectAll, allCreativeIds, isAllCreativesSelected, hasSomeCreativesSelected, updatingDownloadedId, handleToggleDownloaded]
   );
 
   return (
@@ -1489,7 +1529,7 @@ export function CampaignDetailClient({
                       onChange={(e) => setCampaignActive(e.target.checked)}
                       className="sr-only peer"
                     />
-                    <div className="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary" />
+                    <div className="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-primary-foreground after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-card after:border-border after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary" />
                   </label>
                 </div>
               </div>
