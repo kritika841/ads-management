@@ -75,6 +75,22 @@ export function RealtimeSync({ userId, role }: { userId: string; role: UserRole 
       .on("postgres_changes", { event: "*", schema: "public", table: "annotations" }, checkForUpdates)
       .on("postgres_changes", { event: "*", schema: "public", table: "activity_logs" }, checkForUpdates)
       .on("postgres_changes", { event: "*", schema: "public", table: "daily_team_targets" }, refreshDailyTargets)
+      .on("postgres_changes", { event: "*", schema: "public", table: "announcements" }, () => {
+        if (!active) return;
+        markUpdated();
+        queueRefresh();
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("adflow:announcement-updated"));
+        }
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "announcement_acknowledgements" }, () => {
+        if (!active) return;
+        markUpdated();
+        queueRefresh();
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("adflow:announcement-updated"));
+        }
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` }, checkForUpdates)
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {

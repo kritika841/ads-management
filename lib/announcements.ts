@@ -227,6 +227,16 @@ export async function getUnacknowledgedAnnouncements(user: {
   });
 }
 
+export async function getUserVisibleAnnouncements(user: {
+  id: string;
+  role: UserRole;
+}): Promise<Announcement[]> {
+  const all = await getAllAnnouncements();
+  return all.filter((announcement) => {
+    return isUserTargetedByAnnouncement(announcement, user);
+  });
+}
+
 export async function recordAcknowledgement(
   announcementId: string,
   user: { id: string; name: string; role: string }

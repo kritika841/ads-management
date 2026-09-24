@@ -10,6 +10,7 @@ import {
   deleteAnnouncementRecord,
   getAllAnnouncements,
   getUnacknowledgedAnnouncements,
+  getUserVisibleAnnouncements,
   recordAcknowledgement,
   updateAnnouncementStatus
 } from "@/lib/announcements";
@@ -30,7 +31,7 @@ const createAnnouncementSchema = z.object({
   attachments: z.array(attachmentSchema).default([]),
   targetType: z.enum(["all", "roles", "users"]),
   targetRoles: z.array(z.enum(["content_creator", "editor", "manager"])).optional(),
-  targetUserIds: z.array(z.string().uuid()).optional()
+  targetUserIds: z.array(z.string().min(1)).optional()
 });
 
 export async function createAnnouncement(payload: z.input<typeof createAnnouncementSchema>) {
@@ -162,3 +163,33 @@ export async function getAnnouncementsWithStats() {
     allProfiles
   };
 }
+
+export async function unarchiveAnnouncement(announcementId: string) {
+  const profile = await requireProfile();
+  if (profile.role !== "admin" && profile.role !== "manager") {
+    return { ok: false, message: "Only managers and administrators can restore announcements." };
+  }
+
+  try {
+    const success = await updateAnnouncementStatus(announcementId, "active");
+    if (success) {
+      revalidatePath("/announcements");
+      revalidatePath("/admin/settings");
+      return { ok: true };
+    }
+    return { ok: false, message: "Failed to unarchive announcement." };
+  } catch (cause) {
+    return { ok: false, message: cause instanceof Error ? cause.message : "Unarchive failed." };
+  }
+}
+
+export async function getUserAnnouncements() {
+  const profile = await requireProfile();
+  const announcements = await getUserVisibleAnnouncements({
+    id: profile.id,
+    role: profile.role
+  });
+  return announcements;
+}
+
+

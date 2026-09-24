@@ -5,20 +5,18 @@ import {
   AlertCircle,
   CheckCircle2,
   Download,
-  ExternalLink,
   Eye,
-  FileText,
-  ImageIcon,
   Loader2,
   Megaphone,
   Paperclip,
   X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import type { Announcement } from "@/lib/announcements";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import type { Announcement, AnnouncementAttachment } from "@/lib/announcements";
 import type { Profile } from "@/lib/types";
 import { acknowledgeAnnouncement, getPendingAnnouncements } from "@/app/actions/announcements";
+import { getAttachmentIcon, formatFileSize } from "./announcement-card";
 
 export function AnnouncementOverlay({ profile }: { profile: Profile }) {
   const [pendingList, setPendingList] = useState<Announcement[]>([]);
@@ -26,22 +24,70 @@ export function AnnouncementOverlay({ profile }: { profile: Profile }) {
   const [isPending, startTransition] = useTransition();
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
-  useEffect(() => {
-    let mounted = true;
-    async function load() {
-      try {
-        const announcements = await getPendingAnnouncements();
-        if (mounted && Array.isArray(announcements)) {
-          setPendingList(announcements);
-          setCurrentIndex(0);
-        }
-      } catch (e) {
-        console.error("Failed to load announcements:", e);
+  const loadPending = async () => {
+    try {
+      const announcements = await getPendingAnnouncements();
+      if (Array.isArray(announcements)) {
+        setPendingList(announcements);
+        setCurrentIndex((prev) => (prev >= announcements.length ? 0 : prev));
       }
+    } catch (e) {
+      console.error("Failed to load pending announcements:", e);
     }
-    void load();
+  };
+
+  useEffect(() => {
+    void loadPending();
+
+    // 1. Supabase Realtime Channel
+    const supabase = createSupabaseBrowserClient();
+    const channel = supabase
+      .channel(`announcements-overlay-${profile.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "announcements" }, () => {
+        void loadPending();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "announcement_acknowledgements" }, () => {
+        void loadPending();
+      })
+      .subscribe();
+
+    // 2. BroadcastChannel cross-tab listener
+    let bc: BroadcastChannel | null = null;
+    if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+      bc = new BroadcastChannel("adflow_announcements");
+      bc.onmessage = () => {
+        void loadPending();
+      };
+    }
+
+    // 3. Custom event listener (within same tab)
+    const handleCustomEvent = () => {
+      void loadPending();
+    };
+    window.addEventListener("adflow:announcement-updated", handleCustomEvent);
+
+    // 4. Background polling fallback every 4 seconds when page is visible
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void loadPending();
+      }
+    }, 4000);
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void loadPending();
+    };
+    const onFocus = () => void loadPending();
+
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", onFocus);
+
     return () => {
-      mounted = false;
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("adflow:announcement-updated", handleCustomEvent);
+      if (bc) bc.close();
+      void supabase.removeChannel(channel);
     };
   }, [profile.id]);
 
@@ -57,6 +103,16 @@ export function AnnouncementOverlay({ profile }: { profile: Profile }) {
           next.splice(currentIndex, 1);
           return next;
         });
+
+        // Broadcast to other components and tabs immediately
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("adflow:announcement-updated"));
+          if ("BroadcastChannel" in window) {
+            const bc = new BroadcastChannel("adflow_announcements");
+            bc.postMessage({ type: "ACK", announcementId: activeAnnouncement.id, userId: profile.id });
+            bc.close();
+          }
+        }
       }
     });
   };
@@ -77,9 +133,9 @@ export function AnnouncementOverlay({ profile }: { profile: Profile }) {
       aria-labelledby="announcement-title"
     >
       {/* 90% viewport container */}
-      <div className="relative flex flex-col w-[90vw] h-[90vh] max-w-6xl max-h-[90vh] rounded-2xl border border-border bg-card shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative flex flex-col w-[90vw] h-[90vh] max-w-5xl max-h-[90vh] rounded-2xl border border-border bg-card shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         {/* Banner Header */}
-        <div className="flex items-center justify-between border-b border-border bg-muted/60 px-6 py-4">
+        <div className="flex items-center justify-between border-b border-border bg-muted/60 px-6 py-4 shrink-0">
           <div className="flex items-center gap-3">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary shadow-2xs">
               <Megaphone className="size-5" />
@@ -110,40 +166,25 @@ export function AnnouncementOverlay({ profile }: { profile: Profile }) {
           </div>
         </div>
 
-        {/* Scrollable Content Body */}
+        {/* Scrollable Content Body with EXACT REQUESTED HIERARCHY */}
         <div className="flex-1 overflow-y-auto px-6 py-6 sm:px-10 sm:py-8 space-y-6">
-          <div>
-            <h1 id="announcement-title" className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground leading-snug">
-              {activeAnnouncement.title}
-            </h1>
-          </div>
-
-          {/* Formatted Message */}
-          <div className="prose prose-sm dark:prose-invert max-w-none text-foreground/90 whitespace-pre-wrap leading-relaxed text-sm sm:text-base border-l-2 border-primary/40 pl-4 py-1">
-            {activeAnnouncement.content}
-          </div>
-
-          {/* Inline Images Gallery */}
+          {/* 1. TOP PART: CENTRED IMAGE */}
           {activeAnnouncement.images && activeAnnouncement.images.length > 0 ? (
-            <div className="space-y-3 pt-2 border-t border-border">
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                <ImageIcon className="size-4 text-primary" />
-                Attached Images ({activeAnnouncement.images.length})
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="flex flex-col items-center justify-center w-full">
+              <div className="w-full flex flex-col items-center gap-4">
                 {activeAnnouncement.images.map((imgSrc, idx) => (
                   <div
                     key={idx}
                     onClick={() => setImagePreview(imgSrc)}
-                    className="group relative aspect-video rounded-xl border border-border bg-muted/40 overflow-hidden cursor-pointer shadow-xs hover:border-primary/50 transition-all"
+                    className="group relative max-w-full sm:max-w-2xl max-h-[420px] rounded-xl border border-border bg-muted/20 overflow-hidden cursor-pointer shadow-soft hover:border-primary/50 transition-all flex items-center justify-center"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={imgSrc}
-                      alt={`Announcement image ${idx + 1}`}
-                      className="size-full object-cover transition-transform duration-200 group-hover:scale-105"
+                      alt={`Announcement visual ${idx + 1}`}
+                      className="max-h-[420px] w-auto max-w-full object-contain mx-auto transition-transform duration-200 group-hover:scale-[1.02]"
                     />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 text-white text-xs font-medium">
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 text-white text-xs font-semibold">
                       <Eye className="size-4" /> Click to enlarge
                     </div>
                   </div>
@@ -152,49 +193,73 @@ export function AnnouncementOverlay({ profile }: { profile: Profile }) {
             </div>
           ) : null}
 
-          {/* Attachments Section */}
+          {/* 2. BENEATH IMAGE: HEADING */}
+          <div className="space-y-1">
+            <h1
+              id="announcement-title"
+              className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground leading-snug"
+            >
+              {activeAnnouncement.title}
+            </h1>
+          </div>
+
+          {/* 3. BENEATH HEADING: BODY OF THE ANNOUNCEMENT */}
+          <div className="prose prose-sm dark:prose-invert max-w-none text-foreground/90 whitespace-pre-wrap leading-relaxed text-sm sm:text-base border-l-2 border-primary/40 pl-4 py-1">
+            {activeAnnouncement.content}
+          </div>
+
+          {/* 4. BENEATH BODY: ATTACHMENTS THAT ONE CAN DOWNLOAD */}
           {activeAnnouncement.attachments && activeAnnouncement.attachments.length > 0 ? (
-            <div className="space-y-3 pt-2 border-t border-border">
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <div className="space-y-3 pt-3 border-t border-border">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 <Paperclip className="size-4 text-primary" />
-                Attachments ({activeAnnouncement.attachments.length})
+                Downloadable Attachments ({activeAnnouncement.attachments.length})
               </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {activeAnnouncement.attachments.map((att) => (
-                  <a
-                    key={att.id}
-                    href={att.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-between rounded-xl border border-border bg-card p-3.5 hover:bg-muted/60 hover:border-primary/40 transition-all group"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                        <FileText className="size-4" />
-                      </div>
-                      <div className="min-w-0 truncate">
-                        <p className="font-semibold text-xs text-foreground group-hover:text-primary transition-colors truncate">
-                          {att.name}
-                        </p>
-                        {att.size ? (
-                          <p className="text-[11px] text-muted-foreground mt-0.5">
-                            {(att.size / 1024).toFixed(0)} KB
+                {activeAnnouncement.attachments.map((att: AnnouncementAttachment) => {
+                  const icon = getAttachmentIcon(att.name, att.type);
+                  const sizeLabel = formatFileSize(att.size);
+
+                  return (
+                    <a
+                      key={att.id}
+                      href={att.url}
+                      download={att.name}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-between rounded-xl border border-border bg-card p-3.5 hover:bg-muted/60 hover:border-primary/40 transition-all group shadow-2xs"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                          {icon}
+                        </div>
+                        <div className="min-w-0 truncate">
+                          <p className="font-semibold text-xs text-foreground group-hover:text-primary transition-colors truncate">
+                            {att.name}
                           </p>
-                        ) : null}
+                          {sizeLabel ? (
+                            <p className="text-[11px] text-muted-foreground mt-0.5">{sizeLabel}</p>
+                          ) : null}
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex size-7 items-center justify-center rounded text-muted-foreground group-hover:text-primary">
-                      <Download className="size-4" />
-                    </div>
-                  </a>
-                ))}
+
+                      <div
+                        className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground group-hover:bg-primary/15 group-hover:text-primary transition-colors"
+                        title="Download file"
+                      >
+                        <Download className="size-4" />
+                      </div>
+                    </a>
+                  );
+                })}
               </div>
             </div>
           ) : null}
         </div>
 
         {/* Footer with mandatory OK button */}
-        <div className="sticky bottom-0 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-border bg-card/95 backdrop-blur px-6 py-4 sm:px-8">
+        <div className="sticky bottom-0 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-border bg-card/95 backdrop-blur px-6 py-4 sm:px-8 shrink-0">
           <p className="text-xs text-muted-foreground text-center sm:text-left">
             By clicking <strong className="text-foreground">OK</strong>, you confirm you have read and acknowledged this announcement.
           </p>

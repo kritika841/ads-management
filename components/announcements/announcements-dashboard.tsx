@@ -1,23 +1,23 @@
 "use client";
 
-import React, { useState, useTransition, useMemo } from "react";
+import React, { useState, useEffect, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
-  AlertCircle,
   Archive,
   CheckCircle2,
   Clock,
-  Download,
   Eye,
-  FileText,
-  Filter,
+  Grid,
   Image as ImageIcon,
+  LayoutList,
   Loader2,
   Megaphone,
   Paperclip,
   Plus,
+  RotateCcw,
   Search,
   Trash2,
+  UploadCloud,
   Users,
   X
 } from "lucide-react";
@@ -27,13 +27,21 @@ import { Avatar } from "@/components/ui/avatar";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { Announcement, AnnouncementAttachment, AnnouncementTargetType } from "@/lib/announcements";
-import type { Profile, UserRole } from "@/lib/types";
+import type { Profile } from "@/lib/types";
 import {
   archiveAnnouncement,
   createAnnouncement,
-  deleteAnnouncement
+  deleteAnnouncement,
+  getAnnouncementsWithStats,
+  unarchiveAnnouncement
 } from "@/app/actions/announcements";
+import {
+  AnnouncementCardView,
+  formatFileSize,
+  getAttachmentIcon
+} from "./announcement-card";
 
 export function AnnouncementsDashboard({
   announcements: initialAnnouncements,
@@ -47,12 +55,15 @@ export function AnnouncementsDashboard({
   const router = useRouter();
   const { toast } = useToast();
   const [announcements, setAnnouncements] = useState<Announcement[]>(initialAnnouncements);
+  const [viewMode, setViewMode] = useState<"table" | "feed">("table");
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [previewAnnouncement, setPreviewAnnouncement] = useState<Announcement | null>(null);
   const [inspectorAnnouncement, setInspectorAnnouncement] = useState<Announcement | null>(null);
   const [inspectorFilter, setInspectorFilter] = useState<"all" | "acknowledged" | "pending">("all");
   const [inspectorSearch, setInspectorSearch] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "archived">("all");
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   // Create form state
@@ -69,9 +80,89 @@ export function AnnouncementsDashboard({
   const [attachments, setAttachments] = useState<AnnouncementAttachment[]>([]);
   const [attachmentName, setAttachmentName] = useState("");
   const [attachmentUrl, setAttachmentUrl] = useState("");
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
 
   const isAdmin = profile.role === "admin";
-  const isManager = profile.role === "manager";
+
+  // Function to refresh announcements in real-time
+  const refreshAnnouncements = async () => {
+    try {
+      const res = await getAnnouncementsWithStats();
+      if (res.ok && Array.isArray(res.announcements)) {
+        setAnnouncements(res.announcements);
+
+        // Keep inspector announcement in sync with latest acknowledgements
+        setInspectorAnnouncement((current) => {
+          if (!current) return null;
+          const updated = res.announcements.find((a) => a.id === current.id);
+          return updated || current;
+        });
+
+        // Keep preview announcement in sync
+        setPreviewAnnouncement((current) => {
+          if (!current) return null;
+          const updated = res.announcements.find((a) => a.id === current.id);
+          return updated || current;
+        });
+      }
+    } catch (e) {
+      console.error("Failed to refresh announcements:", e);
+    }
+  };
+
+  // Real-time synchronization: Supabase realtime + BroadcastChannel + Polling fallback
+  useEffect(() => {
+    // 1. Supabase Realtime channel
+    const supabase = createSupabaseBrowserClient();
+    const channel = supabase
+      .channel(`admin-announcements-${profile.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "announcements" }, () => {
+        void refreshAnnouncements();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "announcement_acknowledgements" }, () => {
+        void refreshAnnouncements();
+      })
+      .subscribe();
+
+    // 2. BroadcastChannel cross-tab listener
+    let bc: BroadcastChannel | null = null;
+    if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+      bc = new BroadcastChannel("adflow_announcements");
+      bc.onmessage = () => {
+        void refreshAnnouncements();
+      };
+    }
+
+    // 3. Custom event listener (within same tab)
+    const handleCustomEvent = () => {
+      void refreshAnnouncements();
+    };
+    window.addEventListener("adflow:announcement-updated", handleCustomEvent);
+
+    // 4. Background polling fallback every 4 seconds when page is visible
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void refreshAnnouncements();
+      }
+    }, 4000);
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void refreshAnnouncements();
+    };
+    const onFocus = () => void refreshAnnouncements();
+
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("adflow:announcement-updated", handleCustomEvent);
+      if (bc) bc.close();
+      void supabase.removeChannel(channel);
+    };
+  }, [profile.id]);
 
   // Helper to determine target users for an announcement
   const getTargetUsersForAnnouncement = (ann: Announcement): Profile[] => {
@@ -80,7 +171,9 @@ export function AnnouncementsDashboard({
       return activeProfiles.filter((p) => p.role !== "admin");
     }
     if (ann.target_type === "roles") {
-      return activeProfiles.filter((p) => ann.target_roles.includes(p.role as ("content_creator" | "editor" | "manager")));
+      return activeProfiles.filter((p) =>
+        ann.target_roles.includes(p.role as ("content_creator" | "editor" | "manager"))
+      );
     }
     if (ann.target_type === "users") {
       return activeProfiles.filter((p) => ann.target_user_ids.includes(p.id));
@@ -91,6 +184,7 @@ export function AnnouncementsDashboard({
   // Metrics
   const totalAnnouncements = announcements.length;
   const activeAnnouncements = announcements.filter((a) => a.status === "active").length;
+  const archivedAnnouncements = announcements.filter((a) => a.status === "archived").length;
 
   const filteredAnnouncements = useMemo(() => {
     return announcements.filter((a) => {
@@ -128,6 +222,66 @@ export function AnnouncementsDashboard({
     setImageUrlInput("");
   };
 
+  // Handle direct file upload for attachments of ANY type up to 30 MB
+  const handleAttachmentFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const MAX_SIZE = 30 * 1024 * 1024; // 30 MB
+
+    for (const file of Array.from(files)) {
+      if (file.size > MAX_SIZE) {
+        const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+        toast({
+          title: "File too large",
+          description: `"${file.name}" (${sizeMb} MB) exceeds the 30 MB maximum size limit.`,
+          tone: "error"
+        });
+        continue;
+      }
+
+      setUploadingAttachment(true);
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("filename", file.name);
+
+        const response = await fetch("/api/announcements/attachments", {
+          method: "POST",
+          body: formData
+        });
+
+        const result = await response.json();
+        if (!response.ok || !result.ok) {
+          toast({
+            title: "Upload failed",
+            description: result.error || `Could not upload "${file.name}".`,
+            tone: "error"
+          });
+        } else {
+          setAttachments((prev) => [...prev, result.attachment]);
+          toast({
+            title: "Attachment uploaded",
+            description: `"${file.name}" (${(file.size / (1024 * 1024)).toFixed(1)} MB) attached.`,
+            tone: "success"
+          });
+        }
+      } catch (err) {
+        console.error("Upload error:", err);
+        toast({
+          title: "Upload failed",
+          description: `Failed to upload "${file.name}".`,
+          tone: "error"
+        });
+      } finally {
+        setUploadingAttachment(false);
+      }
+    }
+
+    // Reset input
+    e.target.value = "";
+  };
+
+  // Add attachment from external URL or link
   const handleAddAttachment = () => {
     if (!attachmentName.trim() || !attachmentUrl.trim()) return;
     setAttachments((prev) => [
@@ -155,6 +309,17 @@ export function AnnouncementsDashboard({
     setAttachmentUrl("");
   };
 
+  const broadcastChange = (type: string, data?: unknown) => {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("adflow:announcement-updated"));
+      if ("BroadcastChannel" in window) {
+        const bc = new BroadcastChannel("adflow_announcements");
+        bc.postMessage({ type, data });
+        bc.close();
+      }
+    }
+  };
+
   const handleCreateAnnouncement = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !content.trim()) {
@@ -178,10 +343,15 @@ export function AnnouncementsDashboard({
         return;
       }
 
-      toast({ title: "Announcement published", description: "Targeted users will be prompted to acknowledge.", tone: "success" });
+      toast({
+        title: "Announcement published",
+        description: "Targeted users will receive the announcement without refreshing.",
+        tone: "success"
+      });
       setAnnouncements((prev) => [res.announcement!, ...prev]);
       setCreateModalOpen(false);
       resetCreateForm();
+      broadcastChange("CREATE", res.announcement);
       router.refresh();
     });
   };
@@ -191,7 +361,27 @@ export function AnnouncementsDashboard({
       const res = await archiveAnnouncement(id);
       if (res.ok) {
         setAnnouncements((prev) => prev.map((a) => (a.id === id ? { ...a, status: "archived" } : a)));
-        toast({ title: "Announcement archived", description: "Users will no longer be prompted.", tone: "success" });
+        toast({
+          title: "Announcement archived",
+          description: "Targeted users will no longer be prompted by this announcement.",
+          tone: "success"
+        });
+        broadcastChange("STATUS_CHANGE", { id, status: "archived" });
+      }
+    });
+  };
+
+  const handleUnarchive = (id: string) => {
+    startTransition(async () => {
+      const res = await unarchiveAnnouncement(id);
+      if (res.ok) {
+        setAnnouncements((prev) => prev.map((a) => (a.id === id ? { ...a, status: "active" } : a)));
+        toast({
+          title: "Announcement restored",
+          description: "Announcement is now active and prompting targeted users.",
+          tone: "success"
+        });
+        broadcastChange("STATUS_CHANGE", { id, status: "active" });
       }
     });
   };
@@ -203,15 +393,22 @@ export function AnnouncementsDashboard({
       if (res.ok) {
         setAnnouncements((prev) => prev.filter((a) => a.id !== id));
         toast({ title: "Announcement deleted", description: annTitle, tone: "success" });
+        broadcastChange("DELETE", { id });
       }
     });
   };
 
   // Inspector users breakdown calculation
-  const inspectorTargetUsers = inspectorAnnouncement ? getTargetUsersForAnnouncement(inspectorAnnouncement) : [];
-  const inspectorAckMap = new Map(
-    (inspectorAnnouncement?.acknowledgements ?? []).map((a) => [a.user_id, a])
-  );
+  const inspectorTargetUsers = useMemo(() => {
+    return inspectorAnnouncement ? getTargetUsersForAnnouncement(inspectorAnnouncement) : [];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inspectorAnnouncement, allProfiles]);
+
+  const inspectorAckMap = useMemo(() => {
+    return new Map(
+      (inspectorAnnouncement?.acknowledgements ?? []).map((a) => [a.user_id, a])
+    );
+  }, [inspectorAnnouncement]);
 
   const filteredInspectorUsers = useMemo(() => {
     return inspectorTargetUsers.filter((u) => {
@@ -242,13 +439,41 @@ export function AnnouncementsDashboard({
           </p>
         </div>
 
-        <Button
-          onClick={() => setCreateModalOpen(true)}
-          className="gap-2 shadow-soft font-semibold"
-        >
-          <Plus className="size-4" />
-          Create announcement
-        </Button>
+        <div className="flex items-center gap-2.5">
+          {/* View mode toggle */}
+          <div className="flex items-center rounded-lg border border-border bg-card p-1 text-xs">
+            <button
+              type="button"
+              onClick={() => setViewMode("table")}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition",
+                viewMode === "table" ? "bg-primary text-primary-foreground font-semibold shadow-2xs" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <LayoutList className="size-3.5" />
+              Table
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("feed")}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition",
+                viewMode === "feed" ? "bg-primary text-primary-foreground font-semibold shadow-2xs" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Grid className="size-3.5" />
+              Cards
+            </button>
+          </div>
+
+          <Button
+            onClick={() => setCreateModalOpen(true)}
+            className="gap-2 shadow-soft font-semibold"
+          >
+            <Plus className="size-4" />
+            Create announcement
+          </Button>
+        </div>
       </div>
 
       {/* Metrics Row */}
@@ -258,14 +483,15 @@ export function AnnouncementsDashboard({
           <p className="mt-2 text-2xl font-bold text-foreground font-mono">{totalAnnouncements}</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4 shadow-2xs">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Active</p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Active</p>
+            <span className="flex size-2 rounded-full bg-success animate-pulse" />
+          </div>
           <p className="mt-2 text-2xl font-bold text-primary font-mono">{activeAnnouncements}</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4 shadow-2xs">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Team Members</p>
-          <p className="mt-2 text-2xl font-bold text-foreground font-mono">
-            {allProfiles.filter((p) => p.active && p.role !== "admin").length}
-          </p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Archived</p>
+          <p className="mt-2 text-2xl font-bold text-muted-foreground font-mono">{archivedAnnouncements}</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4 shadow-2xs">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Target Roles</p>
@@ -326,171 +552,265 @@ export function AnnouncementsDashboard({
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-border bg-muted/60 text-muted-foreground font-semibold">
-                <th className="px-4 py-3">Announcement</th>
-                <th className="px-4 py-3">Target Audience</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Acknowledgements</th>
-                <th className="px-4 py-3">Author &amp; Date</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {filteredAnnouncements.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-12 text-center text-sm text-muted-foreground">
-                    No announcements found matching criteria.
-                  </td>
+        {viewMode === "feed" ? (
+          /* Cards / Feed View */
+          <div className="p-6 space-y-6">
+            {filteredAnnouncements.length === 0 ? (
+              <div className="py-12 text-center text-sm text-muted-foreground">
+                No announcements found matching criteria.
+              </div>
+            ) : (
+              filteredAnnouncements.map((ann) => (
+                <div key={ann.id} className="relative">
+                  <AnnouncementCardView
+                    announcement={ann}
+                    userId={profile.id}
+                    onImageClick={(url) => setImagePreview(url)}
+                    showAcknowledgementBanner={false}
+                  />
+                  {/* Action buttons overlay for admin */}
+                  <div className="absolute top-4 right-4 flex items-center gap-1.5 bg-card/90 backdrop-blur border border-border p-1 rounded-lg shadow-2xs">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        setInspectorAnnouncement(ann);
+                        setInspectorFilter("all");
+                        setInspectorSearch("");
+                      }}
+                      className="h-7 text-xs gap-1.5"
+                    >
+                      <Users className="size-3.5" />
+                      Log &amp; Users
+                    </Button>
+                    {ann.status === "active" ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleArchive(ann.id)}
+                        className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                        title="Archive announcement"
+                      >
+                        <Archive className="size-3.5" />
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleUnarchive(ann.id)}
+                        className="h-7 text-xs text-muted-foreground hover:text-primary"
+                        title="Restore / Unarchive announcement"
+                      >
+                        <RotateCcw className="size-3.5" />
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleDelete(ann.id, ann.title)}
+                      className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                      title="Delete announcement"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        ) : (
+          /* Table View */
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-border bg-muted/60 text-muted-foreground font-semibold">
+                  <th className="px-4 py-3">Announcement</th>
+                  <th className="px-4 py-3">Target Audience</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Acknowledgements</th>
+                  <th className="px-4 py-3">Author &amp; Date</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
-              ) : (
-                filteredAnnouncements.map((ann) => {
-                  const targetUsers = getTargetUsersForAnnouncement(ann);
-                  const ackCount = ann.acknowledgements?.length ?? 0;
-                  const totalTarget = targetUsers.length;
-                  const ackPercent = totalTarget > 0 ? Math.min(100, Math.round((ackCount / totalTarget) * 100)) : 0;
-                  const formattedDate = new Date(ann.created_at).toLocaleDateString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric"
-                  });
+              </thead>
+              <tbody className="divide-y divide-border">
+                {filteredAnnouncements.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-sm text-muted-foreground">
+                      No announcements found matching criteria.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredAnnouncements.map((ann) => {
+                    const targetUsers = getTargetUsersForAnnouncement(ann);
+                    const ackCount = ann.acknowledgements?.length ?? 0;
+                    const totalTarget = targetUsers.length;
+                    const ackPercent = totalTarget > 0 ? Math.min(100, Math.round((ackCount / totalTarget) * 100)) : 0;
+                    const formattedDate = new Date(ann.created_at).toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric"
+                    });
 
-                  return (
-                    <tr key={ann.id} className="hover:bg-muted/30 transition-colors">
-                      <td className="px-4 py-3.5 max-w-xs">
-                        <div className="space-y-1">
-                          <p className="font-semibold text-foreground text-sm line-clamp-1">{ann.title}</p>
-                          <p className="text-muted-foreground text-xs line-clamp-1">{ann.content}</p>
-                          <div className="flex items-center gap-2 pt-0.5">
-                            {ann.images?.length ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground font-mono">
-                                <ImageIcon className="size-3 text-primary" /> {ann.images.length} images
-                              </span>
-                            ) : null}
-                            {ann.attachments?.length ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground font-mono">
-                                <Paperclip className="size-3 text-primary" /> {ann.attachments.length} files
-                              </span>
-                            ) : null}
+                    return (
+                      <tr key={ann.id} className="hover:bg-muted/30 transition-colors">
+                        <td className="px-4 py-3.5 max-w-xs">
+                          <div className="space-y-1">
+                            <p className="font-semibold text-foreground text-sm line-clamp-1">{ann.title}</p>
+                            <p className="text-muted-foreground text-xs line-clamp-1">{ann.content}</p>
+                            <div className="flex items-center gap-2 pt-0.5">
+                              {ann.images?.length ? (
+                                <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground font-mono">
+                                  <ImageIcon className="size-3 text-primary" /> {ann.images.length} images
+                                </span>
+                              ) : null}
+                              {ann.attachments?.length ? (
+                                <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground font-mono">
+                                  <Paperclip className="size-3 text-primary" /> {ann.attachments.length} files
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
-                        </div>
-                      </td>
+                        </td>
 
-                      <td className="px-4 py-3.5">
-                        <div className="flex flex-wrap gap-1">
-                          {ann.target_type === "all" ? (
-                            <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground">
-                              All Team
-                            </span>
-                          ) : ann.target_type === "roles" ? (
-                            ann.target_roles.map((r) => (
-                              <span
-                                key={r}
-                                className="rounded-md bg-primary/10 text-primary px-2 py-0.5 text-[11px] font-medium"
-                              >
-                                {r === "content_creator" ? "Creators" : r === "editor" ? "Editors" : "Managers"}
+                        <td className="px-4 py-3.5">
+                          <div className="flex flex-wrap gap-1">
+                            {ann.target_type === "all" ? (
+                              <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground">
+                                All Team
                               </span>
-                            ))
-                          ) : (
-                            <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground">
-                              {ann.target_user_ids.length} specific users
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-3.5">
-                        <span
-                          className={cn(
-                            "inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
-                            ann.status === "active" ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"
-                          )}
-                        >
-                          {ann.status}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-3.5 min-w-[160px]">
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="font-semibold text-foreground font-mono">
-                              {ackCount} / {totalTarget}
-                            </span>
-                            <span
-                              className={cn(
-                                "font-mono font-semibold text-[11px]",
-                                ackPercent === 100 ? "text-success" : "text-muted-foreground"
-                              )}
-                            >
-                              {ackPercent}%
-                            </span>
+                            ) : ann.target_type === "roles" ? (
+                              ann.target_roles.map((r) => (
+                                <span
+                                  key={r}
+                                  className="rounded-md bg-primary/10 text-primary px-2 py-0.5 text-[11px] font-medium"
+                                >
+                                  {r === "content_creator" ? "Creators" : r === "editor" ? "Editors" : "Managers"}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground">
+                                {ann.target_user_ids.length} specific users
+                              </span>
+                            )}
                           </div>
-                          <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                            <div
-                              className={cn(
-                                "h-full rounded-full transition-all",
-                                ackPercent === 100 ? "bg-success" : "bg-primary"
-                              )}
-                              style={{ width: `${ackPercent}%` }}
-                            />
-                          </div>
-                        </div>
-                      </td>
+                        </td>
 
-                      <td className="px-4 py-3.5">
-                        <p className="font-medium text-foreground">{ann.author_name}</p>
-                        <p className="text-[11px] text-muted-foreground">{formattedDate}</p>
-                      </td>
-
-                      <td className="px-4 py-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => {
-                              setInspectorAnnouncement(ann);
-                              setInspectorFilter("all");
-                              setInspectorSearch("");
-                            }}
-                            className="h-7 text-xs gap-1.5"
+                        <td className="px-4 py-3.5">
+                          <span
+                            className={cn(
+                              "inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+                              ann.status === "active" ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"
+                            )}
+                            title={
+                              ann.status === "active"
+                                ? "Active: Targeted users are prompted to acknowledge"
+                                : "Archived: Concluded, users will no longer be prompted"
+                            }
                           >
-                            <Users className="size-3.5" />
-                            Log &amp; Users
-                          </Button>
+                            {ann.status}
+                          </span>
+                        </td>
 
-                          {ann.status === "active" ? (
+                        <td className="px-4 py-3.5 min-w-[160px]">
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="font-semibold text-foreground font-mono">
+                                {ackCount} / {totalTarget}
+                              </span>
+                              <span
+                                className={cn(
+                                  "font-mono font-semibold text-[11px]",
+                                  ackPercent === 100 ? "text-success" : "text-muted-foreground"
+                                )}
+                              >
+                                {ackPercent}%
+                              </span>
+                            </div>
+                            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                              <div
+                                className={cn(
+                                  "h-full rounded-full transition-all",
+                                  ackPercent === 100 ? "bg-success" : "bg-primary"
+                                )}
+                                style={{ width: `${ackPercent}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-3.5">
+                          <p className="font-medium text-foreground">{ann.author_name}</p>
+                          <p className="text-[11px] text-muted-foreground">{formattedDate}</p>
+                        </td>
+
+                        <td className="px-4 py-3.5 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => handleArchive(ann.id)}
+                              onClick={() => setPreviewAnnouncement(ann)}
                               className="h-7 text-xs text-muted-foreground hover:text-foreground"
-                              title="Archive announcement"
+                              title="Preview announcement layout"
                             >
-                              <Archive className="size-3.5" />
+                              <Eye className="size-3.5" />
+                              <span className="hidden xl:inline ml-1">View</span>
                             </Button>
-                          ) : null}
 
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleDelete(ann.id, ann.title)}
-                            className="h-7 text-xs text-muted-foreground hover:text-destructive"
-                            title="Delete announcement"
-                          >
-                            <Trash2 className="size-3.5" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => {
+                                setInspectorAnnouncement(ann);
+                                setInspectorFilter("all");
+                                setInspectorSearch("");
+                              }}
+                              className="h-7 text-xs gap-1.5"
+                            >
+                              <Users className="size-3.5" />
+                              Log &amp; Users
+                            </Button>
+
+                            {ann.status === "active" ? (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleArchive(ann.id)}
+                                className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                                title="Archive announcement"
+                              >
+                                <Archive className="size-3.5" />
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleUnarchive(ann.id)}
+                                className="h-7 text-xs text-muted-foreground hover:text-primary"
+                                title="Restore / Unarchive announcement"
+                              >
+                                <RotateCcw className="size-3.5" />
+                              </Button>
+                            )}
+
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleDelete(ann.id, ann.title)}
+                              className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                              title="Delete announcement"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Create Announcement Modal */}
@@ -503,7 +823,7 @@ export function AnnouncementsDashboard({
         >
           <div className="mx-auto flex flex-col w-full bg-card rounded-xl border border-border shadow-float max-w-2xl max-h-[90vh] overflow-hidden">
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-border p-5">
+            <div className="flex items-center justify-between border-b border-border p-5 shrink-0">
               <div>
                 <h2 id="create-announcement-title" className="text-lg font-bold text-foreground flex items-center gap-2">
                   <Megaphone className="size-5 text-primary" />
@@ -646,7 +966,7 @@ export function AnnouncementsDashboard({
 
               {/* Attached Images */}
               <div className="space-y-2 rounded-lg border border-border p-3.5 bg-muted/20">
-                <label className="block text-xs font-semibold text-foreground">Attach Images</label>
+                <label className="block text-xs font-semibold text-foreground">Attach Images (Appears centred at top)</label>
                 <div className="flex gap-2">
                   <Input
                     value={imageUrlInput}
@@ -690,38 +1010,97 @@ export function AnnouncementsDashboard({
                 ) : null}
               </div>
 
-              {/* Attachments / Files */}
-              <div className="space-y-2 rounded-lg border border-border p-3.5 bg-muted/20">
-                <label className="block text-xs font-semibold text-foreground">Attach Documents or Links</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <Input
-                    value={attachmentName}
-                    onChange={(e) => setAttachmentName(e.target.value)}
-                    placeholder="Document title (e.g. Script Template)"
-                    className="text-xs"
-                  />
-                  <Input
-                    value={attachmentUrl}
-                    onChange={(e) => setAttachmentUrl(e.target.value)}
-                    placeholder="Document URL or Google Drive link"
-                    className="text-xs"
-                  />
+              {/* Upload Attachments of ANY file type (Music, Video, Image, PDF, etc. up to 30 MB) */}
+              <div className="space-y-3 rounded-lg border border-border p-3.5 bg-muted/20">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-foreground">
+                    Upload Attachments (Any File Type up to 30 MB)
+                  </label>
+                  <span className="text-[10px] text-muted-foreground">Music, Video, PDF, Docs, Images</span>
                 </div>
-                <Button type="button" size="sm" variant="secondary" onClick={handleAddAttachment}>
-                  <Paperclip className="size-3 mr-1" /> Add attachment
-                </Button>
 
+                {/* Direct file upload button */}
+                <div className="rounded-xl border border-dashed border-border bg-card p-4 text-center hover:border-primary/50 transition-colors">
+                  <label className="flex flex-col items-center justify-center cursor-pointer">
+                    <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary mb-2">
+                      {uploadingAttachment ? (
+                        <Loader2 className="size-5 animate-spin" />
+                      ) : (
+                        <UploadCloud className="size-5" />
+                      )}
+                    </div>
+                    <p className="text-xs font-semibold text-foreground">
+                      {uploadingAttachment ? "Uploading file..." : "Click or browse to upload attachments"}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Accepts music (.mp3, .wav), video (.mp4, .mov), PDF, images, or archives up to 30 MB each.
+                    </p>
+                    <input
+                      type="file"
+                      multiple
+                      onChange={handleAttachmentFileUpload}
+                      disabled={uploadingAttachment}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                {/* Optional external URL/link input */}
+                <div className="pt-2 border-t border-border">
+                  <p className="text-[11px] text-muted-foreground mb-1.5">Or add external link / Google Drive URL:</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      value={attachmentName}
+                      onChange={(e) => setAttachmentName(e.target.value)}
+                      placeholder="Title (e.g. Reference Script)"
+                      className="text-xs"
+                    />
+                    <Input
+                      value={attachmentUrl}
+                      onChange={(e) => setAttachmentUrl(e.target.value)}
+                      placeholder="URL (e.g. drive.google.com/...)"
+                      className="text-xs"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={handleAddAttachment}
+                    className="mt-2 text-xs gap-1"
+                  >
+                    <Paperclip className="size-3" /> Add Link
+                  </Button>
+                </div>
+
+                {/* Uploaded attachments list */}
                 {attachments.length > 0 ? (
-                  <div className="space-y-1 pt-1">
+                  <div className="space-y-1.5 pt-2">
+                    <p className="text-xs font-semibold text-foreground">Attached Files ({attachments.length}):</p>
                     {attachments.map((att) => (
-                      <div key={att.id} className="flex items-center justify-between rounded bg-card p-1.5 border border-border">
-                        <span className="font-medium truncate">{att.name}</span>
+                      <div
+                        key={att.id}
+                        className="flex items-center justify-between rounded-lg bg-card p-2 border border-border shadow-2xs"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="flex size-7 shrink-0 items-center justify-center rounded bg-primary/10 text-primary">
+                            {getAttachmentIcon(att.name, att.type)}
+                          </div>
+                          <div className="min-w-0 truncate">
+                            <span className="font-semibold text-foreground text-xs truncate block">{att.name}</span>
+                            {att.size ? (
+                              <span className="text-[10px] text-muted-foreground">{formatFileSize(att.size)}</span>
+                            ) : null}
+                          </div>
+                        </div>
+
                         <button
                           type="button"
                           onClick={() => setAttachments((prev) => prev.filter((a) => a.id !== att.id))}
-                          className="text-muted-foreground hover:text-destructive p-1"
+                          className="text-muted-foreground hover:text-destructive p-1 rounded"
+                          title="Remove attachment"
                         >
-                          <X className="size-3" />
+                          <X className="size-3.5" />
                         </button>
                       </div>
                     ))}
@@ -730,16 +1109,47 @@ export function AnnouncementsDashboard({
               </div>
 
               {/* Submit Button */}
-              <div className="pt-3 border-t border-border flex justify-end gap-2">
+              <div className="pt-3 border-t border-border flex justify-end gap-2 shrink-0">
                 <Button type="button" variant="ghost" onClick={() => setCreateModalOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={isPending} className="gap-2 font-semibold">
+                <Button type="submit" disabled={isPending || uploadingAttachment} className="gap-2 font-semibold">
                   {isPending ? <Loader2 className="size-4 animate-spin" /> : <Megaphone className="size-4" />}
                   Publish Announcement
                 </Button>
               </div>
             </form>
+          </div>
+        </Modal>
+      ) : null}
+
+      {/* Preview Modal: Shows announcement with exact requested hierarchy */}
+      {previewAnnouncement ? (
+        <Modal
+          open
+          labelledBy="preview-announcement-title"
+          onClose={() => setPreviewAnnouncement(null)}
+          className="p-0 sm:p-6"
+        >
+          <div className="mx-auto flex flex-col w-full bg-card rounded-2xl border border-border shadow-float max-w-4xl max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between border-b border-border p-4 shrink-0 bg-muted/30">
+              <div className="flex items-center gap-2">
+                <Eye className="size-4 text-primary" />
+                <span className="text-sm font-bold text-foreground">Announcement Preview</span>
+              </div>
+              <Button size="icon" variant="ghost" onClick={() => setPreviewAnnouncement(null)}>
+                <X className="size-5" />
+              </Button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 sm:p-8">
+              <AnnouncementCardView
+                announcement={previewAnnouncement}
+                userId={profile.id}
+                onImageClick={(url) => setImagePreview(url)}
+                showAcknowledgementBanner={false}
+              />
+            </div>
           </div>
         </Modal>
       ) : null}
@@ -753,7 +1163,7 @@ export function AnnouncementsDashboard({
           className="p-0 sm:p-6"
         >
           <div className="mx-auto flex flex-col w-full bg-card rounded-xl border border-border shadow-float max-w-3xl max-h-[90vh] overflow-hidden">
-            <div className="flex items-center justify-between border-b border-border p-5">
+            <div className="flex items-center justify-between border-b border-border p-5 shrink-0">
               <div>
                 <h2 id="inspector-title" className="text-lg font-bold text-foreground flex items-center gap-2">
                   <Users className="size-5 text-primary" />
@@ -769,7 +1179,7 @@ export function AnnouncementsDashboard({
             </div>
 
             {/* Filter and stats row */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/40 p-4 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/40 p-4 text-xs shrink-0">
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
@@ -869,6 +1279,30 @@ export function AnnouncementsDashboard({
             </div>
           </div>
         </Modal>
+      ) : null}
+
+      {/* Fullscreen Image Preview Dialog */}
+      {imagePreview ? (
+        <div
+          className="fixed inset-0 z-60 flex items-center justify-center bg-black/95 p-4"
+          onClick={() => setImagePreview(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setImagePreview(null)}
+            className="absolute top-4 right-4 flex size-9 items-center justify-center rounded-full bg-card/80 text-foreground hover:bg-card transition-colors"
+            title="Close image"
+          >
+            <X className="size-5" />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={imagePreview}
+            alt="Preview"
+            className="max-h-[85vh] max-w-[90vw] object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
       ) : null}
     </div>
   );

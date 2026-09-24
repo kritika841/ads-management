@@ -158,4 +158,98 @@ describe("Announcements System", () => {
     expect(announcementWithMedia.attachments).toHaveLength(1);
     expect(announcementWithMedia.attachments![0].name).toBe("Brand_Guidelines_2026.pdf");
   });
+
+  it("supports attachments of any type including music, video, image, or pdf up to 30 MB", () => {
+    const announcementWithDiverseFiles: Announcement = {
+      id: "ann-diverse-files",
+      title: "Audio & Video Creative Pack",
+      content: "Please download the background music track, reference video, and pdf script.",
+      author_id: "admin-1",
+      author_name: "Admin User",
+      author_role: "admin",
+      target_type: "all",
+      target_roles: [],
+      target_user_ids: [],
+      images: ["https://example.com/banner.jpg"],
+      attachments: [
+        {
+          id: "att-audio",
+          name: "Voiceover_Intro.mp3",
+          url: "/api/announcements/attachments/att-audio",
+          size: 5 * 1024 * 1024, // 5 MB
+          type: "audio/mpeg"
+        },
+        {
+          id: "att-video",
+          name: "Sample_Hook_Reference.mp4",
+          url: "/api/announcements/attachments/att-video",
+          size: 28 * 1024 * 1024, // 28 MB <= 30 MB
+          type: "video/mp4"
+        },
+        {
+          id: "att-pdf",
+          name: "Script_Template.pdf",
+          url: "/api/announcements/attachments/att-pdf",
+          size: 1.5 * 1024 * 1024, // 1.5 MB
+          type: "application/pdf"
+        },
+        {
+          id: "att-image",
+          name: "Thumbnail_Storyboard.png",
+          url: "/api/announcements/attachments/att-image",
+          size: 800 * 1024, // 800 KB
+          type: "image/png"
+        }
+      ],
+      status: "active",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      acknowledgements: []
+    };
+
+    expect(announcementWithDiverseFiles.attachments).toHaveLength(4);
+    expect(announcementWithDiverseFiles.attachments.every((a) => (a.size ?? 0) <= 30 * 1024 * 1024)).toBe(true);
+
+    const audioFile = announcementWithDiverseFiles.attachments.find((a) => a.type?.startsWith("audio/"));
+    const videoFile = announcementWithDiverseFiles.attachments.find((a) => a.type?.startsWith("video/"));
+    const pdfFile = announcementWithDiverseFiles.attachments.find((a) => a.name.endsWith(".pdf"));
+
+    expect(audioFile?.name).toBe("Voiceover_Intro.mp3");
+    expect(videoFile?.name).toBe("Sample_Hook_Reference.mp4");
+    expect(pdfFile?.name).toBe("Script_Template.pdf");
+  });
+
+  it("respects archived status: archived announcements do not prompt or target users", () => {
+    const activeAnnouncement: Announcement = {
+      id: "ann-active",
+      title: "Active Announcement",
+      content: "Must be acknowledged.",
+      author_id: "admin-1",
+      author_name: "Admin User",
+      author_role: "admin",
+      target_type: "all",
+      target_roles: [],
+      target_user_ids: [],
+      images: [],
+      attachments: [],
+      status: "active",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      acknowledgements: []
+    };
+
+    const archivedAnnouncement: Announcement = {
+      ...activeAnnouncement,
+      id: "ann-archived",
+      title: "Archived Announcement",
+      status: "archived"
+    };
+
+    // Active announcement targets user
+    expect(isUserTargetedByAnnouncement(activeAnnouncement, "creator-1", "content_creator")).toBe(true);
+
+    // Archived announcement does not target user for prompting
+    expect(isUserTargetedByAnnouncement(archivedAnnouncement, "creator-1", "content_creator")).toBe(false);
+  });
 });
+

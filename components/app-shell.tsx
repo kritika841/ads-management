@@ -73,9 +73,7 @@ export function AppShell({
     ...(profile.role === "admin" || profile.role === "manager"
       ? [{ href: "/analytics", label: "Analytics", icon: BarChart3 }]
       : []),
-    ...(profile.role === "admin" || profile.role === "manager"
-      ? [{ href: "/announcements", label: "Announcements", icon: Megaphone }]
-      : []),
+    { href: "/announcements", label: "Announcements", icon: Megaphone },
     ...(profile.role === "manager"
       ? [{ href: "/admin/performance", label: "Editor Performance", icon: BarChart2 }]
       : [])
