@@ -36,11 +36,18 @@ export type DashboardSummaryModel = {
   timeline?: EditorTimelinePoint[];
 };
 
+export type DashboardSummaryAd = Pick<
+  AdWithRelations,
+  "id" | "name" | "production_stage" | "deadline" | "workflow_status_changed_at"
+> & {
+  campaign?: { id?: string; name: string } | null;
+};
+
 const activeEditorStages: ProductionStage[] = ["ready_for_edit", "editing", "changes_requested"];
 
 export function buildDashboardSummary(params: {
   role: UserRole;
-  ads: AdWithRelations[];
+  ads: DashboardSummaryAd[];
   profiles: Profile[];
   editorWorkloads: Record<string, number>;
   editorCapacity: number;
@@ -137,7 +144,7 @@ export function buildDashboardSummary(params: {
   };
 }
 
-function priorityItems(role: UserRole, ads: AdWithRelations[], today: string, nowMs: number) {
+function priorityItems(role: UserRole, ads: DashboardSummaryAd[], today: string, nowMs: number) {
   const eligible = ads.filter((ad) => {
     if (role === "editor") return activeEditorStages.includes(ad.production_stage);
     if (role === "content_creator") return ["script_writing", "ready_to_shoot", "shoot_complete", "creator_review"].includes(ad.production_stage) || deadlineState(ad.deadline, today) === "overdue";
@@ -159,7 +166,7 @@ function priorityItems(role: UserRole, ads: AdWithRelations[], today: string, no
     .slice(0, 6);
 }
 
-function priorityReason(role: UserRole, ad: AdWithRelations, today: string) {
+function priorityReason(role: UserRole, ad: DashboardSummaryAd, today: string) {
   const deadline = deadlineState(ad.deadline, today);
   if (deadline === "overdue") return "Past deadline";
   if (ad.production_stage === "changes_requested") return "Changes requested";
@@ -196,11 +203,11 @@ function tile(key: string, label: string, count: number, queue: QueueKey | null,
   return { key, label, count, queue, help, tone };
 }
 
-function countStages(ads: AdWithRelations[], stages: ProductionStage[]) { return ads.filter((ad) => stages.includes(ad.production_stage)).length; }
-function waitingHours(ad: AdWithRelations, nowMs: number) { return Math.max(0, (nowMs - new Date(ad.workflow_status_changed_at).getTime()) / 3_600_000); }
+function countStages(ads: DashboardSummaryAd[], stages: ProductionStage[]) { return ads.filter((ad) => stages.includes(ad.production_stage)).length; }
+function waitingHours(ad: DashboardSummaryAd, nowMs: number) { return Math.max(0, (nowMs - new Date(ad.workflow_status_changed_at).getTime()) / 3_600_000); }
 function compareDeadline(a: string | null, b: string | null) { return a === b ? 0 : !a ? 1 : !b ? -1 : a.localeCompare(b); }
 function dateDifference(value: string, today: string) { return Math.round((Date.parse(`${value}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000); }
 function istDate(value: Date) { return new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "Asia/Kolkata" }).format(value); }
-function reviewerHeading(ads: AdWithRelations[]) { const reviews = countStages(ads, ["creator_review", "final_review"]); return reviews ? `${reviews} ${reviews === 1 ? "video needs" : "videos need"} review` : "The team review queue is clear"; }
-function creatorHeading(ads: AdWithRelations[]) { const actions = countStages(ads, ["script_writing", "ready_to_shoot", "shoot_complete", "creator_review"]); return actions ? `${actions} ${actions === 1 ? "item needs" : "items need"} your action` : "Your production work is moving"; }
-function editorHeading(ads: AdWithRelations[]) { const actions = countStages(ads, activeEditorStages); return actions ? `${actions} ${actions === 1 ? "edit needs" : "edits need"} your attention` : "Your editing queue is clear"; }
+function reviewerHeading(ads: DashboardSummaryAd[]) { const reviews = countStages(ads, ["creator_review", "final_review"]); return reviews ? `${reviews} ${reviews === 1 ? "video needs" : "videos need"} review` : "The team review queue is clear"; }
+function creatorHeading(ads: DashboardSummaryAd[]) { const actions = countStages(ads, ["script_writing", "ready_to_shoot", "shoot_complete", "creator_review"]); return actions ? `${actions} ${actions === 1 ? "item needs" : "items need"} your action` : "Your production work is moving"; }
+function editorHeading(ads: DashboardSummaryAd[]) { const actions = countStages(ads, activeEditorStages); return actions ? `${actions} ${actions === 1 ? "edit needs" : "edits need"} your attention` : "Your editing queue is clear"; }

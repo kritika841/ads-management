@@ -65,7 +65,12 @@ export default function ApplicationError({
           An unexpected error occurred while loading this page.
         </p>
         <div className="mt-5 flex justify-center gap-2">
-          <Button variant="secondary" onClick={() => window.location.assign("/dashboard")}>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              window.location.replace("/dashboard?_r=" + Date.now());
+            }}
+          >
             Dashboard
           </Button>
           <Button onClick={reset} disabled={reloading}>

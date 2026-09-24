@@ -28,19 +28,25 @@ import type {
 } from "@/lib/types";
 
 export async function getNotifications(userId: string) {
-  const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase
-    .from("notifications")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(25);
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = await supabase
+      .from("notifications")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(25);
 
-  if (error) {
-    throw error;
+    if (error) {
+      console.warn("[getNotifications] Query error:", error.message || error);
+      return [];
+    }
+
+    return (data ?? []) as Notification[];
+  } catch (err) {
+    console.warn("[getNotifications] Unexpected failure:", err);
+    return [];
   }
-
-  return (data ?? []) as Notification[];
 }
 
 export async function getCampaigns() {
@@ -175,34 +181,80 @@ export async function getEditorInProgressCount(editorId: string) {
 }
 
 export async function getAppSettings() {
+  const fallbackDefaults: AppSettings = {
+    id: 1,
+    max_concurrent_edits: 5,
+    allow_manager_final_approval: true,
+    two_step_approval: false,
+    email_notifications: true,
+    deadline_reminder_days: 2,
+    assignment_start_sla_hours: 24,
+    editing_sla_hours: 48,
+    creator_review_sla_hours: 24,
+    final_review_sla_hours: 24,
+    revision_sla_hours: 24,
+    manager_creative_scope: "all",
+    hidden_metrics_by_role: { content_creator: [], editor: [], manager: [] },
+    updated_at: new Date().toISOString()
+  };
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = await supabase.from("app_settings").select("*").eq("id", 1).maybeSingle();
+
+    if (error) {
+      console.warn("[getAppSettings] Query error:", error.message || error);
+    }
+
+    const fileMetrics = await readMetricVisibilityFile();
+    const record = (data ?? fallbackDefaults) as AppSettings & {
+      allow_manager_final_approval?: boolean;
+      two_step_approval?: boolean;
+      hidden_metrics_by_role?: HiddenMetricsByRole;
+    };
+    const hiddenMetrics = record.hidden_metrics_by_role || fileMetrics || DEFAULT_HIDDEN_METRICS;
+    const managerCreativeScope = record.manager_creative_scope ?? fileMetrics.manager_creative_scope ?? "all";
+
+    return {
+      ...record,
+      allow_manager_final_approval: record.allow_manager_final_approval !== undefined
+        ? record.allow_manager_final_approval
+        : !record.two_step_approval,
+      manager_creative_scope: managerCreativeScope,
+      hidden_metrics_by_role: {
+        content_creator: hiddenMetrics.content_creator ?? [],
+        editor: hiddenMetrics.editor ?? [],
+        manager: hiddenMetrics.manager ?? []
+      }
+    } as AppSettings;
+  } catch (err) {
+    console.warn("[getAppSettings] Falling back to default settings:", err);
+    return fallbackDefaults;
+  }
+}
+
+export type DashboardAdSummaryItem = {
+  id: string;
+  name: string;
+  production_stage: ProductionStage;
+  deadline: string | null;
+  workflow_status_changed_at: string;
+  campaign?: { id: string; name: string } | null;
+};
+
+export async function getDashboardAds(): Promise<DashboardAdSummaryItem[]> {
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase.from("app_settings").select("*").eq("id", 1).single();
+  const { data, error } = await supabase
+    .from("ads")
+    .select("id, name, production_stage, deadline, workflow_status_changed_at, campaign:campaigns(id, name)")
+    .order("updated_at", { ascending: false });
 
   if (error) {
+    console.error("[getDashboardAds] Query error:", error.message || error);
     throw error;
   }
 
-  const fileMetrics = await readMetricVisibilityFile();
-  const record = data as AppSettings & {
-    allow_manager_final_approval?: boolean;
-    two_step_approval?: boolean;
-    hidden_metrics_by_role?: HiddenMetricsByRole;
-  };
-  const hiddenMetrics = record.hidden_metrics_by_role || fileMetrics || DEFAULT_HIDDEN_METRICS;
-  const managerCreativeScope = record.manager_creative_scope ?? fileMetrics.manager_creative_scope ?? "all";
-
-  return {
-    ...record,
-    allow_manager_final_approval: record.allow_manager_final_approval !== undefined
-      ? record.allow_manager_final_approval
-      : !record.two_step_approval,
-    manager_creative_scope: managerCreativeScope,
-    hidden_metrics_by_role: {
-      content_creator: hiddenMetrics.content_creator ?? [],
-      editor: hiddenMetrics.editor ?? [],
-      manager: hiddenMetrics.manager ?? []
-    }
-  } as AppSettings;
+  return (data ?? []) as unknown as DashboardAdSummaryItem[];
 }
 
 export async function getAds() {
