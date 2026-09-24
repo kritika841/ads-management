@@ -62,7 +62,7 @@ describe("getIncentiveDashboard data scoping integration", () => {
     for (const ad of result.metaAds) {
       const matches =
         ad.matched_creator_id === tamanna.id ||
-        (ad.name && ad.name.includes("TAM")) ||
+        (ad.creative_name && ad.creative_name.includes("TAM")) ||
         (ad.detected_tag && ad.detected_tag.includes("TAM")) ||
         ad.assets?.some((a) => (a.asset_label || "").toUpperCase().includes("TAM"));
       expect(matches).toBe(true);
@@ -90,6 +90,15 @@ describe("getIncentiveDashboard data scoping integration", () => {
 
     // Restore to 'all'
     await writeMetricVisibilityFile({}, "all");
+  });
+
+  it("populates matched_creative_name and match_confidence for high confidence matches", async () => {
+    const result = await getIncentiveDashboard(admin);
+    const highMatches = result.metaAds.filter((ad) => ad.match_confidence === "high");
+    expect(highMatches.length).toBeGreaterThan(0);
+    // Ensure high confidence matches have matched_creative_name populated
+    const withCreativeLibName = highMatches.filter((ad) => ad.matched_creative_name);
+    expect(withCreativeLibName.length).toBeGreaterThan(0);
   });
 
   it("admin always sees all ads", async () => {

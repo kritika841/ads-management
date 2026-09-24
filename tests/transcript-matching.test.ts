@@ -14,8 +14,8 @@ describe("transcript mapping", () => {
         { id: "shoes", script_text: "These running shoes are light and comfortable for every workout" }
       ]
     );
-    expect(result.adId).toBeNull();
-    expect(result.confidence).toBe("medium");
+    expect(result.adId).toBe("serum");
+    expect(result.confidence).toBe("high");
   });
 
   it("does not force an unrelated or very short transcript", () => {

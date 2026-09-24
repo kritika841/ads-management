@@ -332,9 +332,18 @@ async function main() {
       return;
     }
 
-    console.log('\nApplying AI matches to Supabase (meta_ad_transcript_mappings and incentive_creatives)...');
+    console.log('\nApplying AI matches to Supabase (meta_ad_transcript_mappings, meta_ads, and incentive_creatives)...');
     let dbUpdated = 0;
     let incentiveLinked = 0;
+
+    const [{ data: dbAds }, { data: campaigns }, { data: existingIncentives }] = await Promise.all([
+      supabase.from('ads').select('id, name, product_id, creator_id, editor_id'),
+      supabase.from('incentive_campaigns').select('id, product_id, starts_on, ends_on, active').eq('active', true),
+      supabase.from('incentive_creatives').select('id, meta_ad_id, ad_id')
+    ]);
+
+    const adMap = new Map((dbAds || []).map((a) => [a.id, a]));
+    const incentiveByMetaId = new Map((existingIncentives || []).map((i) => [i.meta_ad_id, i]));
 
     for (const r of results) {
       if (r.matched_ad_id) {
@@ -355,16 +364,49 @@ async function main() {
 
         // For high-confidence matches, link attribution to meta_ads and incentive_creatives
         if (r.match_confidence === 'high') {
+          const matchedDbAd = adMap.get(r.matched_ad_id);
+
           await supabase
             .from('meta_ads')
-            .update({ matched_ad_id: r.matched_ad_id })
+            .update({
+              matched_ad_id: r.matched_ad_id,
+              matched_creator_id: matchedDbAd?.creator_id ?? null,
+              matched_editor_id: matchedDbAd?.editor_id ?? null,
+              auto_matched_at: new Date().toISOString()
+            })
             .eq('id', r.meta_ad_id);
 
-          const { error: incErr } = await supabase
-            .from('incentive_creatives')
-            .update({ creative_id: r.matched_ad_id })
-            .eq('meta_ad_id', r.meta_ad_id);
-          if (!incErr) incentiveLinked++;
+          const existingLink = incentiveByMetaId.get(r.meta_ad_id);
+          if (existingLink) {
+            const { error: incErr } = await supabase
+              .from('incentive_creatives')
+              .update({
+                ad_id: r.matched_ad_id,
+                creator_id: matchedDbAd?.creator_id ?? null,
+                editor_id: matchedDbAd?.editor_id ?? null,
+                attribution_source: 'auto',
+                auto_matched_at: new Date().toISOString()
+              })
+              .eq('id', existingLink.id);
+            if (!incErr) incentiveLinked++;
+          } else if (matchedDbAd?.product_id) {
+            const matchingCampaign = (campaigns || []).find((c) => c.product_id === matchedDbAd.product_id);
+            if (matchingCampaign) {
+              const { error: insertErr } = await supabase
+                .from('incentive_creatives')
+                .insert({
+                  incentive_campaign_id: matchingCampaign.id,
+                  ad_id: r.matched_ad_id,
+                  meta_ad_id: r.meta_ad_id,
+                  launched_on: new Date().toISOString().slice(0, 10),
+                  creator_id: matchedDbAd.creator_id,
+                  editor_id: matchedDbAd.editor_id,
+                  attribution_source: 'auto',
+                  auto_matched_at: new Date().toISOString()
+                });
+              if (!insertErr) incentiveLinked++;
+            }
+          }
         }
       }
     }

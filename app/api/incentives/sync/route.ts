@@ -59,11 +59,13 @@ async function syncMetaIncentives(actorId: string | null) {
   const adsUrl = graphUrl(`${accountBase}/ads`, token, { limit: "25", fields: "id,name,status,effective_status,created_time,campaign{id,name},adset{id,name},creative{id,name,thumbnail_url,image_url,video_id,object_story_spec,asset_feed_spec}" });
 
   try {
-    const [metaAds, adsResult, campaignsResult, linksResult] = await Promise.all([
+    const [metaAds, adsResult, campaignsResult, linksResult, existingMetaAdsResult, highConfidenceMappingsResult] = await Promise.all([
       graphPages<MetaAdRow>(adsUrl),
       admin.from("ads").select("id,name,product_id,creator_id,editor_id").not("product_id", "is", null),
       admin.from("incentive_campaigns").select("id,product_id,starts_on,ends_on,active").eq("active", true),
-      admin.from("incentive_creatives").select("id,ad_id,meta_ad_id,creator_id,editor_id,evaluation_status")
+      admin.from("incentive_creatives").select("id,ad_id,meta_ad_id,creator_id,editor_id,evaluation_status"),
+      admin.from("meta_ads").select("id,matched_ad_id,matched_creator_id,matched_editor_id,detected_tag,auto_matched_at"),
+      admin.from("meta_ad_transcript_mappings").select("meta_ad_id,matched_ad_id,match_confidence,ad:ads(id,name,product_id,creator_id,editor_id)").eq("match_confidence", "high").not("matched_ad_id", "is", null)
     ]);
     if (adsResult.error) throw adsResult.error;
     if (campaignsResult.error) throw campaignsResult.error;
@@ -75,12 +77,47 @@ async function syncMetaIncentives(actorId: string | null) {
     const existingMetaIds = new Set(existingLinks.map((link) => link.meta_ad_id));
     const reservedAdIds = new Set(existingAdIds);
     const reservedMetaIds = new Set(existingMetaIds);
+
+    const existingMetaAdsMap = new Map((existingMetaAdsResult.data ?? []).map((m) => [m.id, m]));
+    const highMappingMap = new Map((highConfidenceMappingsResult.data ?? []).map((m) => {
+      const ad = Array.isArray(m.ad) ? m.ad[0] : m.ad;
+      return [m.meta_ad_id, { matched_ad_id: m.matched_ad_id, ad: ad as AutoMatchAd | null }];
+    }));
+
     const attributionByMetaId = new Map<string, { ad: AutoMatchAd; tag: string; launchedOn: string; campaign: AutoMatchCampaign | null }>();
     for (const metaAd of metaAds) {
-      const match = matchAdFlowCreative(metaAd.name ?? "", metaAd.creative?.name, internalAds);
-      if (!match || !match.ad.creator_id) continue;
       const launchedOn = (metaAd.created_time ?? today).slice(0, 10);
-      attributionByMetaId.set(metaAd.id, { ad: match.ad, tag: match.tag, launchedOn, campaign: selectProductCampaign(campaigns, match.ad.product_id, launchedOn) });
+      const match = matchAdFlowCreative(metaAd.name ?? "", metaAd.creative?.name, internalAds);
+      if (match && match.ad.creator_id) {
+        attributionByMetaId.set(metaAd.id, { ad: match.ad, tag: match.tag, launchedOn, campaign: selectProductCampaign(campaigns, match.ad.product_id, launchedOn) });
+        continue;
+      }
+
+      // Check high confidence AI transcript mapping
+      const highMapping = highMappingMap.get(metaAd.id);
+      if (highMapping?.ad && highMapping.ad.creator_id) {
+        attributionByMetaId.set(metaAd.id, {
+          ad: highMapping.ad,
+          tag: highMapping.ad.name,
+          launchedOn,
+          campaign: selectProductCampaign(campaigns, highMapping.ad.product_id, launchedOn)
+        });
+        continue;
+      }
+
+      // Check existing meta_ads attribution
+      const existing = existingMetaAdsMap.get(metaAd.id);
+      if (existing?.matched_ad_id) {
+        const matchedInternalAd = internalAds.find((a) => a.id === existing.matched_ad_id);
+        if (matchedInternalAd) {
+          attributionByMetaId.set(metaAd.id, {
+            ad: matchedInternalAd,
+            tag: existing.detected_tag || matchedInternalAd.name,
+            launchedOn,
+            campaign: selectProductCampaign(campaigns, matchedInternalAd.product_id, launchedOn)
+          });
+        }
+      }
     }
     const catalogInsights: MetaInsightRow[] = [];
     const assetInsights: MetaInsightRow[] = [];
@@ -108,7 +145,43 @@ async function syncMetaIncentives(actorId: string | null) {
       const spend = Number(insight?.spend ?? 0);
       const purchases = actionValue(insight?.actions);
       const attribution = attributionByMetaId.get(ad.id);
-      return { id: ad.id, name: ad.name || `Meta ad ${ad.id}`, campaign_id: ad.campaign?.id ?? null, campaign_name: ad.campaign?.name ?? null, adset_id: ad.adset?.id ?? null, adset_name: ad.adset?.name ?? null, creative_id: ad.creative?.id ?? null, creative_name: ad.creative?.name ?? null, thumbnail_url: ad.creative?.thumbnail_url ?? ad.creative?.image_url ?? null, status: ad.status ?? null, effective_status: ad.effective_status ?? null, created_time: ad.created_time ?? null, spend, impressions: Number(insight?.impressions ?? 0), reach: Number(insight?.reach ?? 0), clicks: Number(insight?.clicks ?? 0), link_clicks: Number(insight?.inline_link_clicks ?? 0), purchases, revenue: actionValue(insight?.action_values), cpa: purchases > 0 ? spend / purchases : null, insights_from: catalogStart, insights_to: today, last_synced_at: syncedAt, matched_ad_id: attribution?.ad.id ?? null, matched_creator_id: attribution?.ad.creator_id ?? null, matched_editor_id: attribution?.ad.editor_id ?? null, detected_tag: attribution?.tag ?? null, auto_matched_at: attribution ? syncedAt : null };
+      const existing = existingMetaAdsMap.get(ad.id);
+      const matchedAdId = attribution?.ad.id ?? existing?.matched_ad_id ?? null;
+      const matchedCreatorId = attribution?.ad.creator_id ?? existing?.matched_creator_id ?? null;
+      const matchedEditorId = attribution?.ad.editor_id ?? existing?.matched_editor_id ?? null;
+      const detectedTag = attribution?.tag ?? existing?.detected_tag ?? null;
+      const autoMatchedAt = attribution ? syncedAt : existing?.auto_matched_at ?? null;
+
+      return {
+        id: ad.id,
+        name: ad.name || `Meta ad ${ad.id}`,
+        campaign_id: ad.campaign?.id ?? null,
+        campaign_name: ad.campaign?.name ?? null,
+        adset_id: ad.adset?.id ?? null,
+        adset_name: ad.adset?.name ?? null,
+        creative_id: ad.creative?.id ?? null,
+        creative_name: ad.creative?.name ?? null,
+        thumbnail_url: ad.creative?.thumbnail_url ?? ad.creative?.image_url ?? null,
+        status: ad.status ?? null,
+        effective_status: ad.effective_status ?? null,
+        created_time: ad.created_time ?? null,
+        spend,
+        impressions: Number(insight?.impressions ?? 0),
+        reach: Number(insight?.reach ?? 0),
+        clicks: Number(insight?.clicks ?? 0),
+        link_clicks: Number(insight?.inline_link_clicks ?? 0),
+        purchases,
+        revenue: actionValue(insight?.action_values),
+        cpa: purchases > 0 ? spend / purchases : null,
+        insights_from: catalogStart,
+        insights_to: today,
+        last_synced_at: syncedAt,
+        matched_ad_id: matchedAdId,
+        matched_creator_id: matchedCreatorId,
+        matched_editor_id: matchedEditorId,
+        detected_tag: detectedTag,
+        auto_matched_at: autoMatchedAt
+      };
     });
     if (catalogRows.length) {
       const { error: catalogError } = await admin.from("meta_ads").upsert(catalogRows, { onConflict: "id" });

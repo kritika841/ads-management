@@ -33,6 +33,8 @@ export type MetaAd = {
   matched_editor_id: string | null;
   detected_tag: string | null;
   auto_matched_at: string | null;
+  matched_creative_name?: string | null;
+  match_confidence?: "high" | "medium" | "low" | "unmatched" | null;
   manual_outcome?: IncentiveDecisionStatus | null;
   manual_outcome_at?: string | null;
   manual_outcome_by?: string | null;

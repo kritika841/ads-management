@@ -36,11 +36,10 @@ export default function ResetPasswordPage() {
   return (
     <main className="grid min-h-screen bg-card lg:grid-cols-[minmax(360px,0.8fr)_minmax(520px,1.2fr)]">
       <section className="relative hidden overflow-hidden bg-neutral-950 p-10 text-white lg:flex lg:flex-col lg:justify-between xl:p-14">
-        <div className="flex items-center gap-3">
-          <span className="flex size-11 items-center justify-center rounded-md bg-card text-sm font-bold text-foreground">AF</span>
-          <span>
-            <span className="block text-xl font-semibold">AdFlow</span>
-            <span className="block text-xs text-muted-foreground">Creative operations</span>
+        <div className="flex flex-col items-start gap-1">
+          <img src="/logo-dark.png" alt="Satmi" className="h-9 w-auto max-w-[130px] object-contain" />
+          <span className="text-lg font-semibold tracking-tight text-white/90">
+            AdFlow
           </span>
         </div>
         <div className="max-w-md">
@@ -53,11 +52,11 @@ export default function ResetPasswordPage() {
 
       <section className="flex min-h-screen items-center justify-center bg-muted px-5 py-10 sm:px-8">
         <div className="w-full max-w-md">
-          <div className="mb-8 flex items-center gap-3 lg:hidden">
-            <span className="flex size-10 items-center justify-center rounded-md bg-neutral-950 text-sm font-bold text-white">AF</span>
-            <span>
-              <span className="block text-lg font-semibold text-foreground">AdFlow</span>
-              <span className="block text-xs text-muted-foreground">Creative operations</span>
+          <div className="mb-8 flex flex-col items-start gap-1 lg:hidden">
+            <img src="/logo-light.png" alt="Satmi" className="h-8 w-auto max-w-[120px] object-contain dark:hidden" />
+            <img src="/logo-dark.png" alt="Satmi" className="hidden h-8 w-auto max-w-[120px] object-contain dark:block" />
+            <span className="text-base font-semibold tracking-tight text-foreground">
+              AdFlow
             </span>
           </div>
           <div className="panel p-5 sm:p-7">

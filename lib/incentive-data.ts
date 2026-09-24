@@ -88,13 +88,9 @@ export async function getIncentiveDashboard(profile: Profile) {
   const [campaignResult, creativeResult, allAdsResult, metaAdsResult, transcriptMappingsResult] = await Promise.all([
     admin.from("incentive_campaigns").select("*,product:products(id,name,sku)").order("created_at", { ascending: false }),
     creativesQuery,
-    !isScoped
-      ? admin.from("ads").select("id,name,product_id,creator_id,editor_id,thumbnail_url,drive_file_id,preview_url,resolved_video_url,status,production_stage,creator:profiles!ads_creator_id_fkey(id,name),editor:profiles!ads_editor_id_fkey(id,name)").order("created_at", { ascending: false })
-      : Promise.resolve({ data: userAds, error: null }),
+    admin.from("ads").select("id,name,product_id,creator_id,editor_id,thumbnail_url,drive_file_id,preview_url,resolved_video_url,status,production_stage,creator:profiles!ads_creator_id_fkey(id,name),editor:profiles!ads_editor_id_fkey(id,name)").order("created_at", { ascending: false }),
     loadMetaAds(admin),
-    reviewer
-      ? admin.from("meta_ad_transcript_mappings").select("mapping_key,meta_ad_id,meta_creative_id,meta_video_id,transcript,transcript_language,transcript_language_confidence,transcript_source,transcript_status,transcript_error,review_status,reviewed_at,review_note,matched_ad_id,match_score,match_confidence,matched_tokens,transcript_token_count,script_token_count,mapped_at,ad:ads!meta_ad_transcript_mappings_matched_ad_id_fkey(id,name,script_text,thumbnail_url,preview_url,drive_file_id,drive_url,resolved_video_url,product:products(name))").order("mapped_at", { ascending: false })
-      : Promise.resolve({ data: [], error: null })
+    admin.from("meta_ad_transcript_mappings").select("mapping_key,meta_ad_id,meta_creative_id,meta_video_id,transcript,transcript_language,transcript_language_confidence,transcript_source,transcript_status,transcript_error,review_status,reviewed_at,review_note,matched_ad_id,match_score,match_confidence,matched_tokens,transcript_token_count,script_token_count,mapped_at,ad:ads!meta_ad_transcript_mappings_matched_ad_id_fkey(id,name,creator_id,editor_id,script_text,thumbnail_url,preview_url,drive_file_id,drive_url,resolved_video_url,product:products(name))").order("mapped_at", { ascending: false })
   ]);
 
   if (campaignResult.error) throw campaignResult.error;
@@ -103,12 +99,22 @@ export async function getIncentiveDashboard(profile: Profile) {
   if (metaAdsResult.error) throw metaAdsResult.error;
   if (transcriptMappingsResult.error) throw transcriptMappingsResult.error;
 
-  const rawEligibleAds = !isScoped ? (allAdsResult.data ?? []) : userAds;
-  const eligibleAds = rawEligibleAds.map((ad) => ({
+  const allAdsData = (allAdsResult.data ?? []).map((ad) => ({
     ...ad,
     creator: Array.isArray(ad.creator) ? ad.creator[0] ?? null : ad.creator,
     editor: Array.isArray(ad.editor) ? ad.editor[0] ?? null : ad.editor
   }));
+  const eligibleAds = allAdsData;
+  const allAdsById = new Map(allAdsData.map((ad) => [ad.id, ad]));
+
+  const highConfidenceTranscriptMap = new Map<string, typeof transcriptMappingsResult.data[0]>();
+  for (const mapping of transcriptMappingsResult.data ?? []) {
+    if (mapping.match_confidence === "high" && mapping.matched_ad_id) {
+      if (!highConfidenceTranscriptMap.has(mapping.meta_ad_id)) {
+        highConfidenceTranscriptMap.set(mapping.meta_ad_id, mapping);
+      }
+    }
+  }
 
   const userAdIds = new Set(userAds.map((a) => a.id));
   const userAdNames = new Set(
@@ -116,47 +122,80 @@ export async function getIncentiveDashboard(profile: Profile) {
   );
 
   // Filter meta ads for scoped roles so users only see their matching ads
-  const rawMetaAds = (metaAdsResult.data ?? []).map((ad) => ({
-    ...ad,
-    spend: Number(ad.spend),
-    purchases: Number(ad.purchases),
-    revenue: Number(ad.revenue),
-    cpa: numberOrNull(ad.cpa),
-    daily_metrics: (ad.daily_metrics ?? []).map(normalizeMetric),
-    assets: (ad.assets ?? []).map((asset: Record<string, unknown>) => ({
-      ...asset,
-      daily_metrics: (asset.daily_metrics as Record<string, unknown>[] ?? []).map(normalizeMetric)
-    }))
-  })) as MetaAd[];
+  const rawMetaAds = (metaAdsResult.data ?? []).map((ad) => {
+    const highMatch = highConfidenceTranscriptMap.get(ad.id);
+    const matchedAdId = ad.matched_ad_id || highMatch?.matched_ad_id || null;
+    const dbAd = matchedAdId ? allAdsById.get(matchedAdId) : null;
+    const highMatchAd = Array.isArray(highMatch?.ad) ? highMatch?.ad[0] : highMatch?.ad;
+    const matchedCreatorId = ad.matched_creator_id || highMatchAd?.creator_id || dbAd?.creator_id || null;
+    const matchedEditorId = ad.matched_editor_id || highMatchAd?.editor_id || dbAd?.editor_id || null;
+    const matchedCreativeName = dbAd?.name || highMatchAd?.name || null;
+    const matchConfidence = highMatch ? "high" : ad.matched_ad_id ? "high" : null;
+
+    return {
+      ...ad,
+      matched_ad_id: matchedAdId,
+      matched_creator_id: matchedCreatorId,
+      matched_editor_id: matchedEditorId,
+      matched_creative_name: matchedCreativeName,
+      match_confidence: matchConfidence,
+      spend: Number(ad.spend),
+      purchases: Number(ad.purchases),
+      revenue: Number(ad.revenue),
+      cpa: numberOrNull(ad.cpa),
+      daily_metrics: (ad.daily_metrics ?? []).map(normalizeMetric),
+      assets: (ad.assets ?? []).map((asset: Record<string, unknown>) => ({
+        ...asset,
+        daily_metrics: (asset.daily_metrics as Record<string, unknown>[] ?? []).map(normalizeMetric)
+      }))
+    };
+  }) as MetaAd[];
 
   const metaAds = !isScoped
     ? rawMetaAds
-    : rawMetaAds.filter((ad) => {
-        // Direct ID mapping
-        if (ad.matched_ad_id && userAdIds.has(ad.matched_ad_id)) return true;
-        if ((profile.role === "content_creator" || profile.role === "manager") && ad.matched_creator_id === profile.id) return true;
-        if ((profile.role === "editor" || profile.role === "manager") && ad.matched_editor_id === profile.id) return true;
-
-        // Tag matching on detected tag
-        if (ad.detected_tag && userAdNames.has(ad.detected_tag.toUpperCase())) return true;
-
-        // Tag matching on ad name (e.g. TAM0164 in "OPEN - TAM0164 - Scale")
-        for (const name of userAdNames) {
-          if (ad.name && ad.name.toUpperCase().includes(name)) return true;
-        }
-
-        // Tag matching on child media asset breakdown names (e.g. TAM0173.mp4)
-        if (ad.assets?.length) {
-          for (const asset of ad.assets) {
-            const assetName = (asset.asset_label || "").toUpperCase();
-            for (const name of userAdNames) {
-              if (assetName.includes(name)) return true;
+    : rawMetaAds
+        .map((ad) => {
+          // If ad has multiple media assets, filter to only those belonging to this user
+          if (ad.assets && ad.assets.length > 1) {
+            const userAssets = ad.assets.filter((asset) => {
+              const assetName = (asset.asset_label || "").toUpperCase();
+              return [...userAdNames].some((name) => assetName.includes(name));
+            });
+            if (userAssets.length > 0) {
+              return { ...ad, assets: userAssets };
             }
           }
-        }
+          return ad;
+        })
+        .filter((ad) => {
+          // Direct ID mapping to user's authored/edited creative
+          if (ad.matched_ad_id && userAdIds.has(ad.matched_ad_id)) return true;
+          if ((profile.role === "content_creator" || profile.role === "manager") && ad.matched_creator_id === profile.id) return true;
+          if ((profile.role === "editor" || profile.role === "manager") && ad.matched_editor_id === profile.id) return true;
 
-        return false;
-      });
+          // Tag matching on detected tag (only if it matches user's creative tag)
+          if (ad.detected_tag && userAdNames.has(ad.detected_tag.toUpperCase())) return true;
+
+          // Tag matching strictly on creative name (NOT ad name)
+          if (ad.creative_name) {
+            const upperCreativeName = ad.creative_name.toUpperCase();
+            for (const name of userAdNames) {
+              if (upperCreativeName.includes(name)) return true;
+            }
+          }
+
+          // Tag matching on child media asset breakdown names (e.g. TAM0173.mp4)
+          if (ad.assets?.length) {
+            for (const asset of ad.assets) {
+              const assetName = (asset.asset_label || "").toUpperCase();
+              for (const name of userAdNames) {
+                if (assetName.includes(name)) return true;
+              }
+            }
+          }
+
+          return false;
+        });
 
   const campaignDestinations = getCampaignDestinations();
   const matchedMetaAdIds = new Set(metaAds.map((ad) => ad.id));

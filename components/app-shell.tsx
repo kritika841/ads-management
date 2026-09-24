@@ -199,14 +199,24 @@ function SidebarContent({
 }) {
   return (
     <>
-      <div className="flex h-20 items-center border-b border-border px-5">
-        <Link href="/dashboard" className="flex items-center gap-3" onClick={onNavigate}>
-          <span className="flex size-10 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground shadow-sm dark:shadow-none">
-            AF
-          </span>
-          <span className="min-w-0">
-            <span className="block text-[17px] font-semibold leading-tight text-foreground">AdFlow</span>
-            <span className="block text-xs text-muted-foreground">Creative operations</span>
+      <div className="flex min-h-[84px] items-center border-b border-border px-5 py-3.5">
+        <Link href="/dashboard" className="flex flex-col items-start gap-1" onClick={onNavigate}>
+          <div className="relative flex items-center">
+            {/* Light mode logo */}
+            <img
+              src="/logo-light.png"
+              alt="Satmi"
+              className="h-7 w-auto max-w-[120px] object-contain dark:hidden"
+            />
+            {/* Dark mode logo */}
+            <img
+              src="/logo-dark.png"
+              alt="Satmi"
+              className="hidden h-7 w-auto max-w-[120px] object-contain dark:block"
+            />
+          </div>
+          <span className="text-[13px] font-semibold tracking-tight text-foreground">
+            AdFlow
           </span>
         </Link>
       </div>

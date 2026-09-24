@@ -576,16 +576,16 @@ function CreativeAssetsTable({ ads, creatives, libraryAds, reviewer, selected, a
                 if (playableAsset?.name && !isCaptionLike(playableAsset.name)) {
                     return cleanMediaTitle(playableAsset.name);
                 }
-                if (libraryAd?.name && !isCaptionLike(libraryAd.name)) {
-                    return cleanMediaTitle(`${libraryAd.name}.mp4`);
+                const creativeLibName = libraryAd?.name ?? ad.matched_creative_name;
+                if (creativeLibName && !isCaptionLike(creativeLibName)) {
+                    return cleanMediaTitle(`${creativeLibName}.mp4`);
                 }
                 if (ad.detected_tag && (ad.assets?.length ?? 1) <= 1) {
                     return cleanMediaTitle(`${ad.detected_tag}.mp4`);
                 }
-                const tagMatch = ad.name?.match(/\b(?:HIM|TAM|ISH)\d{2,}\b/i)?.[0];
-                const adHasMultipleTags = (ad.name?.match(/\b(?:HIM|TAM|ISH)\d{2,}\b/gi)?.length ?? 0) > 1;
-                if (tagMatch && !adHasMultipleTags && (ad.assets?.length ?? 1) <= 1) {
-                    return cleanMediaTitle(`${tagMatch.toUpperCase()}.mp4`);
+                const creativeTagMatch = ad.creative_name?.match(/\b(?:HIM|TAM|ISH)\d{2,}\b/i)?.[0];
+                if (creativeTagMatch && (ad.assets?.length ?? 1) <= 1) {
+                    return cleanMediaTitle(`${creativeTagMatch.toUpperCase()}.mp4`);
                 }
                 if (clean && !isCaptionLike(clean)) {
                     return clean;
@@ -593,7 +593,7 @@ function CreativeAssetsTable({ ads, creatives, libraryAds, reviewer, selected, a
                 if (mid) {
                     return mid;
                 }
-                return ad.name || "Unnamed creative";
+                return ad.creative_name || ad.name || "Unnamed creative";
             };
             const displayName = resolveDisplayName();
             const assetMediaId = asset ? (mediaIdentifier(asset.asset_label) ?? mediaIdentifier(asset.id)) : null;
@@ -614,7 +614,48 @@ function CreativeAssetsTable({ ads, creatives, libraryAds, reviewer, selected, a
       {!isEffectiveHidden("ctr") ? <td className="px-4 py-3 tabular-nums">{unavailable ? "—" : `${ctr.toFixed(2)}%`}</td> : null}
       {!isEffectiveHidden("cpm") ? <td className="px-4 py-3 tabular-nums">{unavailable ? "—" : money(cpm)}</td> : null}
       <td className="px-4 py-3">{ad.manual_outcome ? <><OutcomeBadge outcome={ad.manual_outcome}/><p className="mt-1 text-[10px] text-muted-foreground">Manual ad override</p></> : mapped ? <><OutcomeBadge outcome={mapped.decision_status ?? "unreviewed"}/><p className="mt-1 text-[10px] text-muted-foreground">Tracking result</p>{reviewer ? <DecisionSelect creative={mapped}/> : null}</> : <span className="text-xs text-muted-foreground">Not set</span>}</td>
-      <td className="px-4 py-3 text-xs text-muted-foreground">{unavailable ? "Not reported · this media has no breakdown while other media in this ad does" : usingParentFallback ? "Ad-level total (breakdown pending)" : isOnlyCreative ? "Exact ad total · one creative variation" : mapped ? <><span className="font-medium text-success">Mapped to AdFlow</span><br />{ad.detected_tag ? <span className="font-mono">Tag {ad.detected_tag}</span> : "Internal creative match"}</> : ad.detected_tag ? <><span className="font-mono">Tag {ad.detected_tag}</span><br />Awaiting campaign match</> : "Unmapped"}</td>
+      <td className="px-4 py-3 text-xs text-muted-foreground">{(() => {
+          const creativeLibName = libraryAd?.name ?? ad.matched_creative_name;
+          if (creativeLibName) {
+            return (
+              <>
+                <span className="font-medium text-success">{creativeLibName}</span>
+                <br />
+                <span className="text-[11px] text-muted-foreground">
+                  {ad.match_confidence === "high" ? "High confidence match" : mapped ? "Mapped to AdFlow" : "Creative Library match"}
+                </span>
+                {ad.detected_tag && ad.detected_tag !== creativeLibName ? (
+                  <>
+                    <br />
+                    <span className="font-mono text-[10px] text-muted-foreground">Tag {ad.detected_tag}</span>
+                  </>
+                ) : null}
+              </>
+            );
+          }
+          if (unavailable) return "Not reported · this media has no breakdown while other media in this ad does";
+          if (usingParentFallback) return "Ad-level total (breakdown pending)";
+          if (isOnlyCreative) return "Exact ad total · one creative variation";
+          if (mapped) {
+            return (
+              <>
+                <span className="font-medium text-success">Mapped to AdFlow</span>
+                <br />
+                {ad.detected_tag ? <span className="font-mono">Tag {ad.detected_tag}</span> : "Internal creative match"}
+              </>
+            );
+          }
+          if (ad.detected_tag) {
+            return (
+              <>
+                <span className="font-mono">Tag {ad.detected_tag}</span>
+                <br />
+                Awaiting campaign match
+              </>
+            );
+          }
+          return "Unmapped";
+        })()}</td>
       <td className="px-4 py-3"><Button size="icon" variant="secondary" className="size-9" onClick={openPreview} title="View exact video" aria-label="View exact video"><Eye className="size-4"/></Button></td>
     </tr>;
         })}</tbody></table></div>;
@@ -640,7 +681,7 @@ function MetaAdsTable({ ads, onView }: {
         id?: string;
         videoId?: string;
         url: string;
-    }>; const stored = videoRows.find((item) => item.adId === ad.id && (!ad.creative_id || item.creativeId === ad.creative_id || item.id === ad.creative_id || item.videoId === ad.creative_id)) ?? (() => { const candidates = videoRows.filter((item) => item.adName === ad.name); return candidates.length === 1 ? candidates[0] : undefined; })(); const cpa = ad.purchases ? ad.spend / ad.purchases : null; const roas = ad.spend ? ad.revenue / ad.spend : 0; const ctr = ad.impressions ? ad.clicks / ad.impressions * 100 : 0; const cpm = ad.impressions ? ad.spend / ad.impressions * 1000 : 0; const delivery = normalizedStatus(ad.effective_status ?? ad.status); return <tr key={ad.id} className="bg-card align-top"><td className="px-4 py-3"><div className="flex items-center gap-3"><div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-muted">{ad.thumbnail_url ? <img src={ad.thumbnail_url} alt="" className="size-full object-cover"/> : <span className="text-xs text-muted-foreground">—</span>}</div><div className="min-w-0"><p className="max-w-64 truncate font-medium">{ad.name || "Unnamed ad"}</p><p className="font-mono text-[10px] text-muted-foreground">Meta ad {ad.id}</p><p className="font-mono text-[10px] text-muted-foreground">Creative {ad.creative_id ?? "—"}</p></div></div></td><td className="px-4 py-3"><p className="max-w-56 truncate">{ad.campaign_name ?? "—"}</p><p className="max-w-56 truncate text-xs text-muted-foreground">{ad.adset_name ?? "—"}</p></td><td className="px-4 py-3"><span className={cn("rounded-full px-2 py-1 text-xs font-medium", delivery === "Active" ? "bg-success/15 text-success" : delivery === "Learning" ? "bg-warning/15 text-warning" : "bg-muted text-muted-foreground")}>{delivery}</span></td><td className="px-4 py-3 tabular-nums">{money(ad.spend)}</td><td className="px-4 py-3 tabular-nums">{number(ad.impressions)}</td><td className="px-4 py-3 tabular-nums">{number(ad.reach)}</td><td className="px-4 py-3 tabular-nums">{number(ad.clicks)}</td><td className="px-4 py-3 tabular-nums">{number(ad.purchases)}</td><td className="px-4 py-3 tabular-nums">{money(ad.revenue)}</td><td className="px-4 py-3 tabular-nums">{cpa == null ? "—" : money(cpa)}</td><td className="px-4 py-3 tabular-nums">{roas.toFixed(2)}</td><td className="px-4 py-3 tabular-nums">{ctr.toFixed(2)}%</td><td className="px-4 py-3 tabular-nums">{money(cpm)}</td><td className="px-4 py-3 text-xs text-muted-foreground">{ad.detected_tag ? <><span className="font-mono">{ad.detected_tag}</span><br />{ad.matched_ad_id ? "Mapped to incentive creative" : "Awaiting campaign match"}</> : "No AdFlow tag detected"}</td><td className="px-4 py-3"><div className="flex gap-1"><Button size="sm" variant="secondary" onClick={() => onView(ad)}><ExternalLink className="size-3.5"/>View ad</Button>{stored?.url || ad.matched_ad_id ? <a className="inline-flex h-9 items-center gap-1 rounded-md border border-border px-2 text-xs hover:bg-muted" href={stored?.url ? `/api/incentives/media-proxy?url=${encodeURIComponent(stored.url)}&download=1` : `/api/ads/${ad.matched_ad_id}/download`} target="_blank" rel="noreferrer"><Download className="size-3.5"/>Download</a> : null}</div></td></tr>; })}</tbody></table></div>;
+    }>; const stored = videoRows.find((item) => item.adId === ad.id && (!ad.creative_id || item.creativeId === ad.creative_id || item.id === ad.creative_id || item.videoId === ad.creative_id)) ?? (() => { const candidates = videoRows.filter((item) => item.adName === ad.name); return candidates.length === 1 ? candidates[0] : undefined; })(); const cpa = ad.purchases ? ad.spend / ad.purchases : null; const roas = ad.spend ? ad.revenue / ad.spend : 0; const ctr = ad.impressions ? ad.clicks / ad.impressions * 100 : 0; const cpm = ad.impressions ? ad.spend / ad.impressions * 1000 : 0; const delivery = normalizedStatus(ad.effective_status ?? ad.status); return <tr key={ad.id} className="bg-card align-top"><td className="px-4 py-3"><div className="flex items-center gap-3"><div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-muted">{ad.thumbnail_url ? <img src={ad.thumbnail_url} alt="" className="size-full object-cover"/> : <span className="text-xs text-muted-foreground">—</span>}</div><div className="min-w-0"><p className="max-w-64 truncate font-medium">{ad.name || "Unnamed ad"}</p><p className="font-mono text-[10px] text-muted-foreground">Meta ad {ad.id}</p><p className="font-mono text-[10px] text-muted-foreground">Creative {ad.creative_id ?? "—"}</p></div></div></td><td className="px-4 py-3"><p className="max-w-56 truncate">{ad.campaign_name ?? "—"}</p><p className="max-w-56 truncate text-xs text-muted-foreground">{ad.adset_name ?? "—"}</p></td><td className="px-4 py-3"><span className={cn("rounded-full px-2 py-1 text-xs font-medium", delivery === "Active" ? "bg-success/15 text-success" : delivery === "Learning" ? "bg-warning/15 text-warning" : "bg-muted text-muted-foreground")}>{delivery}</span></td><td className="px-4 py-3 tabular-nums">{money(ad.spend)}</td><td className="px-4 py-3 tabular-nums">{number(ad.impressions)}</td><td className="px-4 py-3 tabular-nums">{number(ad.reach)}</td><td className="px-4 py-3 tabular-nums">{number(ad.clicks)}</td><td className="px-4 py-3 tabular-nums">{number(ad.purchases)}</td><td className="px-4 py-3 tabular-nums">{money(ad.revenue)}</td><td className="px-4 py-3 tabular-nums">{cpa == null ? "—" : money(cpa)}</td><td className="px-4 py-3 tabular-nums">{roas.toFixed(2)}</td><td className="px-4 py-3 tabular-nums">{ctr.toFixed(2)}%</td><td className="px-4 py-3 tabular-nums">{money(cpm)}</td><td className="px-4 py-3 text-xs text-muted-foreground">{ad.matched_creative_name ? <><span className="font-medium text-success">{ad.matched_creative_name}</span><br /><span className="text-[11px] text-muted-foreground">{ad.match_confidence === "high" ? "High confidence match" : "Creative Library match"}</span>{ad.detected_tag && ad.detected_tag !== ad.matched_creative_name ? <><br /><span className="font-mono text-[10px] text-muted-foreground">Tag {ad.detected_tag}</span></> : null}</> : ad.detected_tag ? <><span className="font-mono">{ad.detected_tag}</span><br />{ad.matched_ad_id ? "Mapped to incentive creative" : "Awaiting campaign match"}</> : "No AdFlow tag detected"}</td><td className="px-4 py-3"><div className="flex gap-1"><Button size="sm" variant="secondary" onClick={() => onView(ad)}><ExternalLink className="size-3.5"/>View ad</Button>{stored?.url || ad.matched_ad_id ? <a className="inline-flex h-9 items-center gap-1 rounded-md border border-border px-2 text-xs hover:bg-muted" href={stored?.url ? `/api/incentives/media-proxy?url=${encodeURIComponent(stored.url)}&download=1` : `/api/ads/${ad.matched_ad_id}/download`} target="_blank" rel="noreferrer"><Download className="size-3.5"/>Download</a> : null}</div></td></tr>; })}</tbody></table></div>;
 }
 function MetaAdPreviewModal({ ad, creative, libraryAd, onClose }: {
     ad: MetaAd;

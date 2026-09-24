@@ -7,12 +7,13 @@ export async function POST() {
   const profile = await requireRole(["admin", "manager"]);
   const admin = createSupabaseAdminClient();
   const [{ data: scripts, error: scriptsError }, { data: mappings, error: mappingsError }] = await Promise.all([
-    admin.from("ads").select("id,name,script_text").eq("production_stage", "approved").not("script_text", "is", null),
-    admin.from("meta_ad_transcript_mappings").select("mapping_key,meta_ad_id,transcript,transcript_source").eq("transcript_status", "available").not("transcript", "is", null).limit(500)
+    admin.from("ads").select("id,name,script_text,creator_id,editor_id,product_id").eq("production_stage", "approved").not("script_text", "is", null),
+    admin.from("meta_ad_transcript_mappings").select("mapping_key,meta_ad_id,transcript,transcript_source").eq("transcript_status", "available").not("transcript", "is", null).limit(5000)
   ]);
   if (scriptsError || mappingsError) return NextResponse.json({ error: scriptsError?.message ?? mappingsError?.message }, { status: 502 });
 
   const candidates = scripts ?? [];
+  const scriptMap = new Map(candidates.map((s) => [s.id, s]));
   const updates = (mappings ?? [])
     .filter((mapping) => mapping.transcript_source !== "exact_creative_id")
     .map((mapping) => {
@@ -41,7 +42,13 @@ export async function POST() {
       // Update meta_ads for high confidence matches
       const highMatches = chunk.filter((c) => c.match_confidence === "high" && c.matched_ad_id);
       for (const hm of highMatches) {
-        await admin.from("meta_ads").update({ matched_ad_id: hm.matched_ad_id }).eq("id", hm.meta_ad_id);
+        const matchedScript = hm.matched_ad_id ? scriptMap.get(hm.matched_ad_id) : undefined;
+        await admin.from("meta_ads").update({
+          matched_ad_id: hm.matched_ad_id,
+          matched_creator_id: matchedScript?.creator_id ?? null,
+          matched_editor_id: matchedScript?.editor_id ?? null,
+          auto_matched_at: new Date().toISOString()
+        }).eq("id", hm.meta_ad_id);
       }
     }
   }
