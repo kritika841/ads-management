@@ -31,7 +31,8 @@ const createAnnouncementSchema = z.object({
   attachments: z.array(attachmentSchema).default([]),
   targetType: z.enum(["all", "roles", "users"]),
   targetRoles: z.array(z.enum(["content_creator", "editor", "manager"])).optional(),
-  targetUserIds: z.array(z.string().min(1)).optional()
+  targetUserIds: z.array(z.string().min(1)).optional(),
+  showPopup: z.boolean().default(true).optional()
 });
 
 export async function createAnnouncement(payload: z.input<typeof createAnnouncementSchema>) {
@@ -62,7 +63,8 @@ export async function createAnnouncement(payload: z.input<typeof createAnnouncem
       authorRole: profile.role as "admin" | "manager",
       targetType: parsed.data.targetType as AnnouncementTargetType,
       targetRoles: resolvedTargetRoles,
-      targetUserIds: parsed.data.targetUserIds
+      targetUserIds: parsed.data.targetUserIds,
+      showPopup: parsed.data.showPopup ?? true
     });
 
     revalidatePath("/announcements");

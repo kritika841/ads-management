@@ -41,6 +41,7 @@ const hiddenMetricsSchema = z.object({
 }).optional();
 
 const managerCreativeScopeSchema = z.enum(["all", "own"]).optional();
+const bulkRolesSchema = z.array(z.enum(["admin", "content_creator", "editor", "manager"])).optional();
 
 const settingsSchema = z.object({
   twoStepApproval: z.boolean(),
@@ -48,7 +49,8 @@ const settingsSchema = z.object({
   maxConcurrentEdits: z.number().int().min(1).max(10),
   allowManagerFinalApproval: z.boolean().default(true),
   managerCreativeScope: managerCreativeScopeSchema,
-  hiddenMetricsByRole: hiddenMetricsSchema
+  hiddenMetricsByRole: hiddenMetricsSchema,
+  bulkAddToCampaignRoles: bulkRolesSchema
 });
 
 const analyticsSlaSchema = z.object({
@@ -385,6 +387,7 @@ export async function updateSettings(payload: {
   allowManagerFinalApproval?: boolean;
   managerCreativeScope?: ManagerCreativeScope;
   hiddenMetricsByRole?: HiddenMetricsByRole;
+  bulkAddToCampaignRoles?: ("admin" | "content_creator" | "editor" | "manager")[];
 }) {
   const adminProfile = await requireRole(["admin"]);
   const parsed = settingsSchema.safeParse(payload);
@@ -397,8 +400,12 @@ export async function updateSettings(payload: {
     ? parsed.data.allowManagerFinalApproval
     : !parsed.data.twoStepApproval;
 
-  if (parsed.data.hiddenMetricsByRole || parsed.data.managerCreativeScope) {
-    await writeMetricVisibilityFile(parsed.data.hiddenMetricsByRole ?? {}, parsed.data.managerCreativeScope);
+  if (parsed.data.hiddenMetricsByRole || parsed.data.managerCreativeScope || parsed.data.bulkAddToCampaignRoles) {
+    await writeMetricVisibilityFile(
+      parsed.data.hiddenMetricsByRole ?? {},
+      parsed.data.managerCreativeScope,
+      parsed.data.bulkAddToCampaignRoles
+    );
   }
 
   const patch: Record<string, unknown> = {
@@ -414,6 +421,10 @@ export async function updateSettings(payload: {
 
   if (parsed.data.hiddenMetricsByRole) {
     patch.hidden_metrics_by_role = parsed.data.hiddenMetricsByRole;
+  }
+
+  if (parsed.data.bulkAddToCampaignRoles) {
+    patch.bulk_add_to_campaign_roles = parsed.data.bulkAddToCampaignRoles;
   }
 
   let { error } = await admin.from("app_settings").update(patch).eq("id", 1);
@@ -436,6 +447,12 @@ export async function updateSettings(payload: {
     error = retry.error;
   }
 
+  if (error && (error.code === "PGRST204" || error.message.includes("bulk_add_to_campaign_roles"))) {
+    delete patch.bulk_add_to_campaign_roles;
+    const retry = await admin.from("app_settings").update(patch).eq("id", 1);
+    error = retry.error;
+  }
+
   if (error) {
     return { ok: false, message: error.message };
   }
@@ -443,6 +460,7 @@ export async function updateSettings(payload: {
   await audit(adminProfile.id, "updated_settings", "app_settings", "1", parsed.data);
   revalidatePath("/admin/settings");
   revalidatePath("/incentives");
+  revalidatePath("/library");
   return { ok: true };
 }
 

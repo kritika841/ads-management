@@ -5,7 +5,8 @@ import { z } from "zod";
 import { canReview, requireProfile } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { hasAdAccess } from "@/lib/ad-access";
-import { canDeleteAd } from "@/lib/permissions";
+import { canBulkAddToCampaign, canDeleteAd } from "@/lib/permissions";
+import { getAppSettings } from "@/lib/data";
 import {
   activeEditorStages,
   creatorControlledStages,
@@ -1585,4 +1586,121 @@ export async function getNextAdName(creatorId: string): Promise<string> {
   }, 0);
 
   return `${prefix}${String(max + 1).padStart(4, "0")}`;
+}
+
+export async function bulkAssignCampaign(adIds: string[], campaignId: string) {
+  const profile = await requireProfile();
+  const settings = await getAppSettings();
+
+  if (!canBulkAddToCampaign(profile.role, settings)) {
+    return { ok: false, message: "You do not have permission to bulk assign creatives to campaigns." };
+  }
+
+  if (!Array.isArray(adIds) || adIds.length === 0) {
+    return { ok: false, message: "No creatives selected." };
+  }
+
+  if (!campaignId) {
+    return { ok: false, message: "Please select a target campaign." };
+  }
+
+  const admin = createSupabaseAdminClient();
+
+  // Validate target campaign
+  const { data: campaign, error: campaignError } = await admin
+    .from("campaigns")
+    .select("id, name, active")
+    .eq("id", campaignId)
+    .maybeSingle();
+
+  if (campaignError || !campaign) {
+    return { ok: false, message: campaignError?.message ?? "Selected campaign not found." };
+  }
+
+  // Fetch the target ads
+  const { data: adsToUpdate, error: fetchError } = await admin
+    .from("ads")
+    .select("id, name, campaign_id")
+    .in("id", adIds);
+
+  if (fetchError || !adsToUpdate || adsToUpdate.length === 0) {
+    return { ok: false, message: fetchError?.message ?? "Selected creatives not found." };
+  }
+
+  const now = new Date().toISOString();
+  let updatedCount = 0;
+  const errors: string[] = [];
+  const updatedAdIds: string[] = [];
+
+  for (const ad of adsToUpdate) {
+    if (ad.campaign_id === campaignId) {
+      updatedCount++;
+      continue;
+    }
+
+    // Resolve name clash if ad with lower(name) exists in target campaign
+    let targetName = ad.name;
+    const { data: conflicting } = await admin
+      .from("ads")
+      .select("id")
+      .eq("campaign_id", campaignId)
+      .ilike("name", targetName)
+      .neq("id", ad.id)
+      .maybeSingle();
+
+    if (conflicting) {
+      targetName = `${ad.name} (${Math.floor(Math.random() * 900) + 100})`;
+    }
+
+    const { error: updateError } = await admin
+      .from("ads")
+      .update({
+        campaign_id: campaignId,
+        name: targetName,
+        updated_at: now
+      })
+      .eq("id", ad.id);
+
+    if (updateError) {
+      errors.push(`Failed to update ${ad.name}: ${updateError.message}`);
+    } else {
+      updatedCount++;
+      updatedAdIds.push(ad.id);
+    }
+  }
+
+  if (updatedAdIds.length > 0) {
+    try {
+      await admin.from("audit_logs").insert(
+        updatedAdIds.map((id) => ({
+          actor_id: profile.id,
+          action: "bulk_assigned_campaign",
+          target_type: "ad",
+          target_id: id,
+          metadata: {
+            new_campaign_id: campaignId,
+            campaign_name: campaign.name
+          }
+        }))
+      );
+    } catch (auditErr) {
+      console.warn("Non-fatal issue inserting audit log:", auditErr);
+    }
+  }
+
+  revalidatePath("/library");
+  revalidatePath("/dashboard");
+  revalidatePath("/campaigns");
+  revalidatePath("/campaigns/[id]", "page");
+  revalidatePath(`/campaigns/${campaignId}`);
+
+  if (updatedCount === 0 && errors.length > 0) {
+    return { ok: false, message: errors[0] };
+  }
+
+  return {
+    ok: true,
+    count: updatedCount,
+    message: `Successfully assigned ${updatedCount} creative${updatedCount === 1 ? "" : "s"} to "${campaign.name}".`
+  };
 }

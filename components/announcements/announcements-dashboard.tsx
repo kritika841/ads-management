@@ -11,6 +11,7 @@ import {
   Image as ImageIcon,
   LayoutList,
   Loader2,
+  Maximize2,
   Megaphone,
   Paperclip,
   Plus,
@@ -42,6 +43,7 @@ import {
   formatFileSize,
   getAttachmentIcon
 } from "./announcement-card";
+import { AnnouncementPopupModal } from "./announcement-overlay";
 
 export function AnnouncementsDashboard({
   announcements: initialAnnouncements,
@@ -81,6 +83,29 @@ export function AnnouncementsDashboard({
   const [attachmentName, setAttachmentName] = useState("");
   const [attachmentUrl, setAttachmentUrl] = useState("");
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [showPopup, setShowPopup] = useState(true);
+  const [draftPreviewOpen, setDraftPreviewOpen] = useState(false);
+  const [draftPreviewMode, setDraftPreviewMode] = useState<"card" | "popup">("card");
+  const [popupAnnouncement, setPopupAnnouncement] = useState<Announcement | null>(null);
+
+  const draftAnnouncement: Announcement = useMemo(() => ({
+    id: "draft-preview",
+    title: title.trim() || "Untitled Announcement",
+    content: content.trim() || "No message content entered yet.",
+    images,
+    attachments,
+    author_id: profile.id,
+    author_name: profile.name,
+    author_role: profile.role as "admin" | "manager",
+    target_type: targetType,
+    target_roles: targetRoles,
+    target_user_ids: selectedUserIds,
+    show_popup: showPopup,
+    status: "active",
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    acknowledgements: []
+  }), [title, content, images, attachments, profile.id, profile.name, profile.role, targetType, targetRoles, selectedUserIds, showPopup]);
 
   const isAdmin = profile.role === "admin";
 
@@ -307,6 +332,7 @@ export function AnnouncementsDashboard({
     setAttachments([]);
     setAttachmentName("");
     setAttachmentUrl("");
+    setShowPopup(true);
   };
 
   const broadcastChange = (type: string, data?: unknown) => {
@@ -320,8 +346,7 @@ export function AnnouncementsDashboard({
     }
   };
 
-  const handleCreateAnnouncement = (e: React.FormEvent) => {
-    e.preventDefault();
+  const executePublishAnnouncement = async () => {
     if (!title.trim() || !content.trim()) {
       toast({ title: "Missing fields", description: "Title and message content are required.", tone: "error" });
       return;
@@ -335,7 +360,8 @@ export function AnnouncementsDashboard({
         attachments,
         targetType,
         targetRoles: targetType === "roles" ? targetRoles : undefined,
-        targetUserIds: targetType === "users" ? selectedUserIds : undefined
+        targetUserIds: targetType === "users" ? selectedUserIds : undefined,
+        showPopup
       });
 
       if (!res.ok || !res.announcement) {
@@ -350,10 +376,16 @@ export function AnnouncementsDashboard({
       });
       setAnnouncements((prev) => [res.announcement!, ...prev]);
       setCreateModalOpen(false);
+      setDraftPreviewOpen(false);
       resetCreateForm();
       broadcastChange("CREATE", res.announcement);
       router.refresh();
     });
+  };
+
+  const handleCreateAnnouncement = (e: React.FormEvent) => {
+    e.preventDefault();
+    void executePublishAnnouncement();
   };
 
   const handleArchive = (id: string) => {
@@ -566,10 +598,21 @@ export function AnnouncementsDashboard({
                     announcement={ann}
                     userId={profile.id}
                     onImageClick={(url) => setImagePreview(url)}
+                    onShowPopup={() => setPopupAnnouncement(ann)}
                     showAcknowledgementBanner={false}
                   />
                   {/* Action buttons overlay for admin */}
                   <div className="absolute top-4 right-4 flex items-center gap-1.5 bg-card/90 backdrop-blur border border-border p-1 rounded-lg shadow-2xs">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setPopupAnnouncement(ann)}
+                      className="h-7 text-xs gap-1.5 text-primary hover:text-primary hover:bg-primary/10 border-primary/30"
+                      title="Show interactive announcement popup modal"
+                    >
+                      <Maximize2 className="size-3.5" />
+                      Show Popup
+                    </Button>
                     <Button
                       size="sm"
                       variant="secondary"
@@ -754,6 +797,17 @@ export function AnnouncementsDashboard({
                             >
                               <Eye className="size-3.5" />
                               <span className="hidden xl:inline ml-1">View</span>
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setPopupAnnouncement(ann)}
+                              className="h-7 text-xs text-primary hover:text-primary hover:bg-primary/10 gap-1 font-medium"
+                              title="Show interactive announcement popup modal"
+                            >
+                              <Maximize2 className="size-3.5" />
+                              <span className="hidden xl:inline ml-1">Popup</span>
                             </Button>
 
                             <Button
@@ -1108,19 +1162,158 @@ export function AnnouncementsDashboard({
                 ) : null}
               </div>
 
-              {/* Submit Button */}
-              <div className="pt-3 border-t border-border flex justify-end gap-2 shrink-0">
-                <Button type="button" variant="ghost" onClick={() => setCreateModalOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={isPending || uploadingAttachment} className="gap-2 font-semibold">
-                  {isPending ? <Loader2 className="size-4 animate-spin" /> : <Megaphone className="size-4" />}
-                  Publish Announcement
-                </Button>
+              {/* Show as Popup Modal Toggle */}
+              <div className="space-y-2 rounded-lg border border-border p-3.5 bg-muted/20">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5 pr-4">
+                    <label htmlFor="announcement-show-popup" className="block text-xs font-semibold text-foreground cursor-pointer">
+                      Display as Screen Popup Modal
+                    </label>
+                    <p className="text-[11px] text-muted-foreground">
+                      When enabled, this announcement pops up in full-screen for targeted team members when they open the app until acknowledged.
+                    </p>
+                  </div>
+                  <input
+                    id="announcement-show-popup"
+                    type="checkbox"
+                    checked={showPopup}
+                    onChange={(e) => setShowPopup(e.target.checked)}
+                    className="size-4 rounded text-primary cursor-pointer accent-primary shrink-0"
+                  />
+                </div>
+              </div>
+
+              {/* Form Action Footer */}
+              <div className="pt-3 border-t border-border flex flex-wrap items-center justify-between gap-2 shrink-0">
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      setDraftPreviewMode("card");
+                      setDraftPreviewOpen(true);
+                    }}
+                    className="gap-1.5 text-xs font-medium"
+                  >
+                    <Eye className="size-3.5 text-primary" />
+                    Preview Announcement
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      setDraftPreviewMode("popup");
+                      setDraftPreviewOpen(true);
+                    }}
+                    className="gap-1.5 text-xs text-primary hover:text-primary hover:bg-primary/10 border-primary/30 font-medium"
+                  >
+                    <Maximize2 className="size-3.5" />
+                    Show Popup
+                  </Button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button type="button" variant="ghost" onClick={() => setCreateModalOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={isPending || uploadingAttachment} className="gap-2 font-semibold">
+                    {isPending ? <Loader2 className="size-4 animate-spin" /> : <Megaphone className="size-4" />}
+                    Publish Announcement
+                  </Button>
+                </div>
               </div>
             </form>
           </div>
         </Modal>
+      ) : null}
+
+      {/* Draft Announcement Preview Modal (Card View Mode) */}
+      {draftPreviewOpen && draftPreviewMode === "card" ? (
+        <Modal
+          open
+          labelledBy="draft-announcement-preview-title"
+          onClose={() => setDraftPreviewOpen(false)}
+          className="p-0 sm:p-6"
+        >
+          <div className="mx-auto flex flex-col w-full bg-card rounded-2xl border border-border shadow-float max-w-4xl max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between border-b border-border p-4 shrink-0 bg-muted/30">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <Eye className="size-4 text-primary" />
+                  <span id="draft-announcement-preview-title" className="text-sm font-bold text-foreground">
+                    Draft Announcement Preview
+                  </span>
+                </div>
+                <div className="flex items-center rounded-lg border border-border bg-card p-0.5 text-xs font-medium">
+                  <button
+                    type="button"
+                    onClick={() => setDraftPreviewMode("card")}
+                    className="px-2.5 py-1 rounded bg-primary text-primary-foreground font-semibold shadow-2xs"
+                  >
+                    Card View
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDraftPreviewMode("popup")}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded text-muted-foreground hover:text-foreground"
+                  >
+                    <Maximize2 className="size-3" />
+                    Popup View
+                  </button>
+                </div>
+              </div>
+              <Button size="icon" variant="ghost" onClick={() => setDraftPreviewOpen(false)}>
+                <X className="size-5" />
+              </Button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 sm:p-8">
+              <AnnouncementCardView
+                announcement={draftAnnouncement}
+                userId={profile.id}
+                onImageClick={(url) => setImagePreview(url)}
+                onShowPopup={() => setDraftPreviewMode("popup")}
+                showAcknowledgementBanner={false}
+              />
+            </div>
+
+            <div className="p-4 border-t border-border flex items-center justify-between bg-muted/20 shrink-0">
+              <p className="text-xs text-muted-foreground">
+                Review your draft before sending to team members.
+              </p>
+              <div className="flex items-center gap-2">
+                <Button variant="secondary" onClick={() => setDraftPreviewOpen(false)}>
+                  Back to Edit
+                </Button>
+                <Button
+                  onClick={() => {
+                    setDraftPreviewOpen(false);
+                    void executePublishAnnouncement();
+                  }}
+                  disabled={isPending || uploadingAttachment}
+                  className="gap-2 font-semibold"
+                >
+                  {isPending ? <Loader2 className="size-4 animate-spin" /> : <Megaphone className="size-4" />}
+                  Publish Announcement
+                </Button>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+
+      {/* Draft Announcement Preview Modal (Popup View Mode) */}
+      {draftPreviewOpen && draftPreviewMode === "popup" ? (
+        <AnnouncementPopupModal
+          announcement={draftAnnouncement}
+          isPreview
+          onClose={() => setDraftPreviewOpen(false)}
+          onPublish={() => {
+            setDraftPreviewOpen(false);
+            void executePublishAnnouncement();
+          }}
+          isPublishing={isPending}
+        />
       ) : null}
 
       {/* Preview Modal: Shows announcement with exact requested hierarchy */}
@@ -1133,9 +1326,24 @@ export function AnnouncementsDashboard({
         >
           <div className="mx-auto flex flex-col w-full bg-card rounded-2xl border border-border shadow-float max-w-4xl max-h-[90vh] overflow-hidden">
             <div className="flex items-center justify-between border-b border-border p-4 shrink-0 bg-muted/30">
-              <div className="flex items-center gap-2">
-                <Eye className="size-4 text-primary" />
-                <span className="text-sm font-bold text-foreground">Announcement Preview</span>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <Eye className="size-4 text-primary" />
+                  <span className="text-sm font-bold text-foreground">Announcement Preview</span>
+                </div>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    const toPopup = previewAnnouncement;
+                    setPreviewAnnouncement(null);
+                    setPopupAnnouncement(toPopup);
+                  }}
+                  className="h-7 text-xs gap-1.5 text-primary hover:text-primary hover:bg-primary/10 border-primary/30 font-medium"
+                >
+                  <Maximize2 className="size-3" />
+                  View as Popup Modal
+                </Button>
               </div>
               <Button size="icon" variant="ghost" onClick={() => setPreviewAnnouncement(null)}>
                 <X className="size-5" />
@@ -1147,11 +1355,25 @@ export function AnnouncementsDashboard({
                 announcement={previewAnnouncement}
                 userId={profile.id}
                 onImageClick={(url) => setImagePreview(url)}
+                onShowPopup={() => {
+                  const toPopup = previewAnnouncement;
+                  setPreviewAnnouncement(null);
+                  setPopupAnnouncement(toPopup);
+                }}
                 showAcknowledgementBanner={false}
               />
             </div>
           </div>
         </Modal>
+      ) : null}
+
+      {/* Interactive Announcement Popup Modal on-demand for existing announcements */}
+      {popupAnnouncement ? (
+        <AnnouncementPopupModal
+          announcement={popupAnnouncement}
+          isPreview
+          onClose={() => setPopupAnnouncement(null)}
+        />
       ) : null}
 
       {/* Inspector Modal: Who acknowledged vs who is pending */}

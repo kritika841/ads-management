@@ -43,3 +43,12 @@ export function canDeleteAd(role: UserRole) {
 export function canPublish(role: UserRole, status: AdStatus) {
   return (role === "admin" || role === "manager") && status === "approved";
 }
+
+export function canBulkAddToCampaign(
+  role: UserRole,
+  settings?: { bulk_add_to_campaign_roles?: string[] } | null
+): boolean {
+  if (role === "admin") return true;
+  if (!settings || !settings.bulk_add_to_campaign_roles) return false;
+  return settings.bulk_add_to_campaign_roles.includes(role);
+}

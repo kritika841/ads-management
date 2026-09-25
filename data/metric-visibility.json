@@ -35,5 +35,8 @@
     "ctr",
     "cpm"
   ],
-  "manager_creative_scope": "all"
+  "manager_creative_scope": "all",
+  "bulk_add_to_campaign_roles": [
+    "admin"
+  ]
 }

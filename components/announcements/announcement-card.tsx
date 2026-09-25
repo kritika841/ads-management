@@ -10,6 +10,7 @@ import {
   FileText,
   Image as ImageIcon,
   Loader2,
+  Maximize2,
   Music,
   Paperclip,
   Video
@@ -84,6 +85,7 @@ export function AnnouncementCardView({
   userId,
   onImageClick,
   onAcknowledge,
+  onShowPopup,
   isAcknowledging = false,
   showAcknowledgementBanner = true
 }: {
@@ -91,16 +93,19 @@ export function AnnouncementCardView({
   userId?: string;
   onImageClick?: (url: string) => void;
   onAcknowledge?: (announcementId: string) => void;
+  onShowPopup?: () => void;
   isAcknowledging?: boolean;
   showAcknowledgementBanner?: boolean;
 }) {
-  const formattedDate = new Date(announcement.created_at).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit"
-  });
+  const formattedDate = announcement.created_at
+    ? new Date(announcement.created_at).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      })
+    : "Just now";
 
   const ackRecord = userId
     ? announcement.acknowledgements?.find((a) => a.user_id === userId)
@@ -136,22 +141,36 @@ export function AnnouncementCardView({
 
       {/* 2. BENEATH IMAGE: HEADING */}
       <div className="space-y-2">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span className="font-semibold text-foreground">{announcement.author_name}</span>
-          <span className="rounded-md bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
-            {announcement.author_role === "admin" ? "Admin" : "Manager"}
-          </span>
-          <span>·</span>
-          <span>{formattedDate}</span>
-          {announcement.status === "archived" ? (
-            <span className="rounded-full bg-muted text-muted-foreground px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
-              Archived
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span className="font-semibold text-foreground">{announcement.author_name}</span>
+            <span className="rounded-md bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
+              {announcement.author_role === "admin" ? "Admin" : "Manager"}
             </span>
-          ) : (
-            <span className="rounded-full bg-success/15 text-success px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
-              Active
-            </span>
-          )}
+            <span>·</span>
+            <span>{formattedDate}</span>
+            {announcement.status === "archived" ? (
+              <span className="rounded-full bg-muted text-muted-foreground px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
+                Archived
+              </span>
+            ) : (
+              <span className="rounded-full bg-success/15 text-success px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
+                Active
+              </span>
+            )}
+          </div>
+          {onShowPopup ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={onShowPopup}
+              className="h-7 text-xs gap-1.5 font-medium border-border/80 hover:border-primary text-foreground hover:text-primary"
+              title="Show announcement in popup modal"
+            >
+              <Maximize2 className="size-3" />
+              Show Popup
+            </Button>
+          ) : null}
         </div>
 
         <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground leading-snug">

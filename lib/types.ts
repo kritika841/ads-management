@@ -306,6 +306,7 @@ export type AppSettings = {
   allow_manager_final_approval?: boolean;
   manager_creative_scope?: import("@/lib/metric-visibility").ManagerCreativeScope;
   hidden_metrics_by_role?: import("@/lib/metric-visibility").HiddenMetricsByRole;
+  bulk_add_to_campaign_roles?: ("admin" | "content_creator" | "editor" | "manager")[];
   updated_at: string;
 };
 

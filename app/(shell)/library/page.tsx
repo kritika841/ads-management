@@ -153,6 +153,7 @@ export default async function LibraryPage({
       initialQueue={initialQueue}
       mediaTokens={mediaTokens}
       allowManagerFinalApproval={settings.allow_manager_final_approval ?? true}
+      settings={settings}
     />
   );
 }

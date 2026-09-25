@@ -15,6 +15,7 @@ import type { Announcement } from "@/lib/announcements";
 import type { Profile } from "@/lib/types";
 import { acknowledgeAnnouncement, getUserAnnouncements } from "@/app/actions/announcements";
 import { AnnouncementCardView } from "./announcement-card";
+import { AnnouncementPopupModal } from "./announcement-overlay";
 
 export function UserAnnouncementsFeed({
   initialAnnouncements,
@@ -28,6 +29,7 @@ export function UserAnnouncementsFeed({
   const [searchQuery, setSearchQuery] = useState("");
   const [filterState, setFilterState] = useState<"all" | "pending" | "acknowledged">("all");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [popupAnnouncement, setPopupAnnouncement] = useState<Announcement | null>(null);
   const [acknowledgingId, setAcknowledgingId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
@@ -271,12 +273,23 @@ export function UserAnnouncementsFeed({
               userId={profile.id}
               onImageClick={(url) => setImagePreview(url)}
               onAcknowledge={handleAcknowledge}
+              onShowPopup={() => setPopupAnnouncement(ann)}
               isAcknowledging={acknowledgingId === ann.id}
               showAcknowledgementBanner={true}
             />
           ))
         )}
       </div>
+
+      {/* Interactive Announcement Popup Modal */}
+      {popupAnnouncement ? (
+        <AnnouncementPopupModal
+          announcement={popupAnnouncement}
+          onClose={() => setPopupAnnouncement(null)}
+          onAcknowledge={() => handleAcknowledge(popupAnnouncement.id)}
+          isAcknowledging={acknowledgingId === popupAnnouncement.id}
+        />
+      ) : null}
 
       {/* Fullscreen Image Preview Dialog */}
       {imagePreview ? (

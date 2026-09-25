@@ -6,6 +6,7 @@ const METRIC_VISIBILITY_FILE = path.join(process.cwd(), "data", "metric-visibili
 
 export type MetricVisibilityConfig = HiddenMetricsByRole & {
   manager_creative_scope?: ManagerCreativeScope;
+  bulk_add_to_campaign_roles?: ("admin" | "content_creator" | "editor" | "manager")[];
 };
 
 function sanitizeKeys(arr: unknown): PerformanceMetricKey[] {
@@ -13,6 +14,18 @@ function sanitizeKeys(arr: unknown): PerformanceMetricKey[] {
   return arr.filter((item): item is PerformanceMetricKey =>
     typeof item === "string" && (PERFORMANCE_METRIC_KEYS as readonly string[]).includes(item)
   );
+}
+
+function sanitizeRoles(arr: unknown): ("admin" | "content_creator" | "editor" | "manager")[] {
+  if (!Array.isArray(arr)) return ["admin"];
+  const allowed = ["admin", "content_creator", "editor", "manager"];
+  const filtered = arr.filter((item): item is "admin" | "content_creator" | "editor" | "manager" =>
+    typeof item === "string" && allowed.includes(item)
+  );
+  if (!filtered.includes("admin")) {
+    filtered.unshift("admin");
+  }
+  return filtered;
 }
 
 export async function readMetricVisibilityFile(): Promise<MetricVisibilityConfig> {
@@ -24,19 +37,22 @@ export async function readMetricVisibilityFile(): Promise<MetricVisibilityConfig
       content_creator: sanitizeKeys(parsed.content_creator),
       editor: sanitizeKeys(parsed.editor),
       manager: sanitizeKeys(parsed.manager),
-      manager_creative_scope: scope
+      manager_creative_scope: scope,
+      bulk_add_to_campaign_roles: sanitizeRoles(parsed.bulk_add_to_campaign_roles)
     };
   } catch {
     return {
       ...DEFAULT_HIDDEN_METRICS,
-      manager_creative_scope: DEFAULT_MANAGER_CREATIVE_SCOPE
+      manager_creative_scope: DEFAULT_MANAGER_CREATIVE_SCOPE,
+      bulk_add_to_campaign_roles: ["admin"]
     };
   }
 }
 
 export async function writeMetricVisibilityFile(
   data: HiddenMetricsByRole,
-  managerCreativeScope?: ManagerCreativeScope
+  managerCreativeScope?: ManagerCreativeScope,
+  bulkAddToCampaignRoles?: ("admin" | "content_creator" | "editor" | "manager")[]
 ): Promise<void> {
   try {
     const existing = await readMetricVisibilityFile();
@@ -44,7 +60,10 @@ export async function writeMetricVisibilityFile(
       content_creator: Array.isArray(data.content_creator) ? data.content_creator : existing.content_creator ?? [],
       editor: Array.isArray(data.editor) ? data.editor : existing.editor ?? [],
       manager: Array.isArray(data.manager) ? data.manager : existing.manager ?? [],
-      manager_creative_scope: managerCreativeScope ?? existing.manager_creative_scope ?? DEFAULT_MANAGER_CREATIVE_SCOPE
+      manager_creative_scope: managerCreativeScope ?? existing.manager_creative_scope ?? DEFAULT_MANAGER_CREATIVE_SCOPE,
+      bulk_add_to_campaign_roles: bulkAddToCampaignRoles
+        ? sanitizeRoles(bulkAddToCampaignRoles)
+        : existing.bulk_add_to_campaign_roles ?? ["admin"]
     };
     await fs.mkdir(path.dirname(METRIC_VISIBILITY_FILE), { recursive: true });
     await fs.writeFile(METRIC_VISIBILITY_FILE, JSON.stringify(payload, null, 2), "utf-8");

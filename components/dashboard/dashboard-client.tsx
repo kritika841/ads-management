@@ -4,9 +4,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { AlertTriangle, ArrowDown, ArrowRight, ArrowUp, CalendarClock, Check, ChevronsUpDown, Download, ExternalLink, Eye, Filter, Grid2X2, ListFilter, Loader2, Maximize2, Play, Plus, Search, Square, SquareCheck, Table2, Tags, UserCheck, Video, X } from "lucide-react";
-import { assignEditor, bulkAddTags, bulkSetDownloadedBadge, dismissDownloadedBadge, reviewAd } from "@/app/actions/ads";
+import { AlertTriangle, ArrowDown, ArrowRight, ArrowUp, CalendarClock, Check, ChevronsUpDown, Download, ExternalLink, Eye, Filter, FolderKanban, Grid2X2, ListFilter, Loader2, Maximize2, Play, Plus, Search, Square, SquareCheck, Table2, Tags, UserCheck, Video, X } from "lucide-react";
+import { assignEditor, bulkAddTags, bulkAssignCampaign, bulkSetDownloadedBadge, dismissDownloadedBadge, reviewAd } from "@/app/actions/ads";
 import { AdPreviewModal } from "@/components/dashboard/ad-preview-modal";
+import { BulkAssignCampaignModal } from "@/components/dashboard/bulk-assign-campaign-modal";
 import { DeleteAdButton } from "@/components/dashboard/delete-ad-button";
 import { CreatorItemForm } from "@/components/workflow/creator-item-form";
 import { ProductionStageBadge } from "@/components/workflow/production-stage";
@@ -19,10 +20,10 @@ import { platforms } from "@/lib/constants";
 import { runServerAction } from "@/lib/client-action";
 import { downloadProgressLabel, downloadWithProgress, type DownloadProgress } from "@/lib/client-download";
 import type { ExportJobSnapshot } from "@/lib/export-job-types";
-import { canDeleteAd } from "@/lib/permissions";
+import { canBulkAddToCampaign, canDeleteAd } from "@/lib/permissions";
 import { readDashboardFilters, writeDashboardFilters, type DashboardView } from "@/lib/dashboard-filter-state";
 import { creatorEditableStages, getProductionStageLabel, isCreativeCreationBlocked, isFinalMediaVisible, productionStageLabels, productionStages, workflowStageAgeLabel } from "@/lib/production-workflow";
-import type { AdStatus, AdWithRelations, Campaign, Product, Profile } from "@/lib/types";
+import type { AdStatus, AdWithRelations, AppSettings, Campaign, Product, Profile } from "@/lib/types";
 import { cn, dateOnlyDaysFromToday, formatDateOnly } from "@/lib/utils";
 import { matchesQueue, queueForRole, queuesForRole, type QueueKey } from "@/lib/work-queues";
 
@@ -43,7 +44,8 @@ export function DashboardClient({
   editorWorkloads,
   initialQueue,
   mediaTokens,
-  allowManagerFinalApproval = true
+  allowManagerFinalApproval = true,
+  settings
 }: {
   profile: Profile;
   ads: AdWithRelations[];
@@ -55,6 +57,7 @@ export function DashboardClient({
   initialQueue: QueueKey;
   mediaTokens: Record<string, string>;
   allowManagerFinalApproval?: boolean;
+  settings?: AppSettings;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -99,6 +102,9 @@ export function DashboardClient({
   const [downloadProgress, setDownloadProgress] = useState<Record<string, DownloadProgress>>({});
   const [bulkTagModalOpen, setBulkTagModalOpen] = useState(false);
   const [isBulkTagging, setIsBulkTagging] = useState(false);
+  const [bulkCampaignModalOpen, setBulkCampaignModalOpen] = useState(false);
+  const [isBulkAssigningCampaign, setIsBulkAssigningCampaign] = useState(false);
+  const canBulkCampaign = canBulkAddToCampaign(profile.role, settings);
   const [isBulkUpdatingDownloaded, setIsBulkUpdatingDownloaded] = useState(false);
   const [isPending, startTransition] = useTransition();
   const searchRef = useRef<HTMLInputElement>(null);
@@ -476,6 +482,30 @@ export function DashboardClient({
     }
   }
 
+  async function submitBulkCampaign(campaignId: string) {
+    if (!selectedIds.size || isBulkAssigningCampaign) return;
+    setIsBulkAssigningCampaign(true);
+    try {
+      const response = await runServerAction(() => bulkAssignCampaign(Array.from(selectedIds), campaignId));
+      if (!response.ok) {
+        toast({ title: "Could not assign campaign", description: response.message ?? "Try again.", tone: "error" });
+        return;
+      }
+      toast({
+        title: "Creatives assigned to campaign",
+        description: response.message ?? `Assigned ${response.count} creative(s) to campaign.`,
+        tone: "success"
+      });
+      setSelectedIds(new Set());
+      setBulkCampaignModalOpen(false);
+      startTransition(() => {
+        router.refresh();
+      });
+    } finally {
+      setIsBulkAssigningCampaign(false);
+    }
+  }
+
   async function updateDownloadedSelection(downloaded: boolean) {
     if (profile.role !== "admin" || !selectedIds.size || isBulkUpdatingDownloaded) return;
     setIsBulkUpdatingDownloaded(true);
@@ -616,6 +646,12 @@ export function DashboardClient({
             <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
             <Button size="sm" variant="secondary" onClick={selectAll}>Select all {filteredAds.length}</Button>
             <Button size="sm" variant="secondary" onClick={clearSelection}>Clear</Button>
+            {canBulkCampaign ? (
+              <Button size="sm" variant="secondary" onClick={() => setBulkCampaignModalOpen(true)}>
+                <FolderKanban className="size-3.5" aria-hidden />
+                Add to campaign
+              </Button>
+            ) : null}
             <Button size="sm" variant="secondary" onClick={() => setBulkTagModalOpen(true)}>
               <Tags className="size-3.5" aria-hidden />
               Add tags
@@ -663,6 +699,16 @@ export function DashboardClient({
     {cancelAd ? <Modal open labelledBy="changes-title" onClose={() => { setCancelAd(null); setCancelTarget(""); }} className="flex items-center justify-center p-4"><section className="w-full max-w-lg rounded-xl border border-border bg-card shadow-float dark:shadow-none"><div className="flex items-start justify-between border-b border-border px-5 py-4"><div><h2 id="changes-title" className="text-lg font-semibold text-foreground">Request changes</h2><p className="mt-1 text-sm text-muted-foreground">Tell the creator or editor exactly what must change.</p></div><Button size="icon" variant="ghost" className="size-9" title="Close" onClick={() => { setCancelAd(null); setCancelTarget(""); }}><X className="size-5" aria-hidden /></Button></div><div className="space-y-4 p-5"><Textarea className="min-h-32" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} placeholder="Required changes" /><Select value={cancelTarget} onChange={(event) => setCancelTarget(event.target.value as "creator" | "editor" | "") }><option value="">Choose target (Creator or Editor)</option><option value="creator">Creator</option><option value="editor">Editor</option></Select></div><div className="flex justify-end gap-2 border-t border-border px-5 py-4"><Button variant="secondary" onClick={() => { setCancelAd(null); setCancelTarget(""); }}>Keep in review</Button><Button variant="danger" disabled={isPending || !cancelReason.trim() || !cancelTarget} onClick={() => decide(cancelAd, "request_changes", cancelReason.trim())}>{isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <X className="size-4" aria-hidden />}Send changes</Button></div></section></Modal> : null}
     <AdPreviewModal ad={previewAd} onClose={() => setPreviewAd(null)} />
     {bulkTagModalOpen ? <BulkTagModal count={selectedIds.size} availableTags={ordinaryAvailableTags} pending={isBulkTagging} onClose={() => setBulkTagModalOpen(false)} onSubmit={submitBulkTags} /> : null}
+    {bulkCampaignModalOpen ? (
+      <BulkAssignCampaignModal
+        count={selectedIds.size}
+        campaigns={campaigns}
+        selectedAds={ads.filter((ad) => selectedIds.has(ad.id))}
+        pending={isBulkAssigningCampaign}
+        onClose={() => setBulkCampaignModalOpen(false)}
+        onSubmit={submitBulkCampaign}
+      />
+    ) : null}
   </main>;
 }
 

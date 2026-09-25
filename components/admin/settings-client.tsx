@@ -70,6 +70,9 @@ export function SettingsClient({
   const [maxConcurrentEdits, setMaxConcurrentEdits] = useState(settings.max_concurrent_edits);
   const [allowManagerFinalApproval, setAllowManagerFinalApproval] = useState(settings.allow_manager_final_approval ?? true);
   const [managerCreativeScope, setManagerCreativeScope] = useState(settings.manager_creative_scope ?? "all");
+  const [bulkAddToCampaignRoles, setBulkAddToCampaignRoles] = useState<("admin" | "content_creator" | "editor" | "manager")[]>(
+    settings.bulk_add_to_campaign_roles ?? ["admin"]
+  );
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -103,9 +106,23 @@ export function SettingsClient({
         deadlineReminderDays,
         maxConcurrentEdits,
         allowManagerFinalApproval,
-        managerCreativeScope
+        managerCreativeScope,
+        bulkAddToCampaignRoles
       }));
       setMessage(response.ok ? "Settings saved." : response.message ?? "Unable to save settings.");
+    });
+  }
+
+  function toggleBulkCampaignRole(role: "content_creator" | "editor" | "manager") {
+    setBulkAddToCampaignRoles((prev) => {
+      const set = new Set(prev);
+      if (set.has(role)) {
+        set.delete(role);
+      } else {
+        set.add(role);
+      }
+      set.add("admin");
+      return Array.from(set) as ("admin" | "content_creator" | "editor" | "manager")[];
     });
   }
 
@@ -359,6 +376,79 @@ export function SettingsClient({
                     </button>
                   </div>
                 </div>
+
+                <div className="space-y-3 rounded-lg border border-border bg-card/60 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold text-foreground">Bulk Assign Creatives to Campaigns</p>
+                      <p className="mt-1 text-[11px] text-muted-foreground leading-4">
+                        Select which roles are permitted to bulk select creatives in the Creative Library and reassign them to a campaign. Administrator always retains full access.
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                      Permissions
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                    {/* Admin - Always enabled */}
+                    <div className="flex items-center gap-2.5 rounded-lg border border-border/80 bg-muted/40 px-3 py-2.5 opacity-80 cursor-not-allowed">
+                      <input
+                        type="checkbox"
+                        checked={true}
+                        disabled={true}
+                        className="size-4 rounded border-border accent-primary cursor-not-allowed"
+                      />
+                      <div className="flex flex-col">
+                        <span className="text-xs font-medium text-foreground">Administrator</span>
+                        <span className="text-[10px] text-muted-foreground">Always granted (Full system access)</span>
+                      </div>
+                    </div>
+
+                    {/* Manager */}
+                    <label className="flex items-center gap-2.5 rounded-lg border border-border bg-card px-3 py-2.5 hover:bg-muted/50 cursor-pointer transition">
+                      <input
+                        type="checkbox"
+                        checked={bulkAddToCampaignRoles.includes("manager")}
+                        onChange={() => toggleBulkCampaignRole("manager")}
+                        className="size-4 rounded border-border accent-primary cursor-pointer"
+                      />
+                      <div className="flex flex-col">
+                        <span className="text-xs font-medium text-foreground">Manager</span>
+                        <span className="text-[10px] text-muted-foreground">Allow managers to bulk assign campaigns</span>
+                      </div>
+                    </label>
+
+                    {/* Content Creator */}
+                    <label className="flex items-center gap-2.5 rounded-lg border border-border bg-card px-3 py-2.5 hover:bg-muted/50 cursor-pointer transition">
+                      <input
+                        type="checkbox"
+                        checked={bulkAddToCampaignRoles.includes("content_creator")}
+                        onChange={() => toggleBulkCampaignRole("content_creator")}
+                        className="size-4 rounded border-border accent-primary cursor-pointer"
+                      />
+                      <div className="flex flex-col">
+                        <span className="text-xs font-medium text-foreground">Content Creator</span>
+                        <span className="text-[10px] text-muted-foreground">Allow creators to bulk assign campaigns</span>
+                      </div>
+                    </label>
+
+                    {/* Video Editor */}
+                    <label className="flex items-center gap-2.5 rounded-lg border border-border bg-card px-3 py-2.5 hover:bg-muted/50 cursor-pointer transition">
+                      <input
+                        type="checkbox"
+                        checked={bulkAddToCampaignRoles.includes("editor")}
+                        onChange={() => toggleBulkCampaignRole("editor")}
+                        className="size-4 rounded border-border accent-primary cursor-pointer"
+                      />
+                      <div className="flex flex-col">
+                        <span className="text-xs font-medium text-foreground">Video Editor</span>
+                        <span className="text-[10px] text-muted-foreground">Allow editors to bulk assign campaigns</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
                 <Button className="w-full" disabled={isPending} onClick={persistSettings}>
                   {isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
                   Save workflow settings

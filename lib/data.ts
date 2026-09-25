@@ -195,6 +195,7 @@ export async function getAppSettings() {
     revision_sla_hours: 24,
     manager_creative_scope: "all",
     hidden_metrics_by_role: { content_creator: [], editor: [], manager: [] },
+    bulk_add_to_campaign_roles: ["admin"],
     updated_at: new Date().toISOString()
   };
 
@@ -211,9 +212,11 @@ export async function getAppSettings() {
       allow_manager_final_approval?: boolean;
       two_step_approval?: boolean;
       hidden_metrics_by_role?: HiddenMetricsByRole;
+      bulk_add_to_campaign_roles?: ("admin" | "content_creator" | "editor" | "manager")[];
     };
     const hiddenMetrics = record.hidden_metrics_by_role || fileMetrics || DEFAULT_HIDDEN_METRICS;
     const managerCreativeScope = record.manager_creative_scope ?? fileMetrics.manager_creative_scope ?? "all";
+    const bulkRoles = record.bulk_add_to_campaign_roles ?? fileMetrics.bulk_add_to_campaign_roles ?? ["admin"];
 
     return {
       ...record,
@@ -225,7 +228,8 @@ export async function getAppSettings() {
         content_creator: hiddenMetrics.content_creator ?? [],
         editor: hiddenMetrics.editor ?? [],
         manager: hiddenMetrics.manager ?? []
-      }
+      },
+      bulk_add_to_campaign_roles: bulkRoles
     } as AppSettings;
   } catch (err) {
     console.warn("[getAppSettings] Falling back to default settings:", err);

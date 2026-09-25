@@ -33,6 +33,7 @@ export type Announcement = {
   target_roles: ("content_creator" | "editor" | "manager")[];
   target_user_ids: string[];
   status: "active" | "archived";
+  show_popup?: boolean;
   created_at: string;
   updated_at: string;
   acknowledgements: AnnouncementAcknowledgement[];
@@ -108,6 +109,7 @@ export async function getAllAnnouncements(): Promise<Announcement[]> {
           target_roles: Array.isArray(r.target_roles) ? r.target_roles : [],
           target_user_ids: Array.isArray(r.target_user_ids) ? r.target_user_ids : [],
           status: r.status,
+          show_popup: r.show_popup !== false,
           created_at: r.created_at,
           updated_at: r.updated_at,
           acknowledgements: Array.isArray(r.acknowledgements) ? r.acknowledgements : []
@@ -133,6 +135,7 @@ export async function createAnnouncementRecord(input: {
   targetType: AnnouncementTargetType;
   targetRoles?: ("content_creator" | "editor" | "manager")[];
   targetUserIds?: string[];
+  showPopup?: boolean;
 }): Promise<Announcement> {
   const announcement: Announcement = {
     id: crypto.randomUUID(),
@@ -147,6 +150,7 @@ export async function createAnnouncementRecord(input: {
     target_roles: input.targetRoles ?? [],
     target_user_ids: input.targetUserIds ?? [],
     status: "active",
+    show_popup: input.showPopup !== false,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     acknowledgements: []
@@ -156,7 +160,7 @@ export async function createAnnouncementRecord(input: {
   if (hasDb) {
     try {
       const admin = createSupabaseAdminClient();
-      const { error } = await admin.from("announcements").insert({
+      const insertPayload: Record<string, unknown> = {
         id: announcement.id,
         title: announcement.title,
         content: announcement.content,
@@ -169,9 +173,16 @@ export async function createAnnouncementRecord(input: {
         target_roles: announcement.target_roles,
         target_user_ids: announcement.target_user_ids,
         status: announcement.status,
+        show_popup: announcement.show_popup,
         created_at: announcement.created_at,
         updated_at: announcement.updated_at
-      });
+      };
+      let { error } = await admin.from("announcements").insert(insertPayload);
+      if (error && (error.code === "PGRST204" || error.message.includes("show_popup"))) {
+        delete insertPayload.show_popup;
+        const retry = await admin.from("announcements").insert(insertPayload);
+        error = retry.error;
+      }
       if (!error) return announcement;
     } catch (cause) {
       console.warn("Failed to write announcement to Supabase, falling back to local file:", cause);
@@ -222,6 +233,7 @@ export async function getUnacknowledgedAnnouncements(user: {
   const all = await getAllAnnouncements();
   return all.filter((announcement) => {
     if (!isUserTargetedByAnnouncement(announcement, user)) return false;
+    if (announcement.show_popup === false) return false;
     const hasAcknowledged = announcement.acknowledgements.some((ack) => ack.user_id === user.id);
     return !hasAcknowledged;
   });
