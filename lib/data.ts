@@ -678,9 +678,9 @@ export async function getEditorAverageEditTimes(): Promise<Record<string, number
   return averages;
 }
 
-export async function getCampaignsWithOverview(): Promise<CampaignOverview[]> {
+export async function getCampaignsWithOverview(profile?: Profile): Promise<CampaignOverview[]> {
   const admin = createSupabaseAdminClient();
-  const [campaignsResult, adsResult, incentiveResult, campaignGoals] = await Promise.all([
+  const [campaignsResult, adsResult, incentiveResult, campaignGoals, appSettings] = await Promise.all([
     admin.from("campaigns").select("*").order("name", { ascending: true }),
     admin
       .from("ads")
@@ -697,7 +697,8 @@ export async function getCampaignsWithOverview(): Promise<CampaignOverview[]> {
       )
       .order("updated_at", { ascending: false }),
     admin.from("incentive_creatives").select("ad_id,latest_spend,latest_purchases,latest_cpa"),
-    readCampaignGoals()
+    readCampaignGoals(),
+    getAppSettings()
   ]);
 
   if (campaignsResult.error) {
@@ -709,7 +710,38 @@ export async function getCampaignsWithOverview(): Promise<CampaignOverview[]> {
     ...c,
     video_goal: (c.video_goal && c.video_goal > 0) ? c.video_goal : campaignGoals[c.id] ?? null
   }));
-  const ads = normalizeAds(adsResult.data ?? []);
+  const rawAds = normalizeAds(adsResult.data ?? []);
+
+  // Filter ads based on user profile and permissions so users only see their own ads
+  let collaboratorAdIds = new Set<string>();
+  if (profile && profile.role !== "admin") {
+    const { data: collaboratorRows } = await admin
+      .from("ad_collaborators")
+      .select("ad_id")
+      .eq("profile_id", profile.id);
+    if (collaboratorRows?.length) {
+      collaboratorAdIds = new Set(collaboratorRows.map((r) => r.ad_id));
+    }
+  }
+
+  const managerScope = appSettings.manager_creative_scope ?? "all";
+  const isFullAccess = !profile || profile.role === "admin" || (profile.role === "manager" && managerScope !== "own");
+
+  const ads = isFullAccess
+    ? rawAds
+    : rawAds.filter((ad) => {
+        if (profile.role === "content_creator") {
+          return ad.creator_id === profile.id || collaboratorAdIds.has(ad.id);
+        }
+        if (profile.role === "editor") {
+          return ad.editor_id === profile.id || collaboratorAdIds.has(ad.id);
+        }
+        if (profile.role === "manager") {
+          return ad.creator_id === profile.id || ad.editor_id === profile.id || collaboratorAdIds.has(ad.id);
+        }
+        return false;
+      });
+
   const incentiveMap = new Map<string, { latest_spend?: number; latest_purchases?: number; latest_cpa?: number }>();
   if (incentiveResult.data) {
     for (const item of incentiveResult.data) {
@@ -816,7 +848,8 @@ export async function getCampaignsWithOverview(): Promise<CampaignOverview[]> {
   });
 }
 
-export async function getCampaignDetail(campaignId: string): Promise<CampaignOverview | null> {
-  const overviews = await getCampaignsWithOverview();
+export async function getCampaignDetail(campaignId: string, profile?: Profile): Promise<CampaignOverview | null> {
+  const overviews = await getCampaignsWithOverview(profile);
   return overviews.find((o) => o.campaign.id === campaignId) ?? null;
 }
+

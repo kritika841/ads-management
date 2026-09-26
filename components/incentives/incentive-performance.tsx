@@ -240,8 +240,21 @@ export function IncentivePerformance({
         setVisibleCount((value) => Math.min(filtered.length, value + 25)); }, { rootMargin: "240px" }); observer.observe(node); return () => observer.disconnect(); }, [filtered.length, view]);
     useEffect(() => { onPeriodChange?.(periodSummary); }, [onPeriodChange, periodSummary]);
     const today = dashboardToday();
-    const needsAssetRefresh = reviewer && dateFrom === today && dateTo === today && metaAds.some((ad) => (ad.assets?.length ?? 0) > 0 && ad.assets?.some((asset) => asset.source === "meta_creative" || /save(?:%20|\s)more|satmi(?:%20|\s)bundles/i.test(asset.asset_label) || /^(video|image) \d+$/i.test(asset.asset_label) || /^\d{8,}$/.test(asset.asset_label) || isCaptionLike(asset.asset_label) || (/\.(mp4|mov|m4v|webm).*\(\d{8,}\)$/i.test(asset.asset_label) && !/^(video|image)\b/i.test(asset.asset_label)) || !asset.daily_metrics?.some((metric) => metric.metric_date === today)));
-    const needsTodayRefresh = reviewer && ((dateFrom === today && dateTo === today && metaAds.length > 0 && !metaAds.some((ad) => dashboardDate(new Date(ad.last_synced_at)) === today)) || needsAssetRefresh);
+    const latestSyncTime = useMemo(() => {
+        let maxTime = 0;
+        for (const ad of metaAds) {
+            if (ad.last_synced_at) {
+                const ms = new Date(ad.last_synced_at).getTime();
+                if (!isNaN(ms) && ms > maxTime) maxTime = ms;
+            }
+        }
+        return maxTime;
+    }, [metaAds]);
+
+    const STALE_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
+    const isDataStale = (dateFrom === today && dateTo === today) && (metaAds.length === 0 || (Date.now() - latestSyncTime > STALE_THRESHOLD_MS));
+    const needsAssetRefresh = dateFrom === today && dateTo === today && metaAds.some((ad) => (ad.assets?.length ?? 0) > 0 && ad.assets?.some((asset) => asset.source === "meta_creative" || /save(?:%20|\s)more|satmi(?:%20|\s)bundles/i.test(asset.asset_label) || /^(video|image) \d+$/i.test(asset.asset_label) || /^\d{8,}$/.test(asset.asset_label) || isCaptionLike(asset.asset_label) || (/\.(mp4|mov|m4v|webm).*\(\d{8,}\)$/i.test(asset.asset_label) && !/^(video|image)\b/i.test(asset.asset_label)) || !asset.daily_metrics?.some((metric) => metric.metric_date === today)));
+    const needsTodayRefresh = isDataStale || needsAssetRefresh;
     useEffect(() => {
         if (!needsTodayRefresh || autoRefreshAttempted.current) return;
         autoRefreshAttempted.current = true;
@@ -251,10 +264,21 @@ export function IncentivePerformance({
             else if (!refreshRetryUsed.current) {
                 refreshRetryUsed.current = true;
                 autoRefreshAttempted.current = false;
-                window.setTimeout(() => router.refresh(), 1500);
+                window.setTimeout(() => router.refresh(), 2000);
             }
-        }).finally(() => setRefreshingToday(false));
+        }).catch(() => undefined).finally(() => setRefreshingToday(false));
     }, [metaAds, needsTodayRefresh, router]);
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            if (!refreshingToday && Date.now() - latestSyncTime > STALE_THRESHOLD_MS && dateFrom === today && dateTo === today) {
+                fetch("/api/incentives/sync", { method: "POST" })
+                    .then((res) => { if (res.ok) router.refresh(); })
+                    .catch(() => undefined);
+            }
+        }, 10 * 60 * 1000);
+        return () => clearInterval(interval);
+    }, [dateFrom, dateTo, latestSyncTime, refreshingToday, router, today]);
     const setColumnSort = (column: SortColumn) => {
         if (sort === column) setSortDirection((direction) => direction === "asc" ? "desc" : "asc");
         else { setSort(column); setSortDirection(["creative", "campaign", "delivery", "newest", "oldest"].includes(column) ? "asc" : "desc"); }

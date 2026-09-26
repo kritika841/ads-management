@@ -85,7 +85,8 @@ export default async function LibraryPage({
   const initialQueue = queueForRole(profile.role, requestedQueue) ?? queuesForRole(profile.role)[0].key;
 
   const now = Date.now();
-  const cached = libraryCache.get(profile.role);
+  const cacheKey = `${profile.id}:${profile.role}`;
+  const cached = libraryCache.get(cacheKey);
 
   let ads: AdWithRelations[];
   let campaigns: Campaign[];
@@ -124,7 +125,7 @@ export default async function LibraryPage({
     settings = freshSettings;
 
     if (ads.length > 0) {
-      libraryCache.set(profile.role, {
+      libraryCache.set(cacheKey, {
         timestamp: now,
         ads,
         campaigns,

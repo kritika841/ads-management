@@ -76,7 +76,7 @@ async function fetchDashboardAdsWithRetry(fallbackAds: DashboardAdSummaryItem[] 
 export default async function DashboardPage() {
   const profile = await requireProfile();
   const isReviewer = profile.role === "admin" || profile.role === "manager";
-  const cacheKey = `${profile.role}:${isReviewer ? "reviewer" : "member"}`;
+  const cacheKey = `${profile.id}:${profile.role}`;
   const now = Date.now();
   const cached = cacheMap.get(cacheKey);
 

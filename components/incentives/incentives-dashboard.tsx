@@ -136,20 +136,51 @@ export function IncentivesDashboard({
         setMessage(null);
         try {
             const response = await fetch("/api/incentives/sync", { method: "POST" });
-            const text = await response.text();
+            const contentType = response.headers.get("content-type") || "";
             let payload: { error?: string; message?: string; catalogAds?: number; autoMatched?: number; autoLinked?: number; synced?: number } = {};
-            try {
-                payload = JSON.parse(text);
-            } catch {
-                throw new Error(`Server returned HTTP ${response.status}: ${text.slice(0, 150)}`);
+
+            if (contentType.includes("application/json")) {
+                try {
+                    payload = await response.json();
+                } catch {
+                    payload = {};
+                }
+            } else {
+                const text = await response.text();
+                const isHtml = text.trim().startsWith("<") || /<!DOCTYPE|<html/i.test(text);
+                if (isHtml) {
+                    if (response.status === 504) {
+                        throw new Error("Sync is taking longer than usual and is continuing in the background. Please refresh in a moment.");
+                    }
+                    if (response.status === 502 || response.status === 503) {
+                        throw new Error("Meta sync service is temporarily unavailable. Please try again shortly.");
+                    }
+                    if (response.status === 401) {
+                        throw new Error("Session expired. Please log in again to sync.");
+                    }
+                    if (response.status === 403) {
+                        throw new Error("You do not have permission to sync Meta metrics.");
+                    }
+                    throw new Error(`Sync request could not complete (HTTP ${response.status}). Please try again.`);
+                }
+                const cleanError = text.replace(/<[^>]*>/g, "").trim().slice(0, 100);
+                throw new Error(cleanError || `Sync failed (HTTP ${response.status}).`);
             }
-            if (!response.ok)
-                throw new Error(payload.error ?? `Sync failed (HTTP ${response.status}).`);
+
+            if (!response.ok) {
+                const errorMsg = payload.error ? String(payload.error).replace(/<[^>]*>/g, "").trim() : `Sync failed (HTTP ${response.status}).`;
+                throw new Error(errorMsg);
+            }
+
             setMessage(payload.message ?? `Imported ${payload.catalogAds ?? 0} Meta ads, auto-tagged ${payload.autoMatched ?? 0}, added ${payload.autoLinked ?? 0} to incentives, and updated ${payload.synced ?? 0} tracked creatives.`);
             router.refresh();
         }
         catch (cause) {
-            setMessage(cause instanceof Error ? cause.message : "Sync failed.");
+            let errorText = cause instanceof Error ? cause.message : "Sync failed.";
+            if (errorText.includes("<!DOCTYPE") || errorText.includes("<html") || /<[a-z][\s\S]*>/i.test(errorText)) {
+                errorText = "Sync encountered an unexpected server response. Please try again in a few moments.";
+            }
+            setMessage(errorText);
         }
         finally {
             setSyncing(false);
@@ -162,7 +193,17 @@ export function IncentivesDashboard({
           {reviewer ? <Button variant="secondary" onClick={syncMeta} disabled={syncing}>{syncing ? <Loader2 className="size-4 animate-spin"/> : <RefreshCw className="size-4"/>}Sync Meta</Button> : null}
         </div>
       </div>
-      {message ? <div className="mt-4 rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground">{message}</div> : null}
+      {message ? (
+        <div className={cn(
+          "mt-4 flex items-center justify-between rounded-lg border px-4 py-3 text-sm",
+          message.toLowerCase().includes("fail") || message.toLowerCase().includes("error") || message.toLowerCase().includes("expired") || message.toLowerCase().includes("unavailable")
+            ? "border-destructive/30 bg-destructive/10 text-destructive"
+            : "border-border bg-card text-muted-foreground"
+        )}>
+          <span>{message}</span>
+          <button type="button" onClick={() => setMessage(null)} className="ml-3 text-xs opacity-70 hover:opacity-100">✕</button>
+        </div>
+      ) : null}
 
       {section === null ? <section className="panel mt-6 flex min-h-48 items-center justify-center text-sm text-muted-foreground">Loading creative performance…</section> : null}
       {section === "overview" && !isSpendHidden ? <section className="mt-6 max-w-xs overflow-hidden rounded-xl border border-border bg-card">

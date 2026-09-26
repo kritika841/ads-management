@@ -289,12 +289,19 @@ export function CampaignsDashboardClient({
   // Flat list of all creatives across campaigns
   const allCreatives: (AdWithRelations & { campaign?: Campaign })[] = useMemo(() => {
     return campaignOverviews.flatMap((ov) =>
-      ov.creatives.map((creative) => ({
-        ...creative,
-        campaign: ov.campaign
-      }))
+      ov.creatives
+        .filter((creative) => {
+          if (profile.role === "admin" || profile.role === "manager") return true;
+          if (profile.role === "content_creator") return creative.creator_id === profile.id;
+          if (profile.role === "editor") return creative.editor_id === profile.id;
+          return true;
+        })
+        .map((creative) => ({
+          ...creative,
+          campaign: ov.campaign
+        }))
     );
-  }, [campaignOverviews]);
+  }, [campaignOverviews, profile.role, profile.id]);
 
   // Available filter options extracted from creatives
   const { allProducts, allCreators, allEditors } = useMemo(() => {

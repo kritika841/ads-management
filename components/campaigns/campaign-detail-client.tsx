@@ -439,6 +439,13 @@ export function CampaignDetailClient({
   // Filter creatives
   const filteredCreatives = useMemo(() => {
     return overview.creatives.filter((creative) => {
+      if (profile.role === "content_creator" && creative.creator_id && creative.creator_id !== profile.id) {
+        return false;
+      }
+      if (profile.role === "editor" && creative.editor_id && creative.editor_id !== profile.id) {
+        return false;
+      }
+
       if (downloadFilter !== "all") {
         const dl = isDownloaded(creative);
         if (downloadFilter === "downloaded" && !dl) return false;

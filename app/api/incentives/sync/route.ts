@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireRole } from "@/lib/auth";
+import { getCurrentProfile } from "@/lib/auth";
 import { matchAdFlowCreative, selectProductCampaign, type AutoMatchAd, type AutoMatchCampaign } from "@/lib/incentive-auto-match";
 import { evaluateIncentiveCreative, type IncentiveCampaign, type IncentiveDailyMetric } from "@/lib/incentives";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -29,15 +29,32 @@ type ExistingLink = { id: string; ad_id: string; meta_ad_id: string; creator_id:
 export const maxDuration = 300;
 
 export async function POST() {
-  const profile = await requireRole(["admin", "manager"]);
+  const profile = await getCurrentProfile();
+  if (!profile) {
+    return NextResponse.json({ error: "Unauthorized. Please log in to sync metrics." }, { status: 401 });
+  }
+  if (!profile.active) {
+    return NextResponse.json({ error: "Account inactive." }, { status: 403 });
+  }
   return syncMetaIncentives(profile.id);
 }
 
-/** Invoked hourly by Vercel Cron with the same CRON_SECRET used by other jobs. */
+/** Invoked hourly by Vercel Cron or by local VPS background cron scheduler. */
 export async function GET(request: NextRequest) {
   const configuredSecret = process.env.CRON_SECRET;
   const authorization = request.headers.get("authorization");
-  if (!configuredSecret || authorization !== `Bearer ${configuredSecret}`) {
+  const isInternal = request.headers.get("x-internal-cron") === "1";
+  const forwarded = request.headers.get("x-forwarded-for") || "";
+  const host = request.headers.get("host") || "";
+  const isLocalhost =
+    isInternal &&
+    (!forwarded || forwarded.includes("127.0.0.1") || forwarded.includes("::1") || host.includes("localhost") || host.includes("127.0.0.1"));
+
+  const isAuthorized =
+    (configuredSecret && authorization === `Bearer ${configuredSecret}`) ||
+    isLocalhost;
+
+  if (!isAuthorized) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   return syncMetaIncentives(null);
@@ -50,6 +67,25 @@ async function syncMetaIncentives(actorId: string | null) {
 
   const admin = createSupabaseAdminClient();
   const syncStartedAt = Date.now();
+
+  // Prevent duplicate concurrent sync runs from thrashing the server or Meta API limits
+  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const { data: activeSync } = await admin
+    .from("meta_sync_runs")
+    .select("id, started_at")
+    .eq("status", "running")
+    .gt("started_at", fiveMinutesAgo)
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (activeSync) {
+    return NextResponse.json({
+      message: "A sync is already in progress in the background. Please refresh shortly.",
+      alreadyRunning: true
+    }, { status: 200 });
+  }
+
   const { data: syncRun } = await admin.from("meta_sync_runs").insert({ actor_id: actorId }).select("id").maybeSingle();
   const syncRunId = syncRun?.id as string | undefined;
   const today = new Date().toISOString().slice(0, 10);
@@ -126,7 +162,7 @@ async function syncMetaIncentives(actorId: string | null) {
     // Meta's supported `ad.id IN (...)` filtering. Larger API batches reduce
     // request count; lower fan-out prevents the response pages from being
     // retained concurrently and leaving the dashboard with stale labels.
-    for (const batch of chunks(chunks(metaAds.map((ad) => ad.id), 10), 3)) {
+    for (const batch of chunks(chunks(metaAds.map((ad) => ad.id), 20), 3)) {
       const results = await Promise.all(batch.map((adIds) => {
         const insightsUrl = graphUrl(`${accountBase}/insights`, token, { level: "ad", limit: "100", time_increment: "1", time_range: JSON.stringify({ since: catalogStart, until: today }), filtering: JSON.stringify([{ field: "ad.id", operator: "IN", value: adIds }]), fields: "date_start,date_stop,ad_id,spend,impressions,reach,clicks,inline_link_clicks,actions,action_values" });
         return graphPages<MetaInsightRow>(insightsUrl);
@@ -390,14 +426,18 @@ async function fetchAssetBreakdown(accountBase: string, token: string, adIds: st
       return [] as MetaInsightRow[];
     }
   };
-  // Query video_asset and image_asset first because in Meta Graph API they contain
+  // Query video_asset and image_asset first in parallel because in Meta Graph API they contain
   // the exact Creative → Media filenames (e.g. "video_name": "ISH0195.mp4")
   // as displayed in Meta Ads Manager. Fall back to ad_format_asset only if empty.
-  await fetchBreakdown("video_asset");
-  await fetchBreakdown("image_asset");
+  await Promise.all([
+    fetchBreakdown("video_asset"),
+    fetchBreakdown("image_asset")
+  ]);
   if (!collected.size) {
-    await fetchBreakdown("ad_format_asset");
-    if (!collected.size) await fetchBreakdown("creative_media_type_breakdown");
+    await Promise.all([
+      fetchBreakdown("ad_format_asset"),
+      fetchBreakdown("creative_media_type_breakdown")
+    ]);
   }
   // Some accounts return the Ads Manager asset breakdown only as a range
   // total. Keep that total rather than dropping the creative metrics entirely;
@@ -486,9 +526,26 @@ async function updateLinkedCreatives(admin: ReturnType<typeof createSupabaseAdmi
 async function graphPages<T>(initialUrl: URL) {
   const rows: T[] = [];
   let next: string | undefined = initialUrl.toString();
-  while (next) {
-    const response: Response = await fetch(next, { cache: "no-store" });
-    const payload = await response.json() as MetaPayload<T>;
+  let pageCount = 0;
+  while (next && pageCount < 20) {
+    pageCount++;
+    let response: Response;
+    try {
+      response = await fetch(next, { cache: "no-store", signal: AbortSignal.timeout(25000) });
+    } catch (err) {
+      throw new Error(`Meta API request timed out: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    let payload: MetaPayload<T>;
+    if (contentType.includes("application/json")) {
+      payload = await response.json() as MetaPayload<T>;
+    } else {
+      const errorText = await response.text();
+      const cleanError = errorText.replace(/<[^>]*>/g, "").trim().slice(0, 100);
+      throw new Error(`Meta returned HTTP ${response.status}: ${cleanError || "Non-JSON response"}`);
+    }
+
     if (!response.ok || payload.error) throw new Error(payload.error?.message ?? `Meta returned HTTP ${response.status}.`);
     rows.push(...(payload.data ?? []));
     next = payload.paging?.next;

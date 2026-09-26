@@ -20,7 +20,7 @@ export default async function CampaignDetailPage({
   const [{ id }, profile] = await Promise.all([params, requireProfile()]);
 
   const [overview, campaigns, products, profiles, tags, editorWorkloads] = await Promise.all([
-    getCampaignDetail(id),
+    getCampaignDetail(id, profile),
     getCampaigns(),
     getProducts(),
     getProfiles(),

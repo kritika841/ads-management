@@ -5,10 +5,8 @@ import { CampaignsDashboardClient } from "@/components/campaigns/campaigns-dashb
 export const dynamic = "force-dynamic";
 
 export default async function CampaignsPage() {
-  const [profile, campaignOverviews] = await Promise.all([
-    requireProfile(),
-    getCampaignsWithOverview()
-  ]);
+  const profile = await requireProfile();
+  const campaignOverviews = await getCampaignsWithOverview(profile);
 
   return (
     <CampaignsDashboardClient
