@@ -424,7 +424,9 @@ export async function sendPasswordResetEmail(
     }
   }
   if (!origin) {
-    origin = process.env.NEXT_PUBLIC_APP_URL || "https://stock-hip-mon-configure.trycloudflare.com";
+    origin =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.NODE_ENV === "production" ? "https://ads.satmi.in" : "http://localhost:3001");
   }
   origin = origin.replace(/\/+$/, "");
 
