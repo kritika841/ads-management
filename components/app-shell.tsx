@@ -76,6 +76,9 @@ export function AppShell({
     { href: "/announcements", label: "Announcements", icon: Megaphone },
     ...(profile.role === "manager"
       ? [{ href: "/admin/performance", label: "Editor Performance", icon: BarChart2 }]
+      : []),
+    ...(profile.role !== "admin"
+      ? [{ href: "/settings", label: "Settings", icon: Settings }]
       : [])
   ];
   const adminLinks: NavItem[] =
@@ -90,6 +93,7 @@ export function AppShell({
             icon: Settings,
             children: [
               { href: "/admin/settings#workflow", label: "Workflow & Campaigns" },
+              { href: "/admin/settings#security", label: "Security & Passwords" },
               { href: "/admin/settings#downloads", label: "Download Logs" },
               { href: "/admin/settings#announcements", label: "Announcements" },
               { href: "/admin/settings#audit", label: "Audit Log" }
@@ -165,13 +169,17 @@ export function AppShell({
               <NotificationBell notifications={notifications} userId={profile.id}>
                 <Bell className="size-[18px]" aria-hidden />
               </NotificationBell>
-              <div className="ml-1 flex items-center gap-2 rounded-lg border border-border bg-card py-1 pl-1 pr-2">
+              <Link
+                href={profile.role === "admin" ? "/admin/settings#security" : "/settings"}
+                className="ml-1 flex items-center gap-2 rounded-lg border border-border bg-card py-1 pl-1 pr-2 transition-colors hover:bg-muted/70"
+                title="Account Settings"
+              >
                 <Avatar name={profile.name} src={profile.avatar_url} className="size-8" />
                 <div className="hidden min-w-0 leading-tight sm:block">
                   <div className="max-w-40 truncate text-sm font-medium text-foreground">{profile.name}</div>
                   <div className="max-w-40 truncate text-xs text-muted-foreground">{profile.email}</div>
                 </div>
-              </div>
+              </Link>
             </div>
           </div>
         </header>
@@ -235,8 +243,17 @@ function SidebarContent({
             <p className="truncate text-sm font-medium text-foreground">{profile.name}</p>
             <p className="truncate text-xs text-muted-foreground">{roleLabel(profile.role)}</p>
           </div>
+          <Link
+            href={profile.role === "admin" ? "/admin/settings#security" : "/settings"}
+            onClick={onNavigate}
+            title="Account Settings"
+          >
+            <Button variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-foreground" type="button">
+              <Settings className="size-4" aria-hidden />
+            </Button>
+          </Link>
           <form action="/auth/signout" method="post">
-            <Button variant="ghost" size="icon" className="size-9" title="Sign out" type="submit">
+            <Button variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-foreground" title="Sign out" type="submit">
               <LogOut className="size-4" aria-hidden />
             </Button>
           </form>

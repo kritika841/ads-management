@@ -2,15 +2,20 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowLeft, Loader2, Mail, Send } from "lucide-react";
+import { ArrowLeft, Copy, KeyRound, Loader2, Mail, Send } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
+import { requestPasswordResetAction } from "@/app/actions/password";
 
 export default function ResetPasswordPage() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [actionLink, setActionLink] = useState<string | null>(null);
+  const [emailDelivered, setEmailDelivered] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   function handleSubmit(event: React.FormEvent) {
@@ -18,15 +23,18 @@ export default function ResetPasswordPage() {
     setMessage(null);
     startTransition(async () => {
       try {
-        const supabase = createSupabaseBrowserClient();
-        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-          redirectTo: `${window.location.origin}/reset-password/update`
-        });
-        if (error) {
-          setMessage(error.message);
-          return;
+        const trimmedEmail = email.trim();
+        const clientOrigin = typeof window !== "undefined" ? window.location.origin : undefined;
+
+        const res = await requestPasswordResetAction(trimmedEmail, clientOrigin);
+        if (res.ok) {
+          setSent(true);
+          setIsAdmin(Boolean(res.isAdmin));
+          setActionLink(res.actionLink || null);
+          setEmailDelivered(Boolean(res.emailDelivered));
+        } else {
+          setMessage(res.message || "Something went wrong. Please try again.");
         }
-        setSent(true);
       } catch (err) {
         setMessage(err instanceof Error ? err.message : "Something went wrong. Please try again.");
       }
@@ -70,8 +78,39 @@ export default function ResetPasswordPage() {
             {sent ? (
               <div className="space-y-4">
                 <div className="rounded-md border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
-                  A password reset link has been sent to <strong>{email}</strong>. Check your inbox (and spam folder).
+                  A password reset link has been emailed to <strong>{email}</strong>. Please check your inbox (and spam folder) and click the link to set your new password.
                 </div>
+
+                {/* Only authenticated administrators are allowed to bypass email delivery with direct reset tools */}
+                {isAdmin && actionLink ? (
+                  <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-warning">
+                    <p className="font-semibold">Administrator Tools:</p>
+                    <p className="mt-0.5 opacity-90">Direct reset link generated for team administrator access.</p>
+                    <div className="mt-2.5 space-y-2">
+                      <a href={actionLink} className="block w-full">
+                        <Button className="w-full text-xs" type="button" size="sm">
+                          <KeyRound className="mr-2 size-3.5" />
+                          Set New Password Now (Admin)
+                        </Button>
+                      </a>
+                      <Button
+                        variant="secondary"
+                        className="w-full text-xs"
+                        size="sm"
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(actionLink);
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 2000);
+                        }}
+                      >
+                        <Copy className="mr-1.5 size-3" />
+                        {copied ? "Copied reset link!" : "Copy Direct Reset Link"}
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+
                 <Link href="/login" className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">
                   <ArrowLeft className="size-4" aria-hidden />
                   Back to sign in

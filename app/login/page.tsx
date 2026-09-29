@@ -2,30 +2,38 @@ import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/login-form";
 import { SetupState } from "@/components/setup-state";
 import { getCurrentProfile } from "@/lib/auth";
+import { getUserPasswordStatus } from "@/lib/password-security";
 import { hasSupabaseEnv } from "@/lib/supabase/server";
 
 export default async function LoginPage({
   searchParams
 }: {
-  searchParams: Promise<{ inactive?: string; error?: string }>;
+  searchParams: Promise<{ inactive?: string; error?: string; email?: string }>;
 }) {
   if (!hasSupabaseEnv()) {
     return <SetupState />;
   }
 
+  const query = await searchParams;
+  const isPasswordExpiredQuery = query.error === "password_expired";
+
   const profile = await getCurrentProfile();
   if (profile?.active) {
-    redirect("/dashboard");
+    const passwordStatus = await getUserPasswordStatus(profile.id, profile.created_at);
+    if (!passwordStatus.isExpired) {
+      redirect("/dashboard");
+    }
   }
 
-  const query = await searchParams;
   const initialMessage = query.inactive
     ? "Your account is not active yet. Ask an admin to approve it."
-    : query.error
-      ? query.error === "oauth_denied"
-        ? "Google sign-in was cancelled or denied. Please try again."
-        : "Google sign-in could not be completed. Use an approved team account and try again."
-      : null;
+    : isPasswordExpiredQuery
+      ? "Password expired. Your password has expired after 30 days. Please reset it or contact your administrator."
+      : query.error
+        ? query.error === "oauth_denied"
+          ? "Google sign-in was cancelled or denied. Please try again."
+          : "Google sign-in could not be completed. Use an approved team account and try again."
+        : null;
 
   return (
     <main className="grid min-h-screen bg-card lg:grid-cols-[minmax(360px,0.8fr)_minmax(520px,1.2fr)]">
@@ -51,7 +59,11 @@ export default async function LoginPage({
           </div>
           <div className="panel p-5 sm:p-7">
             <div className="mb-6"><h2 className="text-2xl font-semibold text-foreground">Welcome back</h2><p className="mt-1.5 text-sm text-muted-foreground">Sign in with your approved team account.</p></div>
-            <LoginForm initialMessage={initialMessage} />
+            <LoginForm
+              initialMessage={initialMessage}
+              initialEmail={query.email}
+              initialExpired={isPasswordExpiredQuery}
+            />
           </div>
         </div>
       </section>

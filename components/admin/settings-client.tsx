@@ -10,6 +10,7 @@ import {
   Megaphone,
   Power,
   ScrollText,
+  ShieldCheck,
   Sliders,
   Trash2
 } from "lucide-react";
@@ -23,12 +24,14 @@ import type { Announcement } from "@/lib/announcements";
 import { cn, formatDateTime } from "@/lib/utils";
 import { DownloadLogsPanel } from "@/components/admin/download-logs-panel";
 import { AnnouncementsDashboard } from "@/components/announcements/announcements-dashboard";
+import { SecuritySettingsPanel, type PasswordStatusItem } from "@/components/admin/security-settings-panel";
 
-type SettingsTab = "workflow" | "downloads" | "audit" | "announcements";
+type SettingsTab = "workflow" | "security" | "downloads" | "audit" | "announcements";
 
 function resolveSettingsTab(): SettingsTab {
   if (typeof window === "undefined") return "workflow";
   const rawHash = (window.location.hash || "").replace(/^#/, "").toLowerCase();
+  if (rawHash === "security" || rawHash === "passwords" || rawHash === "password") return "security";
   if (rawHash === "downloads" || rawHash.startsWith("download")) return "downloads";
   if (rawHash === "audit") return "audit";
   if (rawHash === "announcements" || rawHash === "announcement") return "announcements";
@@ -37,6 +40,7 @@ function resolveSettingsTab(): SettingsTab {
   try {
     const params = new URLSearchParams(window.location.search);
     const tabParam = (params.get("tab") || params.get("section") || "").toLowerCase();
+    if (tabParam === "security" || tabParam === "passwords" || tabParam === "password") return "security";
     if (tabParam === "downloads" || tabParam.startsWith("download")) return "downloads";
     if (tabParam === "audit") return "audit";
     if (tabParam === "announcements" || tabParam === "announcement") return "announcements";
@@ -55,6 +59,7 @@ export function SettingsClient({
   downloadLogs = [],
   announcements = [],
   allProfiles = [],
+  passwordStatuses = [],
   profile
 }: {
   settings: AppSettings;
@@ -63,6 +68,7 @@ export function SettingsClient({
   downloadLogs?: DownloadLog[];
   announcements?: Announcement[];
   allProfiles?: Profile[];
+  passwordStatuses?: PasswordStatusItem[];
   profile?: Profile;
 }) {
   const [activeTab, setActiveTab] = useState<SettingsTab>(resolveSettingsTab);
@@ -173,6 +179,20 @@ export function SettingsClient({
 
         <button
           type="button"
+          onClick={() => handleTabClick("security")}
+          className={cn(
+            "flex items-center gap-2 border-b-2 px-3.5 py-2.5 text-xs sm:text-sm font-medium transition -mb-px whitespace-nowrap",
+            activeTab === "security"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <ShieldCheck className="size-4" />
+          Security &amp; Passwords
+        </button>
+
+        <button
+          type="button"
           onClick={() => handleTabClick("announcements")}
           className={cn(
             "flex items-center gap-2 border-b-2 px-3.5 py-2.5 text-xs sm:text-sm font-medium transition -mb-px whitespace-nowrap",
@@ -237,6 +257,8 @@ export function SettingsClient({
           allProfiles={allProfiles}
           profile={profile ?? { id: "admin", name: "Admin", email: "admin@example.com", role: "admin", active: true, avatar_url: null, deleted_at: null, created_at: "", updated_at: "" }}
         />
+      ) : activeTab === "security" ? (
+        <SecuritySettingsPanel initialStatuses={passwordStatuses} />
       ) : activeTab === "audit" ? (
         <section className="panel overflow-hidden">
           <div className="border-b border-border p-5">

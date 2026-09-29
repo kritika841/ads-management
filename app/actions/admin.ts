@@ -8,6 +8,8 @@ import { PERFORMANCE_METRIC_KEYS, type HiddenMetricsByRole, type ManagerCreative
 import { writeMetricVisibilityFile } from "@/lib/metric-visibility-server";
 import type { UserRole } from "@/lib/types";
 
+import { isPasswordReused, recordPasswordChange } from "@/lib/password-security";
+
 const userSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().trim().min(1),
@@ -72,6 +74,16 @@ export async function saveUser(payload: z.infer<typeof userSchema>) {
   const admin = createSupabaseAdminClient();
 
   if (data.id) {
+    if (data.password) {
+      const reused = await isPasswordReused(data.id, data.password);
+      if (reused) {
+        return {
+          ok: false,
+          message: "This password has been used previously by this user. Historical passwords cannot be reused."
+        };
+      }
+    }
+
     const { error: authError } = await admin.auth.admin.updateUserById(data.id, {
       email: data.email,
       email_confirm: true,
@@ -85,6 +97,10 @@ export async function saveUser(payload: z.infer<typeof userSchema>) {
 
     if (authError) {
       return { ok: false, message: authError.message };
+    }
+
+    if (data.password) {
+      await recordPasswordChange(data.id, data.password, data.email);
     }
 
     const { error } = await admin
@@ -121,6 +137,16 @@ export async function saveUser(payload: z.infer<typeof userSchema>) {
       return { ok: false, message: existingError.message };
     }
 
+    if (existingProfile?.id) {
+      const reused = await isPasswordReused(existingProfile.id, data.password);
+      if (reused) {
+        return {
+          ok: false,
+          message: "This password has been used previously by this user. Historical passwords cannot be reused."
+        };
+      }
+    }
+
     const authPatch = {
       email: data.email,
       password: data.password,
@@ -139,6 +165,8 @@ export async function saveUser(payload: z.infer<typeof userSchema>) {
     if (error || !created.user) {
       return { ok: false, message: error?.message ?? "Unable to create user." };
     }
+
+    await recordPasswordChange(created.user.id, data.password, data.email);
 
     const { error: profileError } = await admin.from("profiles").upsert({
       id: created.user.id,

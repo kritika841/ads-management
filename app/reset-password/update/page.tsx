@@ -2,10 +2,21 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Loader2, LockKeyhole, ShieldCheck } from "lucide-react";
+import Link from "next/link";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Eye,
+  EyeOff,
+  Loader2,
+  LockKeyhole,
+  RotateCcw,
+  ShieldCheck
+} from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
+import { resetPasswordWithPolicyAction } from "@/app/actions/password";
 
 export default function UpdatePasswordPage() {
   const router = useRouter();
@@ -16,22 +27,150 @@ export default function UpdatePasswordPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const [ready, setReady] = useState(false);
 
-  // Supabase sends the user to this page with a session in the URL hash.
-  // We wait for the SIGNED_IN event from the PASSWORD_RECOVERY flow.
+  // Verification states: "verifying" | "ready" | "error"
+  const [authStatus, setAuthStatus] = useState<"verifying" | "ready" | "error">("verifying");
+  const [authError, setAuthError] = useState<string | null>(null);
+
   useEffect(() => {
+    let isMounted = true;
     const supabase = createSupabaseBrowserClient();
-    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") {
-        setReady(true);
+
+    const markReady = () => {
+      if (isMounted) {
+        setAuthStatus("ready");
+        setAuthError(null);
+      }
+    };
+
+    const markError = (err: string) => {
+      if (isMounted) {
+        setAuthStatus("error");
+        setAuthError(err);
+      }
+    };
+
+    // 1. Inspect URL search params and hash fragment for error returns
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+
+      const error = searchParams.get("error") || hashParams.get("error");
+      const errorDescription = searchParams.get("error_description") || hashParams.get("error_description");
+      const errorCode = searchParams.get("error_code") || hashParams.get("error_code");
+
+      if (error || errorCode) {
+        const readableError = errorDescription
+          ? decodeURIComponent(errorDescription.replace(/\+/g, " "))
+          : "The password reset link is invalid or has expired. Please request a new link.";
+        markError(readableError);
+        return;
+      }
+
+      // 2. Check for access_token in hash fragment or query string (Supabase recovery redirect)
+      const accessToken = hashParams.get("access_token") || searchParams.get("access_token");
+      const refreshToken = hashParams.get("refresh_token") || searchParams.get("refresh_token") || "";
+      if (accessToken) {
+        supabase.auth
+          .setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken
+          })
+          .then(({ data, error: sessionErr }) => {
+            if (!sessionErr && (data.session || data.user)) {
+              markReady();
+            } else if (sessionErr) {
+              markError(sessionErr.message || "Failed to establish password recovery session.");
+            }
+          })
+          .catch((err) => markError(err?.message || "Failed to authenticate recovery token."));
+        return;
+      }
+
+      // 3. Check for token_hash in search params (direct OTP verification)
+      const tokenHash = searchParams.get("token_hash");
+      const type = (searchParams.get("type") as "recovery" | null) || "recovery";
+      if (tokenHash) {
+        supabase.auth
+          .verifyOtp({ token_hash: tokenHash, type })
+          .then(({ error: otpErr }) => {
+            if (otpErr) {
+              markError(otpErr.message || "Failed to verify reset token.");
+            } else {
+              markReady();
+            }
+          })
+          .catch((err) => markError(err?.message || "Verification failed."));
+        return;
+      }
+
+      // 4. Check for PKCE code in search params
+      const code = searchParams.get("code");
+      if (code) {
+        supabase.auth
+          .exchangeCodeForSession(code)
+          .then(({ error: codeErr }) => {
+            if (codeErr) {
+              // Before failing, check if the session is already established
+              supabase.auth.getSession().then(({ data }) => {
+                if (data.session) {
+                  markReady();
+                } else {
+                  markError(codeErr.message || "Failed to exchange reset code.");
+                }
+              });
+            } else {
+              markReady();
+            }
+          })
+          .catch((err) => markError(err?.message || "Exchange failed."));
+        return;
+      }
+    } catch {
+      // ignore URL parsing errors
+    }
+
+    // 5. Listen for auth state changes (e.g. PASSWORD_RECOVERY, SIGNED_IN)
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY" || (event === "SIGNED_IN" && session)) {
+        markReady();
       }
     });
-    // Also check if there is already an active session (e.g. tab reload)
+
+    // 6. Check if session already active (e.g. set by server callback or existing cookie)
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) setReady(true);
+      if (data.session) {
+        markReady();
+      }
     });
-    return () => listener.subscription.unsubscribe();
+
+    // 7. Timeout safeguard: after 10 seconds, if still verifying, verify once more with getUser()
+    const timer = setTimeout(async () => {
+      if (isMounted) {
+        const {
+          data: { user }
+        } = await supabase.auth.getUser();
+        if (user) {
+          markReady();
+        } else {
+          setAuthStatus((prev) => {
+            if (prev === "verifying") {
+              setAuthError(
+                "Link verification timed out or the link has expired. Please request a fresh reset link."
+              );
+              return "error";
+            }
+            return prev;
+          });
+        }
+      }
+    }, 10000);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
   function handleSubmit(event: React.FormEvent) {
@@ -48,11 +187,24 @@ export default function UpdatePasswordPage() {
     startTransition(async () => {
       try {
         const supabase = createSupabaseBrowserClient();
-        const { error } = await supabase.auth.updateUser({ password });
-        if (error) {
-          setMessage(error.message);
+        const {
+          data: { user }
+        } = await supabase.auth.getUser();
+
+        const result = await resetPasswordWithPolicyAction({
+          newPassword: password,
+          confirmPassword,
+          userId: user?.id
+        });
+
+        if (!result.ok) {
+          setMessage(result.error || "Failed to update password.");
           return;
         }
+
+        // Also sync client session if applicable
+        await supabase.auth.updateUser({ password }).catch(() => null);
+
         setSuccess(true);
         setTimeout(() => router.push("/dashboard"), 2000);
       } catch (err) {
@@ -91,7 +243,11 @@ export default function UpdatePasswordPage() {
             <div className="mb-6">
               <h2 className="text-2xl font-semibold text-foreground">New password</h2>
               <p className="mt-1.5 text-sm text-muted-foreground">
-                {success ? "Password updated! Redirecting you to the dashboard…" : "Enter your new password below."}
+                {success
+                  ? "Password updated! Redirecting you to the dashboard…"
+                  : authStatus === "error"
+                  ? "Password recovery verification notice"
+                  : "Enter your new password below."}
               </p>
             </div>
 
@@ -100,10 +256,38 @@ export default function UpdatePasswordPage() {
                 <ShieldCheck className="size-4 shrink-0" aria-hidden />
                 Your password has been updated successfully.
               </div>
-            ) : !ready ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" aria-hidden />
-                Verifying reset link…
+            ) : authStatus === "error" ? (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-destructive">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="mt-0.5 size-5 shrink-0" aria-hidden />
+                    <div className="space-y-1">
+                      <h3 className="text-sm font-semibold">Unable to verify reset link</h3>
+                      <p className="text-xs leading-relaxed opacity-90">
+                        {authError || "This password reset link is invalid, has expired, or was already used."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Link href="/reset-password" className="block w-full">
+                    <Button className="w-full" type="button">
+                      <RotateCcw className="mr-2 size-4" />
+                      Request a New Reset Link
+                    </Button>
+                  </Link>
+                  <Link href="/login" className="flex items-center justify-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">
+                    <ArrowLeft className="size-4" aria-hidden />
+                    Back to sign in
+                  </Link>
+                </div>
+              </div>
+            ) : authStatus === "verifying" ? (
+              <div className="flex flex-col items-center justify-center py-6 text-center">
+                <Loader2 className="size-6 animate-spin text-primary" aria-hidden />
+                <p className="mt-3 text-sm font-medium text-foreground">Verifying reset link…</p>
+                <p className="mt-1 text-xs text-muted-foreground">Authenticating your secure recovery token</p>
               </div>
             ) : (
               <form className="space-y-4" onSubmit={handleSubmit}>

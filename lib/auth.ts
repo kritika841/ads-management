@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient, hasSupabaseEnv } from "@/lib/supabase/server";
+import { getUserPasswordStatus } from "@/lib/password-security";
 import type { Profile, UserRole } from "@/lib/types";
 
 export async function getSessionUser() {
@@ -46,6 +47,11 @@ export async function requireProfile() {
 
   if (!profile.active) {
     redirect("/login?inactive=1");
+  }
+
+  const passwordStatus = await getUserPasswordStatus(profile.id, profile.created_at);
+  if (passwordStatus.isExpired) {
+    redirect(`/login?error=password_expired&email=${encodeURIComponent(profile.email)}`);
   }
 
   return profile;

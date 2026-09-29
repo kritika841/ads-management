@@ -37,3 +37,18 @@ export const statusStyles: Record<AdStatus, string> = {
 };
 
 export const reviewerRoles: UserRole[] = ["admin", "manager"];
+
+export function roleLabel(role: UserRole | string): string {
+  switch (role) {
+    case "admin":
+      return "Admin";
+    case "manager":
+      return "Manager";
+    case "editor":
+      return "Editor";
+    case "content_creator":
+      return "Content Creator";
+    default:
+      return role;
+  }
+}
