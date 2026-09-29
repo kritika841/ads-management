@@ -248,7 +248,7 @@ export function SecuritySettingsPanel({
                       </td>
                       <td className="px-4 py-3">
                         <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
-                          {roleLabel(user.role as any)}
+                          {roleLabel(user.role)}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">
