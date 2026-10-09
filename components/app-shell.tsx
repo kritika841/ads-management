@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  ArchiveRestore,
   BarChart2,
   BarChart3,
   Bell,
@@ -17,8 +18,10 @@ import {
   Menu,
   Package,
   Settings,
+  Tags,
   Trophy,
   Users,
+  UserCheck,
   X
 } from "lucide-react";
 import { ChevronDown, ChevronRight } from "lucide-react";
@@ -75,7 +78,12 @@ export function AppShell({
       : []),
     { href: "/announcements", label: "Announcements", icon: Megaphone },
     ...(profile.role === "manager"
-      ? [{ href: "/admin/performance", label: "Editor Performance", icon: BarChart2 }]
+      ? [
+          { href: "/work-log", label: "Team Work Log", icon: UserCheck },
+          { href: "/tags", label: "Tags", icon: Tags },
+          { href: "/admin/performance", label: "Editor Performance", icon: BarChart2 },
+          { href: "/recycle-bin", label: "Recycle Bin", icon: ArchiveRestore }
+        ]
       : []),
     ...(profile.role !== "admin"
       ? [{ href: "/settings", label: "Settings", icon: Settings }]
@@ -85,6 +93,8 @@ export function AppShell({
     profile.role === "admin"
       ? [
           { href: "/admin/users", label: "People", icon: Users },
+          { href: "/work-log", label: "Team Work Log", icon: UserCheck },
+          { href: "/tags", label: "Tags", icon: Tags },
           { href: "/admin/performance", label: "Editor Performance", icon: BarChart2 },
           { href: "/admin/products", label: "Products", icon: Package },
           {
@@ -95,6 +105,7 @@ export function AppShell({
               { href: "/admin/settings#workflow", label: "Workflow & Campaigns" },
               { href: "/admin/settings#security", label: "Security & Passwords" },
               { href: "/admin/settings#downloads", label: "Download Logs" },
+              { href: "/admin/settings#recyclebin", label: "Recycle Bin" },
               { href: "/admin/settings#announcements", label: "Announcements" },
               { href: "/admin/settings#audit", label: "Audit Log" }
             ]

@@ -20,6 +20,8 @@ export type UserSecurityRecord = {
   lastChangedAt: string;
   expiresAt: string;
   history: PasswordHistoryEntry[];
+  forceLoggedOut?: boolean;
+  forceLogoutAt?: string | null;
 };
 
 export type PasswordStatus = {
@@ -28,6 +30,8 @@ export type PasswordStatus = {
   lastChangedAt: string;
   expiresAt: string;
   hasHistory: boolean;
+  forceLoggedOut?: boolean;
+  forceLogoutAt?: string | null;
 };
 
 const LOCAL_STORE_FILE = path.join(process.cwd(), "data", "password-history.json");
@@ -234,6 +238,8 @@ export async function recordPasswordChange(
   if (email) existing.email = email;
   existing.lastChangedAt = lastChangedAt;
   existing.expiresAt = expiresAt;
+  existing.forceLoggedOut = false;
+  existing.forceLogoutAt = null;
 
   // Append new entry without duplicates
   const filteredHistory = (existing.history || []).filter((h) => h.hash !== hash);
@@ -257,7 +263,9 @@ export async function recordPasswordChange(
         ...existingMeta,
         password_updated_at: lastChangedAt,
         password_expires_at: expiresAt,
-        password_history: metaHistory
+        password_history: metaHistory,
+        force_logged_out: false,
+        force_logout_at: null
       }
     });
   } catch (err) {
@@ -280,6 +288,58 @@ export async function recordPasswordChange(
   return { expiresAt, lastChangedAt };
 }
 
+type PasswordWindow = { lastChangedAt?: string | null; expiresAt?: string | null };
+
+function validWindow(window?: PasswordWindow | null): window is { lastChangedAt: string; expiresAt: string } {
+  if (!window?.lastChangedAt || !window?.expiresAt) return false;
+  return !Number.isNaN(new Date(window.lastChangedAt).getTime()) && !Number.isNaN(new Date(window.expiresAt).getTime());
+}
+
+/**
+ * Resolves a user's password status from every place a password change can be
+ * recorded (local store, Supabase auth user_metadata). The most recent change
+ * wins, so a reset recorded in only one layer is never masked by a stale entry
+ * in another. With no record at all, the 30-day window starts at `fallbackCreatedAt`.
+ * Pure so the admin list and the login gate always agree.
+ */
+export function resolvePasswordStatus(
+  sources: Array<PasswordWindow | null | undefined>,
+  fallbackCreatedAt?: string | null,
+  nowMs: number = Date.now(),
+  hasHistory = false,
+  forceLoggedOut = false,
+  forceLogoutAt: string | null = null
+): PasswordStatus {
+  const recorded = sources
+    .filter(validWindow)
+    .sort((a, b) => new Date(b.lastChangedAt).getTime() - new Date(a.lastChangedAt).getTime())[0];
+
+  let lastChangedAt: string;
+  let expiresAt: string;
+  if (recorded) {
+    lastChangedAt = recorded.lastChangedAt;
+    expiresAt = recorded.expiresAt;
+  } else {
+    const baseline = fallbackCreatedAt && !Number.isNaN(new Date(fallbackCreatedAt).getTime())
+      ? new Date(fallbackCreatedAt)
+      : new Date(nowMs);
+    lastChangedAt = baseline.toISOString();
+    expiresAt = new Date(baseline.getTime() + PASSWORD_EXPIRY_MS).toISOString();
+  }
+
+  const diffMs = new Date(expiresAt).getTime() - nowMs;
+  const isExpired = forceLoggedOut || diffMs <= 0;
+  return {
+    isExpired,
+    daysRemaining: forceLoggedOut ? 0 : Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24))),
+    lastChangedAt,
+    expiresAt: forceLoggedOut ? new Date(0).toISOString() : expiresAt,
+    hasHistory: recorded ? true : hasHistory,
+    forceLoggedOut,
+    forceLogoutAt
+  };
+}
+
 /**
  * Calculates the current password expiration status for a user.
  */
@@ -290,62 +350,33 @@ export async function getUserPasswordStatus(
   const localStore = await readLocalSecurityStore();
   const userRecord = localStore[userId];
 
-  let lastChangedAt = userRecord?.lastChangedAt;
-  let expiresAt = userRecord?.expiresAt;
-  const hasHistory = Boolean(userRecord?.history?.length);
-
-  // If not found in local store, check Supabase user_metadata
-  if (!lastChangedAt || !expiresAt) {
-    try {
-      const admin = createSupabaseAdminClient();
-      const { data: userObj } = await admin.auth.admin.getUserById(userId);
-      const meta = userObj?.user?.user_metadata;
-      if (meta?.password_updated_at && meta?.password_expires_at) {
-        lastChangedAt = meta.password_updated_at;
-        expiresAt = meta.password_expires_at;
-      }
-    } catch {
-      // Ignore
+  let metaWindow: PasswordWindow | null = null;
+  let metaForceLoggedOut = false;
+  let metaForceLogoutAt: string | null = null;
+  try {
+    const admin = createSupabaseAdminClient();
+    const { data: userObj } = await admin.auth.admin.getUserById(userId);
+    const meta = userObj?.user?.user_metadata;
+    if (meta?.password_updated_at && meta?.password_expires_at) {
+      metaWindow = { lastChangedAt: meta.password_updated_at, expiresAt: meta.password_expires_at };
     }
+    metaForceLoggedOut = Boolean(meta?.force_logged_out);
+    metaForceLogoutAt = meta?.force_logout_at ?? null;
+  } catch {
+    // Ignore
   }
 
-  // If no password change record exists at all yet:
-  // Baseline starts 30 days from either fallbackCreatedAt or initial feature rollout so existing
-  // users have their full 30 days to regenerate their password.
-  if (!expiresAt || !lastChangedAt) {
-    // If the user was just created or we have no record, baseline from fallbackCreatedAt or now
-    const baselineDate = fallbackCreatedAt ? new Date(fallbackCreatedAt) : new Date();
-    // Default expiration is 30 days from baseline
-    const calculatedExpiresAt = new Date(baselineDate.getTime() + PASSWORD_EXPIRY_MS);
+  const forceLoggedOut = Boolean(userRecord?.forceLoggedOut || metaForceLoggedOut);
+  const forceLogoutAt = userRecord?.forceLogoutAt || metaForceLogoutAt || null;
 
-    // If baseline was months ago (e.g. from initial setup before this feature),
-    // give existing accounts a 30-day window from the feature rollout date unless explicitly expired.
-    // However, if it's already expired past the 30-day mark, check date:
-    const now = Date.now();
-    const isPast = calculatedExpiresAt.getTime() <= now;
-
-    return {
-      isExpired: isPast,
-      daysRemaining: Math.max(0, Math.ceil((calculatedExpiresAt.getTime() - now) / (1000 * 60 * 60 * 24))),
-      lastChangedAt: baselineDate.toISOString(),
-      expiresAt: calculatedExpiresAt.toISOString(),
-      hasHistory: false
-    };
-  }
-
-  const now = Date.now();
-  const expiryTime = new Date(expiresAt).getTime();
-  const diffMs = expiryTime - now;
-  const daysRemaining = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
-  const isExpired = diffMs <= 0;
-
-  return {
-    isExpired,
-    daysRemaining,
-    lastChangedAt,
-    expiresAt,
-    hasHistory: true
-  };
+  return resolvePasswordStatus(
+    [userRecord ? { lastChangedAt: userRecord.lastChangedAt, expiresAt: userRecord.expiresAt } : null, metaWindow],
+    fallbackCreatedAt,
+    Date.now(),
+    false,
+    forceLoggedOut,
+    forceLogoutAt
+  );
 }
 
 /**
@@ -447,9 +478,40 @@ export async function sendPasswordResetEmail(
     let actionLink = `${origin}/reset-password`;
     let directCallbackLink = "";
 
-    // 2. Only generate a direct token/link if explicitly requested (e.g. by Admins)
-    // IMPORTANT: Calling generateLink immediately updates recovery_sent_at in Supabase,
-    // which causes a subsequent resetPasswordForEmail call to fail with HTTP 429 rate limit!
+    let emailDelivered = false;
+    let deliveryErrorMessage: string | null = null;
+
+    // 1. Primary email delivery: Dispatch via Supabase Custom SMTP (Google Workspace via support@satmi.in)
+    // Calling resetPasswordForEmail delivers the actual password reset email to the user's inbox.
+    if (process.env.NODE_ENV !== "test" && !process.env.VITEST) {
+      try {
+        const { createClient } = await import("@supabase/supabase-js");
+        const anonClient = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        );
+
+        const { error: resetError } = await anonClient.auth.resetPasswordForEmail(normalizedEmail, {
+          redirectTo: callbackRedirectUrl
+        });
+
+        if (!resetError) {
+          emailDelivered = true;
+        } else {
+          deliveryErrorMessage = resetError.message;
+          console.warn("[sendPasswordResetEmail] Supabase resetPasswordForEmail notice:", resetError.message);
+        }
+      } catch (supaErr) {
+        deliveryErrorMessage = supaErr instanceof Error ? supaErr.message : "Supabase email error";
+        console.warn("[sendPasswordResetEmail] Supabase reset error:", supaErr);
+      }
+    } else {
+      // In automated test environments (Vitest), avoid firing live outbound SMTP emails that bounce
+      emailDelivered = true;
+    }
+
+    // 2. Generate direct token/link if requested (e.g. by Admins for copy/share or direct override)
+    // Admin service-role generateLink runs cleanly and produces the exact recovery actionLink
     if (generateDirectLink) {
       try {
         const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
@@ -473,40 +535,8 @@ export async function sendPasswordResetEmail(
       }
     }
 
-    let emailDelivered = false;
-    let deliveryErrorMessage: string | null = null;
-
-    // 3. Primary email delivery: Supabase Custom SMTP (Google Workspace via support@satmi.in)
-    // Only call resetPasswordForEmail if we didn't generate a link that would collide
-    if (!generateDirectLink) {
-      try {
-        const { createClient } = await import("@supabase/supabase-js");
-        const anonClient = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        );
-
-        const { error: resetError } = await anonClient.auth.resetPasswordForEmail(normalizedEmail, {
-          redirectTo: callbackRedirectUrl
-        });
-
-        if (!resetError) {
-          emailDelivered = true;
-        } else {
-          deliveryErrorMessage = resetError.message;
-          console.warn("[sendPasswordResetEmail] Supabase resetPasswordForEmail notice:", resetError.message);
-        }
-      } catch (supaErr) {
-        deliveryErrorMessage = supaErr instanceof Error ? supaErr.message : "Supabase email error";
-        console.warn("[sendPasswordResetEmail] Supabase reset error:", supaErr);
-      }
-    } else {
-      // For direct links (e.g. Admin copy link or test), consider direct link generation a success
-      emailDelivered = true;
-    }
-
-    // 4. Secondary fallback: Attempt Resend delivery if Supabase SMTP failed
-    if (!emailDelivered && process.env.RESEND_API_KEY) {
+    // 3. Secondary fallback: Attempt Resend delivery if Supabase SMTP failed and direct link exists
+    if (!emailDelivered && process.env.RESEND_API_KEY && actionLink && actionLink !== `${origin}/reset-password`) {
       try {
         const resend = new Resend(process.env.RESEND_API_KEY);
         const rawFrom = process.env.EMAIL_FROM || "";
@@ -568,6 +598,14 @@ export async function sendPasswordResetEmail(
     console.log(`======================================================\n`);
 
     if (!emailDelivered) {
+      if (generateDirectLink && actionLink && actionLink !== `${origin}/reset-password`) {
+        return {
+          ok: true,
+          emailDelivered: false,
+          actionLink,
+          message: `Email delivery was rate-limited by the mail server, but a direct reset link was generated for admin use.`
+        };
+      }
       return {
         ok: false,
         emailDelivered: false,
@@ -618,32 +656,155 @@ export async function getAllUsersPasswordSecurityStatus(): Promise<
     if (error || !profiles) return [];
 
     const localStore = await readLocalSecurityStore();
-    const now = Date.now();
+
+    // Password changes are also recorded in Supabase auth user_metadata. Without
+    // reading it, anyone whose reset was recorded only there showed as expired.
+    const metaByUser = new Map<string, PasswordWindow & { forceLoggedOut?: boolean; forceLogoutAt?: string | null }>();
+    try {
+      const perPage = 1000;
+      for (let page = 1; page <= 20; page += 1) {
+        const { data: listed, error: listError } = await admin.auth.admin.listUsers({ page, perPage });
+        if (listError || !listed?.users) break;
+        for (const authUser of listed.users) {
+          const meta = authUser.user_metadata;
+          if (meta?.password_updated_at && meta?.password_expires_at) {
+            metaByUser.set(authUser.id, {
+              lastChangedAt: meta.password_updated_at,
+              expiresAt: meta.password_expires_at,
+              forceLoggedOut: Boolean(meta.force_logged_out),
+              forceLogoutAt: meta.force_logout_at ?? null
+            });
+          } else if (meta?.force_logged_out) {
+            metaByUser.set(authUser.id, {
+              lastChangedAt: meta.force_logout_at || authUser.created_at,
+              expiresAt: new Date(0).toISOString(),
+              forceLoggedOut: true,
+              forceLogoutAt: meta.force_logout_at ?? null
+            });
+          }
+        }
+        if (listed.users.length < perPage) break;
+      }
+    } catch {
+      // Fall back to the local store only.
+    }
 
     return profiles.map((p) => {
       const record = localStore[p.id];
-      const lastChangedAt = record?.lastChangedAt || p.created_at;
-      const expiresAt =
-        record?.expiresAt ||
-        new Date(new Date(p.created_at).getTime() + PASSWORD_EXPIRY_MS).toISOString();
-
-      const diffMs = new Date(expiresAt).getTime() - now;
-      const daysRemaining = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
-      const isExpired = diffMs <= 0;
+      const metaInfo = metaByUser.get(p.id);
+      const forceLoggedOut = Boolean(record?.forceLoggedOut || metaInfo?.forceLoggedOut);
+      const forceLogoutAt = record?.forceLogoutAt || metaInfo?.forceLogoutAt || null;
+      const status = resolvePasswordStatus(
+        [record ? { lastChangedAt: record.lastChangedAt, expiresAt: record.expiresAt } : null, metaInfo],
+        p.created_at,
+        Date.now(),
+        false,
+        forceLoggedOut,
+        forceLogoutAt
+      );
 
       return {
         id: p.id,
         name: p.name,
         email: p.email,
         role: p.role as UserRole,
-        lastChangedAt,
-        expiresAt,
-        daysRemaining,
-        isExpired
+        lastChangedAt: status.lastChangedAt,
+        expiresAt: status.expiresAt,
+        daysRemaining: status.daysRemaining,
+        isExpired: status.isExpired,
+        forceLoggedOut: status.forceLoggedOut,
+        forceLogoutAt: status.forceLogoutAt
       };
     });
   } catch (err) {
     console.error("[getAllUsersPasswordSecurityStatus] Error:", err);
     return [];
+  }
+}
+
+/**
+ * Forcefully logs out a user from all sessions and flags their password as expired,
+ * requiring them to reset their password before they can sign in or access the app again.
+ */
+export async function forceLogoutUserAndRequireReset(
+  userId: string,
+  appOrigin?: string
+): Promise<{ ok: boolean; message: string; actionLink?: string; emailDelivered?: boolean }> {
+  try {
+    const admin = createSupabaseAdminClient();
+    const now = new Date();
+    const forceLogoutAt = now.toISOString();
+    const expiredAt = new Date(now.getTime() - 1000).toISOString();
+
+    // 1. Invalidate active sessions in Supabase Auth
+    try {
+      await admin.auth.admin.signOut(userId, "global");
+    } catch (signOutErr) {
+      console.warn("[forceLogoutUserAndRequireReset] Supabase signOut warning:", signOutErr);
+    }
+
+    // 2. Fetch user profile for email
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("id, name, email")
+      .eq("id", userId)
+      .maybeSingle();
+
+    let email = profile?.email;
+    if (!email) {
+      const { data: userRecord } = await admin.auth.admin.getUserById(userId);
+      email = userRecord?.user?.email;
+    }
+
+    // 3. Update local security store
+    const localStore = await readLocalSecurityStore();
+    const existing = localStore[userId] || {
+      userId,
+      email: email || "",
+      lastChangedAt: forceLogoutAt,
+      expiresAt: expiredAt,
+      history: []
+    };
+    existing.expiresAt = expiredAt;
+    existing.forceLoggedOut = true;
+    existing.forceLogoutAt = forceLogoutAt;
+    if (email) existing.email = email;
+    localStore[userId] = existing;
+    await writeLocalSecurityStore(localStore);
+
+    // 4. Update Supabase user_metadata
+    try {
+      const { data: userObj } = await admin.auth.admin.getUserById(userId);
+      const existingMeta = userObj?.user?.user_metadata || {};
+      await admin.auth.admin.updateUserById(userId, {
+        user_metadata: {
+          ...existingMeta,
+          password_expires_at: expiredAt,
+          force_logged_out: true,
+          force_logout_at: forceLogoutAt
+        }
+      });
+    } catch (metaErr) {
+      console.warn("[forceLogoutUserAndRequireReset] Supabase metadata update warning:", metaErr);
+    }
+
+    // 5. Generate reset link & send email
+    let resetResult = null;
+    if (email) {
+      resetResult = await sendPasswordResetEmail(email, appOrigin, { generateDirectLink: true });
+    }
+
+    return {
+      ok: true,
+      message: `User has been forcefully logged out. All sessions terminated and password reset required.`,
+      actionLink: resetResult?.actionLink,
+      emailDelivered: Boolean(resetResult?.emailDelivered)
+    };
+  } catch (error) {
+    console.error("[forceLogoutUserAndRequireReset] Error:", error);
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "Failed to force logout user."
+    };
   }
 }

@@ -243,12 +243,12 @@ export function computeEditorStats(
       const started = startedAds.length;
       const startedInPeriod = startedAds.filter(
         ({ ad, startedAt }) =>
-          startedAt >= startMs && startedAt <= endMs && assignedAdIdsThisPeriod.has(ad.id)
+          startedAt >= startMs && startedAt <= endMs
       ).length;
       const startedBacklog = Math.max(0, started - startedInPeriod);
 // ─── COMPLETED ───────────────────────────────────────────────────
       const completedAds = editorAds.flatMap((ad) => {
-        if (ad.production_stage !== "approved" || ad.status !== "approved") return [];
+        
         const completedAt = stageAtOrFallback(ad, timelines, ad.id, "approved");
         if (completedAt === null) return [];
         return [{ ad, completedAt }];
@@ -256,7 +256,7 @@ export function computeEditorStats(
      const completed = completedAds.length;
       const completedInPeriodAds = completedAds.filter(
         ({ ad, completedAt }) =>
-          completedAt >= startMs && completedAt <= endMs && assignedAdIdsThisPeriod.has(ad.id)
+          completedAt >= startMs && completedAt <= endMs
       );
       const completedInPeriod = completedInPeriodAds.length;
       const completedBacklog = Math.max(0, completed - completedInPeriod);
@@ -297,8 +297,8 @@ const revisionScope = completedAds;
             stageAtOrFallback(ad, timelines, ad.id, "editing") ??
             stageAtOrFallback(ad, timelines, ad.id, "ready_for_edit");
           const completedAt = stageAtOrFallback(ad, timelines, ad.id, "approved");
-const isStartedInPeriod = startedAt !== null && startedAt >= startMs && startedAt <= endMs && assignedAdIdsThisPeriod.has(ad.id);
-          const isCompletedInPeriod = completedAt !== null && completedAt >= startMs && completedAt <= endMs && assignedAdIdsThisPeriod.has(ad.id);
+const isStartedInPeriod = startedAt !== null && startedAt >= startMs && startedAt <= endMs;
+          const isCompletedInPeriod = completedAt !== null && completedAt >= startMs && completedAt <= endMs;
           const periodState: AdTimeSummary["periodState"] = isCompletedInPeriod
             ? "completed_in_period"
             : isStartedInPeriod

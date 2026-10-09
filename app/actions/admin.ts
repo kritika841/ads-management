@@ -1,14 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { invalidateLibraryCache } from "@/lib/library-cache";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { PERFORMANCE_METRIC_KEYS, type HiddenMetricsByRole, type ManagerCreativeScope } from "@/lib/metric-visibility";
+import { PERFORMANCE_METRIC_KEYS, type HiddenMetricsByRole, type ManagerCreativeScope, type PerformanceMetricKey } from "@/lib/metric-visibility";
 import { writeMetricVisibilityFile } from "@/lib/metric-visibility-server";
 import type { UserRole } from "@/lib/types";
 
 import { isPasswordReused, recordPasswordChange } from "@/lib/password-security";
+import { isRecycleBinReady, softDeleteCampaign } from "@/lib/recycle-bin";
 
 const userSchema = z.object({
   id: z.string().uuid().optional(),
@@ -237,7 +239,7 @@ export async function activateUser(userId: string) {
 
   await audit(adminProfile.id, "activated_user", "profile", parsedId.data, { name: target.name });
   revalidatePath("/admin/users");
-  revalidatePath("/library");
+  revalidatePath("/library"); invalidateLibraryCache();
   revalidatePath("/dashboard");
   return { ok: true };
 }
@@ -284,7 +286,7 @@ export async function deleteUser(userId: string) {
     deleted_at: deletedAt
   });
   revalidatePath("/admin/users");
-  revalidatePath("/library");
+  revalidatePath("/library"); invalidateLibraryCache();
   revalidatePath("/dashboard");
   return { ok: true };
 }
@@ -321,7 +323,7 @@ export async function saveCampaign(payload: { id?: string; name: string; descrip
   );
   revalidatePath("/admin/settings");
   revalidatePath("/dashboard");
-  revalidatePath("/library");
+  revalidatePath("/library"); invalidateLibraryCache();
   return { ok: true };
 }
 
@@ -358,7 +360,7 @@ export async function saveProduct(payload: {
   await audit(adminProfile.id, data.id ? "updated_product" : "created_product", "product", savedProduct.id, patch);
   revalidatePath("/admin/products");
   revalidatePath("/dashboard");
-  revalidatePath("/library");
+  revalidatePath("/library"); invalidateLibraryCache();
   return { ok: true };
 }
 
@@ -366,6 +368,19 @@ export async function deleteCampaign(id: string) {
   const adminProfile = await requireRole(["admin"]);
   const parsedId = z.string().uuid().safeParse(id);
   if (!parsedId.success) return { ok: false, message: "Invalid campaign id." };
+
+  // Recycle Bin: the campaign stays restorable for the retention window. Its creatives are not deleted;
+  // they only lose the campaign association.
+  if (await isRecycleBinReady()) {
+    const moved = await softDeleteCampaign(parsedId.data, adminProfile.id);
+    if (!moved.ok) return { ok: false, message: moved.message };
+    revalidatePath("/admin/settings");
+    revalidatePath("/campaigns");
+    revalidatePath("/dashboard");
+    revalidatePath("/library"); invalidateLibraryCache();
+    revalidatePath("/analytics");
+    return { ok: true, movedToRecycleBin: true, creativeCount: moved.creativeCount ?? 0 };
+  }
 
   const admin = createSupabaseAdminClient();
   const { data: campaign, error: fetchError } = await admin
@@ -381,7 +396,7 @@ export async function deleteCampaign(id: string) {
   await audit(adminProfile.id, "deleted_campaign", "campaign", parsedId.data, { name: campaign.name });
   revalidatePath("/admin/settings");
   revalidatePath("/dashboard");
-  revalidatePath("/library");
+  revalidatePath("/library"); invalidateLibraryCache();
   return { ok: true };
 }
 
@@ -404,7 +419,7 @@ export async function deleteProduct(id: string) {
   await audit(adminProfile.id, "deleted_product", "product", parsedId.data, { name: product.name });
   revalidatePath("/admin/products");
   revalidatePath("/dashboard");
-  revalidatePath("/library");
+  revalidatePath("/library"); invalidateLibraryCache();
   return { ok: true };
 }
 
@@ -488,13 +503,17 @@ export async function updateSettings(payload: {
   await audit(adminProfile.id, "updated_settings", "app_settings", "1", parsed.data);
   revalidatePath("/admin/settings");
   revalidatePath("/incentives");
-  revalidatePath("/library");
+  revalidatePath("/library"); invalidateLibraryCache();
   return { ok: true };
 }
 
 export async function updateMetricVisibilitySettings(payload: {
   hiddenMetricsByRole: HiddenMetricsByRole;
   managerCreativeScope?: ManagerCreativeScope;
+  overviewMetrics?: PerformanceMetricKey[];
+  overrideAllUsers?: boolean;
+  usersWithAllAdsAccess?: string[];
+  hiddenCampaignsByUser?: Record<string, string[]>;
 }) {
   const adminProfile = await requireRole(["admin"]);
   const parsed = hiddenMetricsSchema.safeParse(payload.hiddenMetricsByRole);
@@ -503,7 +522,12 @@ export async function updateMetricVisibilitySettings(payload: {
   }
 
   const hiddenMetrics = parsed.data ?? {};
-  await writeMetricVisibilityFile(hiddenMetrics, payload.managerCreativeScope);
+  await writeMetricVisibilityFile(hiddenMetrics, payload.managerCreativeScope, undefined, {
+    overview_metrics: payload.overviewMetrics,
+    override_all_users: payload.overrideAllUsers,
+    users_with_all_ads_access: payload.usersWithAllAdsAccess,
+    hidden_campaigns_by_user: payload.hiddenCampaignsByUser
+  });
 
   const admin = createSupabaseAdminClient();
   const patch: Record<string, unknown> = {
@@ -530,7 +554,11 @@ export async function updateMetricVisibilitySettings(payload: {
 
   await audit(adminProfile.id, "updated_metric_visibility", "app_settings", "1", {
     hiddenMetrics,
-    managerCreativeScope: payload.managerCreativeScope
+    managerCreativeScope: payload.managerCreativeScope,
+    overviewMetrics: payload.overviewMetrics,
+    overrideAllUsers: payload.overrideAllUsers,
+    usersWithAllAdsAccess: payload.usersWithAllAdsAccess,
+    hiddenCampaignsByUser: payload.hiddenCampaignsByUser
   });
   revalidatePath("/incentives");
   revalidatePath("/admin/settings");

@@ -40,6 +40,8 @@ export type DashboardSummaryAd = Pick<
   AdWithRelations,
   "id" | "name" | "production_stage" | "deadline" | "workflow_status_changed_at"
 > & {
+  creator_id?: string | null;
+  editor_id?: string | null;
   campaign?: { id?: string; name: string } | null;
 };
 
@@ -47,6 +49,7 @@ const activeEditorStages: ProductionStage[] = ["ready_for_edit", "editing", "cha
 
 export function buildDashboardSummary(params: {
   role: UserRole;
+  profileId?: string;
   ads: DashboardSummaryAd[];
   profiles: Profile[];
   editorWorkloads: Record<string, number>;
@@ -55,10 +58,18 @@ export function buildDashboardSummary(params: {
   editorAverageEditTimes?: Record<string, number>;
   timelineData?: EditorTimelinePoint[];
 }): DashboardSummaryModel {
-  const { role, ads, profiles, editorWorkloads, editorCapacity, editorAverageEditTimes, timelineData } = params;
+  const { role, profileId, ads, profiles, editorWorkloads, editorCapacity, editorAverageEditTimes, timelineData } = params;
   const now = params.now ?? new Date();
   const today = istDate(now);
-  const openAds = ads.filter((ad) => ad.production_stage !== "approved");
+  
+  let userAds = ads;
+  if (profileId && role === "content_creator") {
+    userAds = ads.filter(ad => ad.creator_id === profileId);
+  } else if (profileId && role === "editor") {
+    userAds = ads.filter(ad => ad.editor_id === profileId);
+  }
+
+  const openAds = userAds.filter((ad) => ad.production_stage !== "approved");
   const overdue = openAds.filter((ad) => deadlineState(ad.deadline, today) === "overdue");
   const dueSoon = openAds.filter((ad) => ["today", "soon"].includes(deadlineState(ad.deadline, today)));
   const priorities = priorityItems(role, openAds, today, now.getTime());
@@ -70,35 +81,35 @@ export function buildDashboardSummary(params: {
       title: creatorHeading(openAds),
       description: "Move scripts and shoots forward, assign completed footage, and review edited videos.",
       tiles: [
-        tile("preparing", "Preparing", countStages(ads, ["script_writing", "ready_to_shoot"]), "preparing", "Scripts and shoots that are still being prepared."),
-        tile("assign", "Need an editor", countStages(ads, ["shoot_complete"]), "pending_editor_assign", "Completed shoots waiting for an editor and deadline.", "attention"),
-        tile("review", "Need your review", countStages(ads, ["creator_review"]), "creator_review", "Edited videos waiting for your feedback.", "attention"),
+        tile("preparing", "Preparing", countStages(userAds, ["script_writing", "ready_to_shoot"]), "preparing", "Scripts and shoots that are still being prepared."),
+        tile("assign", "Need an editor", countStages(userAds, ["shoot_complete"]), "pending_editor_assign", "Completed shoots waiting for an editor and deadline.", "attention"),
+        tile("review", "Need your review", countStages(userAds, ["creator_review"]), "creator_review", "Edited videos waiting for your feedback.", "attention"),
         tile("overdue", "Overdue", overdue.length, null, "Open work that has passed its deadline.", overdue.length ? "urgent" : "neutral")
       ],
       priorityTitle: "My next actions",
       priorityEmpty: "You have no urgent production actions right now.",
       priorities,
       production: [
-        { label: "Preparing", count: countStages(ads, ["script_writing", "ready_to_shoot", "shoot_complete"]) },
-        { label: "With editor", count: countStages(ads, ["ready_for_edit", "editing", "changes_requested"]) },
-        { label: "Awaiting final approval", count: countStages(ads, ["final_review"]) },
-        { label: "Approved", count: countStages(ads, ["approved"]) }
+        { label: "Preparing", count: countStages(userAds, ["script_writing", "ready_to_shoot", "shoot_complete"]) },
+        { label: "With editor", count: countStages(userAds, ["ready_for_edit", "editing", "changes_requested"]) },
+        { label: "Awaiting final approval", count: countStages(userAds, ["final_review"]) },
+        { label: "Approved", count: countStages(userAds, ["approved"]) }
       ],
       workloads: []
     };
   }
 
   if (role === "editor") {
-    const active = countStages(ads, activeEditorStages);
+    const active = countStages(userAds, activeEditorStages);
     return {
       kind: "editor",
       eyebrow: "Your editing desk",
-      title: editorHeading(ads),
+      title: editorHeading(userAds),
       description: "Start new assignments, finish active edits, and handle requested changes before their deadlines.",
       tiles: [
-        tile("new", "New assignments", countStages(ads, ["ready_for_edit"]), "new_assignments", "Assigned videos you have not started yet.", "attention"),
-        tile("editing", "Editing now", countStages(ads, ["editing"]), "editing", "Videos currently being edited."),
-        tile("changes", "Changes requested", countStages(ads, ["changes_requested"]), "changes", "Submitted videos that need another update.", "attention"),
+        tile("new", "New assignments", countStages(userAds, ["ready_for_edit"]), "new_assignments", "Assigned videos you have not started yet.", "attention"),
+        tile("editing", "Editing now", countStages(userAds, ["editing"]), "editing", "Videos currently being edited."),
+        tile("changes", "Changes requested", countStages(userAds, ["changes_requested"]), "changes", "Submitted videos that need another update.", "attention"),
         tile("deadlines", "Due soon or late", new Set([...dueSoon, ...overdue].map((ad) => ad.id)).size, null, "Open edits due within three days or already overdue.", overdue.length ? "urgent" : "neutral")
       ],
       priorityTitle: "My priority edits",
@@ -107,8 +118,8 @@ export function buildDashboardSummary(params: {
       production: [
         { label: "Active workload", count: active },
         { label: "Available capacity", count: Math.max(0, editorCapacity - active) },
-        { label: "Submitted", count: countStages(ads, ["creator_review", "final_review"]) },
-        { label: "Approved", count: countStages(ads, ["approved"]) }
+        { label: "Submitted", count: countStages(userAds, ["creator_review", "final_review"]) },
+        { label: "Approved", count: countStages(userAds, ["approved"]) }
       ],
       workloads: []
     };
@@ -120,9 +131,9 @@ export function buildDashboardSummary(params: {
     title: reviewerHeading(openAds),
     description: "Clear reviews, assign completed shoots, and balance editing work across the team.",
     tiles: [
-      tile("review", "Need review", countStages(ads, ["creator_review", "final_review"]), "needs_review", "Videos waiting for manager or admin review.", "attention"),
-      tile("assign", "Need an editor", countStages(ads, ["shoot_complete"]), "pending_editor_assign", "Completed shoots waiting for an editor and deadline.", "attention"),
-      tile("changes", "Changes in progress", countStages(ads, ["changes_requested"]), "changes", "Videos returned to editors for updates."),
+      tile("review", "Need review", countStages(userAds, ["creator_review", "final_review"]), "needs_review", "Videos waiting for manager or admin review.", "attention"),
+      tile("assign", "Need an editor", countStages(userAds, ["shoot_complete"]), "pending_editor_assign", "Completed shoots waiting for an editor and deadline.", "attention"),
+      tile("changes", "Changes in progress", countStages(userAds, ["changes_requested"]), "changes", "Videos returned to editors for updates."),
       tile("overdue", "Overdue", overdue.length, null, "Open work that has passed its deadline.", overdue.length ? "urgent" : "neutral")
     ],
     priorityTitle: "Needs attention",

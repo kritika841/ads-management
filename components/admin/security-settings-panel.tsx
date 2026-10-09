@@ -13,6 +13,7 @@ import {
   KeyRound,
   Loader2,
   Lock,
+  LogOut,
   Mail,
   RefreshCw,
   Send,
@@ -21,7 +22,7 @@ import {
   UserCheck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { adminSendUserResetEmailAction } from "@/app/actions/password";
+import { adminForceLogoutUserAction, adminSendUserResetEmailAction } from "@/app/actions/password";
 import { roleLabel } from "@/lib/constants";
 import { formatDateTime } from "@/lib/utils";
 
@@ -34,6 +35,8 @@ export type PasswordStatusItem = {
   expiresAt: string;
   daysRemaining: number;
   isExpired: boolean;
+  forceLoggedOut?: boolean;
+  forceLogoutAt?: string | null;
 };
 
 export function SecuritySettingsPanel({
@@ -43,6 +46,7 @@ export function SecuritySettingsPanel({
 }) {
   const [statuses, setStatuses] = useState<PasswordStatusItem[]>(initialStatuses);
   const [sendingUserId, setSendingUserId] = useState<string | null>(null);
+  const [forceLoggingOutUserId, setForceLoggingOutUserId] = useState<string | null>(null);
   const [actionFeedback, setActionFeedback] = useState<{
     id: string;
     success: boolean;
@@ -58,7 +62,8 @@ export function SecuritySettingsPanel({
     setSendingUserId(user.id);
     startTransition(async () => {
       try {
-        const res = await adminSendUserResetEmailAction(user.id);
+        const clientOrigin = typeof window !== "undefined" ? window.location.origin : undefined;
+        const res = await adminSendUserResetEmailAction(user.id, clientOrigin);
         if (res.ok) {
           setActionFeedback({
             id: user.id,
@@ -84,6 +89,51 @@ export function SecuritySettingsPanel({
         });
       } finally {
         setSendingUserId(null);
+      }
+    });
+  }
+
+  function handleForceLogout(user: PasswordStatusItem) {
+    if (!window.confirm(`Forcefully log out ${user.name} (${user.email})? This terminates all active sessions immediately and requires them to reset their password before signing in again.`)) {
+      return;
+    }
+
+    setActionFeedback(null);
+    setForceLoggingOutUserId(user.id);
+    startTransition(async () => {
+      try {
+        const clientOrigin = typeof window !== "undefined" ? window.location.origin : undefined;
+        const res = await adminForceLogoutUserAction(user.id, clientOrigin);
+        if (res.ok) {
+          setStatuses((prev) =>
+            prev.map((s) =>
+              s.id === user.id
+                ? { ...s, isExpired: true, daysRemaining: 0, forceLoggedOut: true, forceLogoutAt: new Date().toISOString() }
+                : s
+            )
+          );
+          setActionFeedback({
+            id: user.id,
+            success: true,
+            actionLink: res.actionLink,
+            emailDelivered: Boolean(res.emailDelivered),
+            text: `${user.name} has been forcefully logged out. All sessions were invalidated and password reset is now required.${res.emailDelivered ? ` Reset instructions sent to ${user.email}.` : " Direct reset link generated below:"}`
+          });
+        } else {
+          setActionFeedback({
+            id: user.id,
+            success: false,
+            text: res.message || "Failed to force logout user."
+          });
+        }
+      } catch (err) {
+        setActionFeedback({
+          id: user.id,
+          success: false,
+          text: err instanceof Error ? err.message : "Error during force logout."
+        });
+      } finally {
+        setForceLoggingOutUserId(null);
       }
     });
   }
@@ -255,7 +305,12 @@ export function SecuritySettingsPanel({
                         {user.lastChangedAt ? formatDateTime(user.lastChangedAt) : "Initial"}
                       </td>
                       <td className="px-4 py-3">
-                        {user.isExpired ? (
+                        {user.forceLoggedOut ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-destructive/30 bg-destructive/15 px-2.5 py-0.5 text-xs font-semibold text-destructive">
+                            <ShieldAlert className="size-3" />
+                            Force Logged Out (Reset Required)
+                          </span>
+                        ) : user.isExpired ? (
                           <span className="inline-flex items-center gap-1.5 rounded-full border border-destructive/30 bg-destructive/15 px-2.5 py-0.5 text-xs font-semibold text-destructive">
                             <ShieldAlert className="size-3" />
                             Expired (Locked)
@@ -273,20 +328,37 @@ export function SecuritySettingsPanel({
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          disabled={isSendingThisUser || isPending}
-                          onClick={() => handleSendReset(user)}
-                          title={`Email reset link to ${user.email}`}
-                        >
-                          {isSendingThisUser ? (
-                            <Loader2 className="mr-1.5 size-3.5 animate-spin" />
-                          ) : (
-                            <Send className="mr-1.5 size-3.5" />
-                          )}
-                          Send Reset Link
-                        </Button>
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled={isSendingThisUser || forceLoggingOutUserId === user.id || isPending}
+                            onClick={() => handleSendReset(user)}
+                            title={`Email reset link to ${user.email}`}
+                          >
+                            {isSendingThisUser ? (
+                              <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                            ) : (
+                              <Send className="mr-1.5 size-3.5" />
+                            )}
+                            Send Reset Link
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            disabled={isSendingThisUser || forceLoggingOutUserId === user.id || isPending}
+                            onClick={() => handleForceLogout(user)}
+                            title={`Forcefully log out ${user.name} from all sessions and require password reset`}
+                          >
+                            {forceLoggingOutUserId === user.id ? (
+                              <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                            ) : (
+                              <LogOut className="mr-1.5 size-3.5" />
+                            )}
+                            Force Logout
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );

@@ -50,6 +50,9 @@ export async function requireProfile() {
   }
 
   const passwordStatus = await getUserPasswordStatus(profile.id, profile.created_at);
+  if (passwordStatus.forceLoggedOut) {
+    redirect(`/login?error=forced_logout_reset&email=${encodeURIComponent(profile.email)}`);
+  }
   if (passwordStatus.isExpired) {
     redirect(`/login?error=password_expired&email=${encodeURIComponent(profile.email)}`);
   }

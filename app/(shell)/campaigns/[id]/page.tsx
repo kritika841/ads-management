@@ -6,8 +6,10 @@ import {
   getEditorWorkloads,
   getProducts,
   getProfiles,
+  getAppSettings,
   getTags
 } from "@/lib/data";
+import { canBulkAddToCampaign } from "@/lib/permissions";
 import { CampaignDetailClient } from "@/components/campaigns/campaign-detail-client";
 
 export const dynamic = "force-dynamic";
@@ -19,13 +21,14 @@ export default async function CampaignDetailPage({
 }) {
   const [{ id }, profile] = await Promise.all([params, requireProfile()]);
 
-  const [overview, campaigns, products, profiles, tags, editorWorkloads] = await Promise.all([
+  const [overview, campaigns, products, profiles, tags, editorWorkloads, settings] = await Promise.all([
     getCampaignDetail(id, profile),
     getCampaigns(),
     getProducts(),
     getProfiles(),
     getTags(),
-    getEditorWorkloads()
+    getEditorWorkloads(),
+    getAppSettings()
   ]);
 
   if (!overview) {
@@ -41,6 +44,7 @@ export default async function CampaignDetailPage({
       profiles={profiles}
       availableTags={tags}
       editorWorkloads={editorWorkloads}
+      canImportFromLibrary={canBulkAddToCampaign(profile.role, settings)}
     />
   );
 }

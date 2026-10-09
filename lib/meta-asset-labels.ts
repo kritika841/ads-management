@@ -19,6 +19,8 @@ export type MetaInsightRow = {
   reach?: string;
   clicks?: string;
   inline_link_clicks?: string;
+  cost_per_inline_link_click?: string;
+  cpc?: string;
   actions?: MetaAction[];
   action_values?: MetaAction[];
 };
@@ -220,20 +222,59 @@ export function normalizeAssetLabel(value: MetaAssetBreakdown): string {
   return decodedName ?? id ?? JSON.stringify(value);
 }
 
-export function creativeAssets(creative?: MetaCreative): Array<{ label: string; type: "video" | "image" }> {
-  const assets = new Map<string, { label: string; type: "video" | "image" }>();
-  const add = (id: string, type: "video" | "image", name?: string | null) => {
+export type AssetMedia = { videoId: string | null; imageHash: string | null; thumbnailUrl: string | null };
+
+export type CreativeAsset = AssetMedia & { label: string; type: "video" | "image" };
+
+/**
+ * Extracts the exact media identity of one creative from a Meta breakdown
+ * value. `video_asset` objects carry `video_id` (distinct from their `id`,
+ * which is Meta's asset ID used in the label), `image_asset` objects carry
+ * `hash`. String breakdowns carry no media identity.
+ */
+export function assetMediaFromValue(value: MetaAssetBreakdown | undefined | null): AssetMedia {
+  if (!value || typeof value !== "object") return { videoId: null, imageHash: null, thumbnailUrl: null };
+  const videoId = firstString(value, ["video_id", "videoId"]);
+  const imageHash = videoId ? null : firstString(value, ["hash", "image_hash", "imageHash"]);
+  const thumbnailUrl = firstString(value, ["thumbnail_url", "thumbnailUrl"]) ?? (imageHash ? firstString(value, ["url", "image_url", "permalink_url"]) : null);
+  return { videoId, imageHash, thumbnailUrl };
+}
+
+/** Merges media identity across every breakdown field present on a row. */
+export function assetMediaFromRow(row: MetaInsightRow): AssetMedia {
+  const media: AssetMedia = { videoId: null, imageHash: null, thumbnailUrl: null };
+  for (const value of [row.video_asset, row.image_asset, row.ad_format_asset, row.creative_media_type_breakdown]) {
+    const next = assetMediaFromValue(value);
+    media.videoId ??= next.videoId;
+    media.thumbnailUrl ??= next.thumbnailUrl;
+    if (!media.videoId) media.imageHash ??= next.imageHash;
+  }
+  if (media.videoId) media.imageHash = null;
+  return media;
+}
+
+export function creativeAssets(creative?: MetaCreative): CreativeAsset[] {
+  const assets = new Map<string, CreativeAsset>();
+  const add = (id: string, type: "video" | "image", name?: string | null, thumbnailUrl?: string | null) => {
     const title = type === "video" ? "Video" : "Image";
     const cleanName = name?.trim();
     // Reject caption-like names (e.g. "Save More with Satmi Bundles") that
     // leak from Meta's video title field. Only include the name if it looks
     // like an actual filename or contains a HIM/TAM/ISH tag.
     const isUsableName = cleanName && cleanName !== id && !isCaptionLikeLabel(cleanName);
-    const label = isUsableName ? `${title} ${cleanName} (${id})` : `${title} ${id}`;
-    assets.set(`${type}:${id}`, { label, type });
+    const key = `${type}:${id}`;
+    const previous = assets.get(key);
+    const label = isUsableName ? `${title} ${cleanName} (${id})` : previous?.label ?? `${title} ${id}`;
+    assets.set(key, {
+      label,
+      type,
+      videoId: type === "video" ? id : null,
+      imageHash: type === "image" ? id : null,
+      thumbnailUrl: thumbnailUrl ?? previous?.thumbnailUrl ?? null
+    });
   };
 
-  if (creative?.video_id) add(creative.video_id, "video");
+  if (creative?.video_id) add(creative.video_id, "video", null, creative.thumbnail_url ?? null);
 
   const visit = (value: unknown) => {
     if (!value || typeof value !== "object") return;
@@ -245,8 +286,13 @@ export function creativeAssets(creative?: MetaCreative): Array<{ label: string; 
     const name = firstString(object, ["video_name", "videoName", "image_name", "imageName", "file_name", "fileName", "filename", "name", "asset_name"]);
     const videoId = firstString(object, ["video_id", "videoId"]);
     const imageId = firstString(object, ["image_hash", "image_id", "imageHash", "hash"]);
-    if (videoId) add(videoId, "video", name);
-    if (imageId) add(imageId, "image", name);
+    if (videoId) {
+      // `video_data` also carries the poster frame's `image_hash`/`image_url`;
+      // that is the video's thumbnail, not a separate image creative.
+      add(videoId, "video", name, firstString(object, ["thumbnail_url", "image_url", "picture"]));
+    } else if (imageId) {
+      add(imageId, "image", name, firstString(object, ["url", "image_url", "picture"]));
+    }
     for (const child of Object.values(object)) visit(child);
   };
 
@@ -257,7 +303,7 @@ export function creativeAssets(creative?: MetaCreative): Array<{ label: string; 
   // Represent that primary creative explicitly, rather than falling back to a
   // misleading ad-level row in the dashboard.
   if (!assets.size && creative?.id) {
-    assets.set(`creative:${creative.id}`, { label: `Creative ${creative.id}`, type: "image" });
+    assets.set(`creative:${creative.id}`, { label: `Creative ${creative.id}`, type: "image", videoId: null, imageHash: null, thumbnailUrl: creative.thumbnail_url ?? creative.image_url ?? null });
   }
 
   return [...assets.values()];

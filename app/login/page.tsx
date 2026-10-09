@@ -15,25 +15,28 @@ export default async function LoginPage({
   }
 
   const query = await searchParams;
-  const isPasswordExpiredQuery = query.error === "password_expired";
+  const isForcedLogoutQuery = query.error === "forced_logout_reset";
+  const isPasswordExpiredQuery = query.error === "password_expired" || isForcedLogoutQuery;
 
   const profile = await getCurrentProfile();
   if (profile?.active) {
     const passwordStatus = await getUserPasswordStatus(profile.id, profile.created_at);
-    if (!passwordStatus.isExpired) {
+    if (!passwordStatus.isExpired && !passwordStatus.forceLoggedOut) {
       redirect("/dashboard");
     }
   }
 
   const initialMessage = query.inactive
     ? "Your account is not active yet. Ask an admin to approve it."
-    : isPasswordExpiredQuery
-      ? "Password expired. Your password has expired after 30 days. Please reset it or contact your administrator."
-      : query.error
-        ? query.error === "oauth_denied"
-          ? "Google sign-in was cancelled or denied. Please try again."
-          : "Google sign-in could not be completed. Use an approved team account and try again."
-        : null;
+    : isForcedLogoutQuery
+      ? "You were forcefully logged out by an administrator. For security, you must reset your password before signing in."
+      : isPasswordExpiredQuery
+        ? "Password expired. Your password has expired after 30 days. Please reset it or contact your administrator."
+        : query.error
+          ? query.error === "oauth_denied"
+            ? "Google sign-in was cancelled or denied. Please try again."
+            : "Google sign-in could not be completed. Use an approved team account and try again."
+          : null;
 
   return (
     <main className="grid min-h-screen bg-card lg:grid-cols-[minmax(360px,0.8fr)_minmax(520px,1.2fr)]">

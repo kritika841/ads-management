@@ -25,6 +25,7 @@ export function NotificationBell({
   const [clearedAt, setClearedAt] = useState<number | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const missedChimes = useRef(0);
   const notifPermission = useRef<NotificationPermission | null>(null);
   const chimeAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -199,6 +200,28 @@ export function NotificationBell({
     return () => { supabase.removeChannel(channel); };
   }, [userId]);
 
+  // ── Dismiss the panel when the user presses anywhere outside of it (or hits Escape).
+  // `pointerdown` fires before the target's click handler, so clicking another control
+  // both closes the panel and still activates that control.
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(event: PointerEvent) {
+      const container = containerRef.current;
+      if (container && event.target instanceof Node && !container.contains(event.target)) {
+        setOpen(false);
+      }
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
   // ── Play chime when coming back to tab with missed notifications
   useEffect(() => {
     function onVisibilityChange() {
@@ -252,7 +275,7 @@ export function NotificationBell({
   }
 
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <Button variant="ghost" size="icon" className="relative" onClick={handleBellClick} title="Notifications" aria-label="Notifications" aria-expanded={open}>
         {children}
         {unreadCount ? (

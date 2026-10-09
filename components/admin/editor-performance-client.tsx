@@ -27,9 +27,8 @@ export function EditorPerformanceClient({
   const endDate = endDateStr ? new Date(endDateStr) : null;
   const hasPeriod = Boolean(startDateStr || endDateStr);
 
-  const stats = computeEditorStats(profiles, ads, timeLogs, activityLogs, startDate, endDate);
-
-  const editors = profiles.filter((p) => p.role === "editor");
+  const editors = profiles.filter((p) => p.role === "editor" && p.active);
+  const stats = computeEditorStats(editors, ads, timeLogs, activityLogs, startDate, endDate);
 
   if (editors.length === 0) {
     return (

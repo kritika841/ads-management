@@ -1,5 +1,5 @@
 import { google } from "googleapis";
-import { existsSync, readFileSync } from "node:fs";
+import { parseServiceAccountCredentials } from "@/lib/google-credentials";
 
 type DriveAuth = InstanceType<typeof google.auth.GoogleAuth>;
 let cachedDriveAuth: DriveAuth | null | undefined;
@@ -58,14 +58,15 @@ export async function getDriveFolderContents(folderId: string) {
   return res.data.files ?? [];
 }
 
-export async function getDriveMedia(fileId: string, range?: string | null) {
+export async function getDriveMedia(fileId: string, range?: string | null, signal?: AbortSignal) {
   const auth = createDriveAuth();
   if (!auth) return null;
   const accessToken = await auth.getAccessToken();
   if (!accessToken) return null;
   return fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, {
     headers: { Authorization: `Bearer ${accessToken}`, ...(range ? { Range: range } : {}) },
-    cache: "no-store"
+    cache: "no-store",
+    signal
   });
 }
 
@@ -79,12 +80,13 @@ function createDriveAuth() {
   }
 
   try {
-    const credentialsSource = serviceAccountSource.trim().replace(/^"(.*)"$/, "$1");
-    const credentials = JSON.parse(
-      credentialsSource.startsWith("{") || !existsSync(credentialsSource)
-        ? credentialsSource
-        : readFileSync(credentialsSource, "utf8")
-    );
+    // Tolerant: handles `{\"type\":...}` as stored in the production .env, raw newlines in the
+    // private key, base64 and key-file paths (see lib/google-credentials.js).
+    const credentials = parseServiceAccountCredentials(serviceAccountSource);
+    if (!credentials) {
+      cachedDriveAuth = null;
+      return cachedDriveAuth;
+    }
     cachedDriveAuth = new google.auth.GoogleAuth({
       credentials,
       scopes: ["https://www.googleapis.com/auth/drive.readonly"]

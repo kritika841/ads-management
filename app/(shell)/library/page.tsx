@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { DashboardClient } from "@/components/dashboard/dashboard-client";
 import { requireProfile } from "@/lib/auth";
 import {
@@ -10,6 +11,9 @@ import {
   getTags
 } from "@/lib/data";
 import { createMediaAccessToken } from "@/lib/media-token";
+import { LIBRARY_CACHE_TTL_MS, libraryCache } from "@/lib/library-cache";
+import { LIBRARY_QUEUE_COOKIE, LIBRARY_REVIEW_TAB_COOKIE, parseLibraryReviewTab } from "@/lib/library-tab-state";
+import { readDashboardFilters } from "@/lib/dashboard-filter-state";
 import { queueForRole, queuesForRole } from "@/lib/work-queues";
 import type { AdWithRelations, AppSettings, Campaign, Product, Profile } from "@/lib/types";
 
@@ -36,20 +40,9 @@ const defaultSettings: AppSettings = {
   updated_at: new Date().toISOString()
 };
 
-type CachedLibraryData = {
-  timestamp: number;
-  ads: AdWithRelations[];
-  campaigns: Campaign[];
-  products: Product[];
-  profiles: Profile[];
-  tags: string[];
-  editorWorkloads: Record<string, number>;
-  settings: AppSettings;
-};
-
-// 10-second cache to prevent multi-tab and concurrent request pileups
-const libraryCache = new Map<string, CachedLibraryData>();
-const CACHE_TTL_MS = 10_000;
+// 10-second cache to prevent multi-tab and concurrent request pileups. Server actions that
+// mutate creatives clear it (see lib/library-cache.ts) so refreshes never show stale rows.
+const CACHE_TTL_MS = LIBRARY_CACHE_TTL_MS;
 
 async function safeQuery<T>(promise: Promise<T>, fallback: T, name: string): Promise<T> {
   try {
@@ -78,11 +71,27 @@ async function fetchAdsWithRetry(fallbackAds: AdWithRelations[] = []): Promise<A
 export default async function LibraryPage({
   searchParams
 }: {
-  searchParams: Promise<{ queue?: string | string[] }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const [profile, query] = await Promise.all([requireProfile(), searchParams]);
-  const requestedQueue = Array.isArray(query.queue) ? query.queue[0] : query.queue;
+  const [profile, query, cookieStore] = await Promise.all([requireProfile(), searchParams, cookies()]);
+  // URL wins (deep links, Home shortcuts); otherwise restore the last opened tab.
+  const requestedQueue = (Array.isArray(query.queue) ? query.queue[0] : query.queue) ?? cookieStore.get(LIBRARY_QUEUE_COOKIE)?.value;
   const initialQueue = queueForRole(profile.role, requestedQueue) ?? queuesForRole(profile.role)[0].key;
+  const requestedReviewTab = (Array.isArray(query.review) ? query.review[0] : query.review) ?? cookieStore.get(LIBRARY_REVIEW_TAB_COOKIE)?.value;
+  const initialReviewTab = parseLibraryReviewTab(requestedReviewTab) ?? "all";
+
+  // Pre-parse filters from query parameters on the server for instant SSR hydration
+  const searchParamsObj = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined) {
+      if (Array.isArray(value)) {
+        for (const item of value) searchParamsObj.append(key, item);
+      } else {
+        searchParamsObj.set(key, value);
+      }
+    }
+  }
+  const initialFilters = readDashboardFilters(searchParamsObj.toString());
 
   const now = Date.now();
   const cacheKey = `${profile.id}:${profile.role}`;
@@ -152,6 +161,8 @@ export default async function LibraryPage({
       availableTags={tags}
       editorWorkloads={editorWorkloads}
       initialQueue={initialQueue}
+      initialReviewTab={initialReviewTab}
+      initialFilters={initialFilters}
       mediaTokens={mediaTokens}
       allowManagerFinalApproval={settings.allow_manager_final_approval ?? true}
       settings={settings}

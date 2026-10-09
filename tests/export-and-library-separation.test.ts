@@ -42,7 +42,7 @@ describe("exact ZIP export jobs", () => {
 
   it("keeps the inline video source stable while live data refreshes", () => {
     expect(dashboard).toContain("const [source] = useState(() => mediaUrl(ad, mediaToken))");
-    expect(dashboard).toContain('<video src={source}');
+    expect(dashboard).toMatch(/<video[^>]*\bsrc=\{source\}/);
   });
 
   it("lets admins dismiss the downloaded badge from its hover control", () => {

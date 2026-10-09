@@ -21,4 +21,6 @@ export type ExportJobSnapshot = {
   zipSizeBytes: number | null;
   error: string | null;
   createdAt: string;
+  /** Days the finished archive is kept, per the admin-configured Download Logs retention. */
+  retentionDays?: number;
 };

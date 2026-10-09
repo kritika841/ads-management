@@ -197,16 +197,27 @@ describe("production workflow", () => {
       expect(blocked).toBe(false);
     });
 
-    it("never blocks admin users", () => {
-      const blocked = isCreativeCreationBlocked({
-        role: "admin",
-        userId: "admin-1",
-        ads: [
-          { creator_id: "admin-1", production_stage: "creator_changes_requested" },
-          { creator_id: "admin-1", production_stage: "changes_requested" }
-        ]
-      });
-      expect(blocked).toBe(false);
+    it("blocks admin only when a creative they own needs creator changes", () => {
+      expect(
+        isCreativeCreationBlocked({
+          role: "admin",
+          userId: "admin-1",
+          ads: [{ creator_id: "admin-1", production_stage: "creator_changes_requested" }]
+        })
+      ).toBe(true);
+    });
+
+    it("does not block admin for editor-stage changes or other people's creatives", () => {
+      expect(
+        isCreativeCreationBlocked({
+          role: "admin",
+          userId: "admin-1",
+          ads: [
+            { creator_id: "admin-1", production_stage: "changes_requested" },
+            { creator_id: "creator-2", production_stage: "creator_changes_requested" }
+          ]
+        })
+      ).toBe(false);
     });
   });
 });

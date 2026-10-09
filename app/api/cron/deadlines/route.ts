@@ -3,6 +3,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { deadlineActiveStatuses, indiaDateString, indiaDayStartIso } from "@/lib/deadlines";
 import { createNotification } from "@/lib/notifications";
 import type { AppSettings, Profile } from "@/lib/types";
+import { isRecycleBinReady, liveOnly } from "@/lib/recycle-bin";
 
 export async function GET(request: NextRequest) {
   const configuredSecret = process.env.CRON_SECRET;
@@ -27,12 +28,16 @@ export async function GET(request: NextRequest) {
   const now = new Date();
   const limitDate = indiaDateString(now, appSettings.deadline_reminder_days);
 
-  const { data: ads, error } = await admin
-    .from("ads")
-    .select("*, creator:profiles!ads_creator_id_fkey(*), editor:profiles!ads_editor_id_fkey(*)")
-    .not("deadline", "is", null)
-    .lte("deadline", limitDate)
-    .in("status", deadlineActiveStatuses);
+  const binReady = await isRecycleBinReady();
+  const { data: ads, error } = await liveOnly(
+    admin
+      .from("ads")
+      .select("*, creator:profiles!ads_creator_id_fkey(*), editor:profiles!ads_editor_id_fkey(*)")
+      .not("deadline", "is", null)
+      .lte("deadline", limitDate)
+      .in("status", deadlineActiveStatuses),
+    binReady
+  );
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

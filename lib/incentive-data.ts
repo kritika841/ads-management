@@ -3,14 +3,28 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { readMetricVisibilityFile } from "@/lib/metric-visibility-server";
 import type { Profile } from "@/lib/types";
 import type { IncentiveCampaign, IncentiveCreative, MetaAd } from "@/lib/incentives";
+import { isRecycleBinReady, liveOnly } from "@/lib/recycle-bin";
 
 export async function getIncentiveDashboard(profile: Profile) {
   const admin = createSupabaseAdminClient();
   const visibilityConfig = await readMetricVisibilityFile();
+  const binReady = await isRecycleBinReady();
   const managerScope = visibilityConfig.manager_creative_scope ?? "all";
   const isManagerScoped = profile.role === "manager" && managerScope === "own";
-  const isScoped = profile.role === "content_creator" || profile.role === "editor" || isManagerScoped;
+
+  // Role-based funneling override:
+  // Admin can enable override_all_users to show all ads performance to all users,
+  // or grant users_with_all_ads_access to specific users.
+  const hasGlobalOverride = Boolean(visibilityConfig.override_all_users);
+  const hasUserOverride = Boolean(visibilityConfig.users_with_all_ads_access?.includes(profile.id));
+  const overrideFunneling = profile.role === "admin" || hasGlobalOverride || hasUserOverride;
+
+  const isScoped = !overrideFunneling && (profile.role === "content_creator" || profile.role === "editor" || isManagerScoped);
   const reviewer = profile.role === "admin" || (profile.role === "manager" && !isManagerScoped);
+
+  const userHiddenCampaigns = new Set(
+    (visibilityConfig.hidden_campaigns_by_user?.[profile.id] ?? []).map((c) => c.toLowerCase().trim()).filter(Boolean)
+  );
 
   let creativesQuery = admin
     .from("incentive_creatives")
@@ -43,9 +57,9 @@ export async function getIncentiveDashboard(profile: Profile) {
   }> = [];
 
   if (isScoped) {
-    let userAdsQuery = admin
+    let userAdsQuery = liveOnly(admin
       .from("ads")
-      .select("id,name,product_id,creator_id,editor_id,thumbnail_url,drive_file_id,preview_url,resolved_video_url,status,production_stage,creator:profiles!ads_creator_id_fkey(id,name),editor:profiles!ads_editor_id_fkey(id,name)");
+      .select("id,name,product_id,creator_id,editor_id,thumbnail_url,drive_file_id,preview_url,resolved_video_url,status,production_stage,creator:profiles!ads_creator_id_fkey(id,name),editor:profiles!ads_editor_id_fkey(id,name)"), binReady);
 
     if (profile.role === "content_creator") {
       userAdsQuery = userAdsQuery.eq("creator_id", profile.id);
@@ -88,7 +102,7 @@ export async function getIncentiveDashboard(profile: Profile) {
   const [campaignResult, creativeResult, allAdsResult, metaAdsResult, transcriptMappingsResult] = await Promise.all([
     admin.from("incentive_campaigns").select("*,product:products(id,name,sku)").order("created_at", { ascending: false }),
     creativesQuery,
-    admin.from("ads").select("id,name,product_id,creator_id,editor_id,thumbnail_url,drive_file_id,preview_url,resolved_video_url,status,production_stage,creator:profiles!ads_creator_id_fkey(id,name),editor:profiles!ads_editor_id_fkey(id,name)").order("created_at", { ascending: false }),
+    liveOnly(admin.from("ads").select("id,name,product_id,creator_id,editor_id,thumbnail_url,drive_file_id,preview_url,resolved_video_url,status,production_stage,creator:profiles!ads_creator_id_fkey(id,name),editor:profiles!ads_editor_id_fkey(id,name)").order("created_at", { ascending: false }), binReady),
     loadMetaAds(admin),
     admin.from("meta_ad_transcript_mappings").select("mapping_key,meta_ad_id,meta_creative_id,meta_video_id,transcript,transcript_language,transcript_language_confidence,transcript_source,transcript_status,transcript_error,review_status,reviewed_at,review_note,matched_ad_id,match_score,match_confidence,matched_tokens,transcript_token_count,script_token_count,mapped_at,ad:ads!meta_ad_transcript_mappings_matched_ad_id_fkey(id,name,creator_id,editor_id,script_text,thumbnail_url,preview_url,drive_file_id,drive_url,resolved_video_url,product:products(name))").order("mapped_at", { ascending: false })
   ]);
@@ -197,10 +211,26 @@ export async function getIncentiveDashboard(profile: Profile) {
           return false;
         });
 
+  let visibleMetaAds = metaAds;
+  if (profile.role !== "admin" && userHiddenCampaigns.size > 0) {
+    visibleMetaAds = metaAds.filter((ad) => {
+      const cId = (ad.campaign_id ?? "").toLowerCase();
+      const cName = (ad.campaign_name ?? "").toLowerCase().trim();
+      return !userHiddenCampaigns.has(cId) && (!cName || !userHiddenCampaigns.has(cName));
+    });
+  }
+
   const campaignDestinations = getCampaignDestinations();
-  const matchedMetaAdIds = new Set(metaAds.map((ad) => ad.id));
+  const matchedMetaAdIds = new Set(visibleMetaAds.map((ad) => ad.id));
 
   const userCreativeList = (creativeResult.data ?? []).filter((creative) => {
+    if (profile.role !== "admin" && userHiddenCampaigns.size > 0) {
+      const cId = (creative.campaign_id ?? "").toLowerCase();
+      const cName = (Array.isArray(creative.campaign) ? creative.campaign[0]?.name : creative.campaign?.name)?.toLowerCase()?.trim();
+      if (userHiddenCampaigns.has(cId) || (cName && userHiddenCampaigns.has(cName))) {
+        return false;
+      }
+    }
     if (!isScoped) return true;
     if (creative.meta_ad_id && matchedMetaAdIds.has(creative.meta_ad_id)) return true;
     if (profile.role === "content_creator") {
@@ -228,8 +258,13 @@ export async function getIncentiveDashboard(profile: Profile) {
     return false;
   });
 
+  const allCampaigns = (campaignResult.data ?? []).map(normalizeCampaign);
+  const visibleCampaigns = profile.role === "admin" || userHiddenCampaigns.size === 0
+    ? allCampaigns
+    : allCampaigns.filter((c) => !userHiddenCampaigns.has(c.id.toLowerCase()) && !userHiddenCampaigns.has(c.name.toLowerCase().trim()));
+
   return {
-    campaigns: (campaignResult.data ?? []).map(normalizeCampaign),
+    campaigns: visibleCampaigns,
     creatives: userCreativeList.map((creative) => ({
       ...creative,
       decision_status: creative.decision_status ?? (creative.evaluation_status === "winner" ? "winner" : "unreviewed"),
@@ -247,7 +282,7 @@ export async function getIncentiveDashboard(profile: Profile) {
       metrics: (creative.metrics ?? []).map((metric: Record<string, unknown>) => ({ ...metric, spend: Number(metric.spend), purchases: Number(metric.purchases), revenue: Number(metric.revenue) }))
     })) as IncentiveCreative[],
     eligibleAds,
-    metaAds,
+    metaAds: visibleMetaAds,
     syncRuns: reviewer ? await loadSyncRuns(admin) : [],
     transcriptMappings: transcriptMappingsResult.data ?? [],
     campaignDestinations

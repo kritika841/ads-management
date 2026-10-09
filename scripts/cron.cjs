@@ -6,6 +6,7 @@ const dotenv = require("dotenv");
 
 const RUN_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 const META_SYNC_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+const RECYCLE_BIN_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
 let running = false;
 let syncingMeta = false;
 
@@ -98,13 +99,34 @@ function runMetaSync() {
   req.end();
 }
 
+function runRecycleBinSweep() {
+  const secret = process.env.CRON_SECRET || "";
+  if (!secret) return;
+  const req = http.request({
+    hostname: "127.0.0.1",
+    port: Number(process.env.PORT || 3000),
+    path: "/api/cron/recycle-bin-purge",
+    method: "GET",
+    headers: { "Authorization": `Bearer ${secret}`, "User-Agent": "satmi-ads-cron" },
+    timeout: 60000
+  }, (res) => {
+    res.resume();
+    res.on("end", () => console.log(`[cron-bin] Recycle Bin sweep finished with HTTP ${res.statusCode}`));
+  });
+  req.on("error", (err) => console.error(`[cron-bin] Error contacting Recycle Bin sweep endpoint:`, err.message));
+  req.on("timeout", () => req.destroy());
+  req.end();
+}
+
 // Run immediately on startup
 runIngest();
 setTimeout(runMetaSync, 15000); // 15s after startup to allow server to be ready
+setTimeout(runRecycleBinSweep, 45000);
 
 // Schedule subsequent runs
 setInterval(runIngest, RUN_INTERVAL_MS);
 setInterval(runMetaSync, META_SYNC_INTERVAL_MS);
+setInterval(runRecycleBinSweep, RECYCLE_BIN_SWEEP_INTERVAL_MS);
 
 function bootstrapEnv() {
   const projectRoot = path.resolve(process.cwd());

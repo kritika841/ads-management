@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { creatorCapableProfiles } from "@/lib/creators";
 import {
   AlertCircle,
   AlertTriangle,
@@ -32,6 +33,7 @@ import {
   SlidersHorizontal,
   SquareCheck,
   Target,
+  Upload,
   Video,
   X
 } from "lucide-react";
@@ -47,6 +49,9 @@ import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
+import { BulkImportCreativesModal } from "@/components/campaigns/bulk-import-creatives-modal";
+import { ImportFromLibraryModal } from "@/components/campaigns/import-from-library-modal";
+import { SearchableFilterDropdown } from "@/components/campaigns/searchable-filter-dropdown";
 import { CreatorItemForm } from "@/components/workflow/creator-item-form";
 import { ProductionStageBadge } from "@/components/workflow/production-stage";
 import { bulkSetDownloadedBadge } from "@/app/actions/ads";
@@ -322,7 +327,8 @@ export function CampaignDetailClient({
   products,
   profiles,
   availableTags,
-  editorWorkloads = {}
+  editorWorkloads = {},
+  canImportFromLibrary = false
 }: {
   overview: CampaignOverview;
   profile: Profile;
@@ -331,6 +337,8 @@ export function CampaignDetailClient({
   profiles: Profile[];
   availableTags: string[];
   editorWorkloads?: Record<string, number>;
+  /** May pull existing Creative Library creatives into this campaign (bulk "Add to campaign" permission). */
+  canImportFromLibrary?: boolean;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -340,7 +348,25 @@ export function CampaignDetailClient({
   const [editorFilter, setEditorFilter] = useState<string>("all");
   const [productFilter, setProductFilter] = useState<string>("all");
   const [downloadFilter, setDownloadFilter] = useState<"all" | "downloaded" | "not_downloaded">("all");
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
+
+  const campaignTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const cr of overview.creatives) {
+      for (const t of cr.tags ?? []) {
+        if (t.name && t.name.toLowerCase() !== "downloaded") {
+          set.add(t.name);
+        }
+      }
+    }
+    for (const t of availableTags ?? []) {
+      if (t && t.toLowerCase() !== "downloaded") {
+        set.add(t);
+      }
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [overview.creatives, availableTags]);
 
   const [updatingDownloadedId, setUpdatingDownloadedId] = useState<string | null>(null);
   const [isBulkUpdatingDownloaded, setIsBulkUpdatingDownloaded] = useState(false);
@@ -349,10 +375,12 @@ export function CampaignDetailClient({
   const [selectedScriptAd, setSelectedScriptAd] = useState<AdWithRelations | null>(null);
   const [editingAd, setEditingAd] = useState<AdWithRelations | null>(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
+  const [libraryImportOpen, setLibraryImportOpen] = useState(false);
   const bulk = useBulkDownload();
 
-  const creators = useMemo(() => profiles.filter((p) => p.role === "content_creator"), [profiles]);
-  const editors = useMemo(() => profiles.filter((p) => p.role === "editor"), [profiles]);
+  const creators = useMemo(() => creatorCapableProfiles(profiles).filter((p) => p.active), [profiles]);
+  const editors = useMemo(() => profiles.filter((p) => p.role === "editor" && p.active), [profiles]);
 
   const canAddCreative =
     profile.role === "content_creator" || profile.role === "admin" || profile.role === "manager";
@@ -509,6 +537,11 @@ export function CampaignDetailClient({
         }
       }
 
+      if (tagFilter.length > 0) {
+        const hasTag = creative.tags?.some((t) => tagFilter.includes(t.name));
+        if (!hasTag) return false;
+      }
+
       return true;
     });
   }, [
@@ -518,6 +551,7 @@ export function CampaignDetailClient({
     creatorFilter,
     editorFilter,
     productFilter,
+    tagFilter,
     search
   ]);
 
@@ -527,7 +561,8 @@ export function CampaignDetailClient({
     stageFilter !== "all" ||
     creatorFilter !== "all" ||
     editorFilter !== "all" ||
-    productFilter !== "all";
+    productFilter !== "all" ||
+    tagFilter.length > 0;
 
   const resetFilters = () => {
     setSearch("");
@@ -536,6 +571,7 @@ export function CampaignDetailClient({
     setCreatorFilter("all");
     setEditorFilter("all");
     setProductFilter("all");
+    setTagFilter([]);
   };
 
   // Export to CSV
@@ -671,6 +707,31 @@ export function CampaignDetailClient({
                   ))}
                 </div>
               ) : null}
+            </div>
+          );
+        }
+      },
+      {
+        id: "tags",
+        header: "Tags",
+        sortableValue: (ad) => (ad.tags ?? []).map((t) => t.name).sort().join(", "),
+        defaultWidth: 160,
+        minWidth: 100,
+        cell: (ad) => {
+          const displayTags = (ad.tags ?? []).filter((tag) => tag.name.toLowerCase() !== "downloaded");
+          if (!displayTags.length) {
+            return <span className="text-[11px] text-muted-foreground italic">—</span>;
+          }
+          return (
+            <div className="flex flex-wrap gap-1 max-h-12 overflow-y-auto py-0.5">
+              {displayTags.map((tag) => (
+                <span
+                  key={tag.id ?? tag.name}
+                  className="inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground font-mono"
+                >
+                  #{tag.name}
+                </span>
+              ))}
             </div>
           );
         }
@@ -1027,6 +1088,18 @@ export function CampaignDetailClient({
             <Download className="size-3.5 mr-1" />
             Export CSV
           </Button>
+          {(canAddCreative || canImportFromLibrary) && overview.campaign.active !== false ? (
+            <Button
+              id="campaign-import-button"
+              variant="secondary"
+              onClick={() => (canImportFromLibrary ? setLibraryImportOpen(true) : setBulkImportOpen(true))}
+              className="h-9 gap-1.5 text-xs"
+              title={canImportFromLibrary ? "Import creatives from the Creative Library" : "Import creatives from CSV"}
+            >
+              <Upload className="size-3.5" />
+              Import
+            </Button>
+          ) : null}
           {canAddCreative ? (
             <Button onClick={() => setAddModalOpen(true)} className="h-9 gap-1.5 text-xs shadow-xs">
               <Plus className="size-4" />
@@ -1233,93 +1306,75 @@ export function CampaignDetailClient({
           </div>
         </div>
 
-        {/* Collapsible Dropdowns */}
+        {/* Collapsible Dropdowns with Search */}
         {showFilters && (
-          <div className="grid grid-cols-2 gap-3 pt-2.5 border-t border-border sm:grid-cols-5 text-xs">
-            <div>
-              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Stage & Status</label>
-              <Select
-                value={stageFilter}
-                onChange={(e) => setStageFilter(e.target.value)}
-                className="h-8 text-xs"
-              >
-                <option value="all">All Statuses & Stages</option>
-                <option value="approved">Approved</option>
-                <option value="changes_requested_all">Changes Requested (All)</option>
-                <option value="changes_requested">Changes: Editor</option>
-                <option value="creator_changes_requested">Changes: Creator</option>
-                <option value="in_review">In Review (All)</option>
-                <option value="final_review">Final Review</option>
-                <option value="creator_review">Creator Review</option>
-                <option value="in_creation">In Creation (All)</option>
-                <option value="editing">Editing</option>
-                <option value="ready_for_edit">Ready for Edit</option>
-                <option value="shoot_complete">Shoot Complete (Clips Done)</option>
-                <option value="ready_to_shoot">Ready to Shoot</option>
-                <option value="script_writing">Script in Progress</option>
-              </Select>
-            </div>
+          <div className="grid grid-cols-2 gap-3 pt-2.5 border-t border-border sm:grid-cols-3 lg:grid-cols-6 text-xs">
+            <SearchableFilterDropdown
+              label="Tags"
+              value={tagFilter}
+              onChange={setTagFilter}
+              isMulti
+              prefix="#"
+              allLabel="All Tags"
+              options={campaignTags.map((t) => ({ value: t, label: t }))}
+            />
 
-            <div>
-              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Download Status</label>
-              <Select
-                value={downloadFilter}
-                onChange={(e) => setDownloadFilter(e.target.value as "all" | "downloaded" | "not_downloaded")}
-                className="h-8 text-xs"
-              >
-                <option value="all">All Download States</option>
-                <option value="downloaded">Downloaded</option>
-                <option value="not_downloaded">Yet to download</option>
-              </Select>
-            </div>
+            <SearchableFilterDropdown
+              label="Stage & Status"
+              value={stageFilter}
+              onChange={setStageFilter}
+              allLabel="All Statuses & Stages"
+              options={[
+                { value: "approved", label: "Approved" },
+                { value: "changes_requested_all", label: "Changes Requested (All)" },
+                { value: "changes_requested", label: "Changes: Editor" },
+                { value: "creator_changes_requested", label: "Changes: Creator" },
+                { value: "in_review", label: "In Review (All)" },
+                { value: "final_review", label: "Final Review" },
+                { value: "creator_review", label: "Creator Review" },
+                { value: "in_creation", label: "In Creation (All)" },
+                { value: "editing", label: "Editing" },
+                { value: "ready_for_edit", label: "Ready for Edit" },
+                { value: "shoot_complete", label: "Shoot Complete (Clips Done)" },
+                { value: "ready_to_shoot", label: "Ready to Shoot" },
+                { value: "script_writing", label: "Script in Progress" }
+              ]}
+            />
 
-            <div>
-              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Creator</label>
-              <Select
-                value={creatorFilter}
-                onChange={(e) => setCreatorFilter(e.target.value)}
-                className="h-8 text-xs"
-              >
-                <option value="all">All Creators</option>
-                {creators.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
+            <SearchableFilterDropdown
+              label="Download Status"
+              value={downloadFilter}
+              onChange={(val) => setDownloadFilter(val as "all" | "downloaded" | "not_downloaded")}
+              allLabel="All Download States"
+              options={[
+                { value: "downloaded", label: "Downloaded" },
+                { value: "not_downloaded", label: "Yet to download" }
+              ]}
+            />
 
-            <div>
-              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Editor</label>
-              <Select
-                value={editorFilter}
-                onChange={(e) => setEditorFilter(e.target.value)}
-                className="h-8 text-xs"
-              >
-                <option value="all">All Editors</option>
-                {editors.map((ed) => (
-                  <option key={ed.id} value={ed.id}>
-                    {ed.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
+            <SearchableFilterDropdown
+              label="Creator"
+              value={creatorFilter}
+              onChange={setCreatorFilter}
+              allLabel="All Creators"
+              options={creators.map((c) => ({ value: c.id, label: c.name }))}
+            />
 
-            <div>
-              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Product</label>
-              <Select
-                value={productFilter}
-                onChange={(e) => setProductFilter(e.target.value)}
-                className="h-8 text-xs"
-              >
-                <option value="all">All Products</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
+            <SearchableFilterDropdown
+              label="Editor"
+              value={editorFilter}
+              onChange={setEditorFilter}
+              allLabel="All Editors"
+              options={editors.map((ed) => ({ value: ed.id, label: ed.name }))}
+            />
+
+            <SearchableFilterDropdown
+              label="Product"
+              value={productFilter}
+              onChange={setProductFilter}
+              allLabel="All Products"
+              options={products.map((p) => ({ value: p.id, label: p.name }))}
+            />
           </div>
         )}
       </div>
@@ -1366,7 +1421,7 @@ export function CampaignDetailClient({
       />
 
       {/* Video Preview Modal */}
-      {previewAd ? <AdPreviewModal ad={previewAd} onClose={() => setPreviewAd(null)} /> : null}
+      {previewAd ? <AdPreviewModal ad={previewAd} role={profile.role} onClose={() => setPreviewAd(null)} /> : null}
 
       {/* Full Script Modal */}
       {selectedScriptAd ? (
@@ -1403,6 +1458,28 @@ export function CampaignDetailClient({
             </div>
           </section>
         </Modal>
+      ) : null}
+
+      {libraryImportOpen ? (
+        <ImportFromLibraryModal
+          campaignId={overview.campaign.id}
+          campaignName={overview.campaign.name}
+          onClose={() => setLibraryImportOpen(false)}
+          onImported={() => router.refresh()}
+          onUseCsv={canAddCreative ? () => { setLibraryImportOpen(false); setBulkImportOpen(true); } : undefined}
+        />
+      ) : null}
+
+      {bulkImportOpen ? (
+        <BulkImportCreativesModal
+          campaignId={overview.campaign.id}
+          campaignName={overview.campaign.name}
+          profile={profile}
+          creators={creators}
+          products={products.filter((p) => p.active)}
+          onClose={() => setBulkImportOpen(false)}
+          onImported={() => router.refresh()}
+        />
       ) : null}
 
       {/* Edit Creative Modal */}

@@ -1,14 +1,18 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { invalidateDashboardCache } from "@/lib/dashboard-cache";
+import { invalidateLibraryCache } from "@/lib/library-cache";
 import { z } from "zod";
 import { canReview, requireProfile } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { hasAdAccess } from "@/lib/ad-access";
 import { canBulkAddToCampaign, canDeleteAd } from "@/lib/permissions";
+import { canAssignCreator, isCreatorCapableRole } from "@/lib/creators";
 import { getAppSettings } from "@/lib/data";
 import {
   activeEditorStages,
+  canToggleEditingFreeze,
   creatorControlledStages,
   creatorEditableStages,
   inProgressEditingStages
@@ -19,6 +23,8 @@ import { extractMentions, profileMentionHandles } from "@/lib/mentions";
 import { createNotification } from "@/lib/notifications";
 import { sanitizeScriptHtml } from "@/lib/sanitize";
 import { validateReviewInput } from "@/lib/workflow";
+import { isRecycleBinReady, liveOnly, softDeleteAd } from "@/lib/recycle-bin";
+import { planEditorAssignment, reassignableEditorStages, type EditorAssignmentKind } from "@/lib/editor-assignment";
 import type { Ad, Profile } from "@/lib/types";
 
 const creatorItemSchema = z.object({
@@ -73,7 +79,7 @@ export async function saveCreatorItem(payload: z.input<typeof creatorItemSchema>
 
   const admin = createSupabaseAdminClient();
 
-  if (!data.id && (profile.role === "content_creator" || profile.role === "manager")) {
+  if (!data.id && (profile.role === "content_creator" || profile.role === "manager" || profile.role === "admin")) {
     const { data: userAds } = await admin
       .from("ads")
       .select("id, creator_id, production_stage")
@@ -86,13 +92,15 @@ export async function saveCreatorItem(payload: z.input<typeof creatorItemSchema>
       }
 
       const adIds = userAds.map((ad) => ad.id);
-      const { data: createdLogs } = await admin
-        .from("activity_logs")
-        .select("ad_id")
-        .in("ad_id", adIds)
-        .eq("actor_id", profile.id)
-        .eq("action", "creator_item_created")
-        .limit(1);
+      const { data: createdLogs } = profile.role === "admin"
+        ? { data: null }
+        : await admin
+          .from("activity_logs")
+          .select("ad_id")
+          .in("ad_id", adIds)
+          .eq("actor_id", profile.id)
+          .eq("action", "creator_item_created")
+          .limit(1);
 
       if (createdLogs && createdLogs.length > 0) {
         return { ok: false, message: "You must resolve requested changes before creating another creative." };
@@ -100,36 +108,25 @@ export async function saveCreatorItem(payload: z.input<typeof creatorItemSchema>
     }
   }
 
-  // Managers may assign themselves as the creator. In that case we skip the
-  // content_creator role check and just verify their own active profile.
-  const isManagerSelf = profile.role === "manager" && data.creatorId === profile.id;
+  // Managers and admins inherit the creator behaviour: they may author as
+  // themselves, and admins may also author on behalf of managers. The chosen
+  // creator must be an active, creator-capable profile the actor may act for.
+  const { data: creatorProfile, error: creatorError } = await admin
+    .from("profiles")
+    .select("id, role, active")
+    .eq("id", data.creatorId)
+    .maybeSingle();
 
-  let creator: { id: string } | null = null;
-  let creatorError: { message: string } | null = null;
-
-  if (isManagerSelf) {
-    const { data: managerProfile, error: managerError } = await admin
-      .from("profiles")
-      .select("id")
-      .eq("id", profile.id)
-      .eq("active", true)
-      .maybeSingle();
-    creator = managerProfile ?? null;
-    creatorError = managerError ?? null;
-  } else {
-    const { data: creatorData, error: creatorErr } = await admin
-      .from("profiles")
-      .select("id")
-      .eq("id", data.creatorId)
-      .eq("role", "content_creator")
-      .eq("active", true)
-      .maybeSingle();
-    creator = creatorData ?? null;
-    creatorError = creatorErr ?? null;
+  if (creatorError) {
+    return { ok: false, message: creatorError.message };
   }
-
-  if (creatorError || !creator) {
-    return { ok: false, message: creatorError?.message ?? "Choose an active content creator." };
+  let unchangedCreator = false;
+  if (data.id) {
+    const { data: existingCreatorRow } = await admin.from("ads").select("creator_id").eq("id", data.id).maybeSingle();
+    unchangedCreator = existingCreatorRow?.creator_id === data.creatorId;
+  }
+  if (!unchangedCreator && (!creatorProfile || !canAssignCreator({ id: profile.id, role: profile.role }, creatorProfile as { id: string; role: string; active: boolean }))) {
+    return { ok: false, message: "Choose an active creator you are allowed to create work for." };
   }
 
 
@@ -253,6 +250,7 @@ const adminOverrideSchema = z.object({
   tags: z.array(z.string()).default([]),
   deadline: z.string().optional().nullable(),
   notes: z.string().trim().max(4000).optional().nullable(),
+  driveUrl: z.string().trim().optional().or(z.literal("")),
 });
 
 export async function adminOverrideCreativeEdit(payload: z.input<typeof adminOverrideSchema>) {
@@ -284,11 +282,23 @@ export async function adminOverrideCreativeEdit(payload: z.input<typeof adminOve
     }
   }
 
+  let drivePreview: ReturnType<typeof parseGoogleDriveVideoFileUrl>["result"] = null;
+  let driveThumbnail: string | null = null;
+  if (data.driveUrl?.trim()) {
+    const driveResult = parseGoogleDriveVideoFileUrl(data.driveUrl.trim());
+    if (driveResult.error || !driveResult.result) {
+      return { ok: false, message: driveResult.error ?? "Use a valid Google Drive video file URL." };
+    }
+    drivePreview = driveResult.result;
+    const metadata = await getDriveMetadata(drivePreview.fileId).catch(() => null);
+    driveThumbnail = drivePreview.thumbnailUrl || metadata?.thumbnailLink || null;
+  }
+
   const now = new Date().toISOString();
   const stageIndex = ["script_writing", "ready_to_shoot", "shoot_complete", "ready_for_edit", "editing", "creator_review", "final_review", "creator_changes_requested", "changes_requested", "approved"].indexOf(data.stage);
   const assignedAt = editorId ? (currentAd.editor_id === editorId && currentAd.assigned_at ? currentAd.assigned_at : now) : null;
 
-  const patch = {
+  const patch: Record<string, unknown> = {
     name: data.name,
     campaign_id: data.campaignId,
     product_id: data.productId,
@@ -310,11 +320,37 @@ export async function adminOverrideCreativeEdit(payload: z.input<typeof adminOve
     final_approved_at: stageIndex >= 8 ? currentAd.final_approved_at ?? now : null,
   };
 
+  if (drivePreview) {
+    patch.drive_url = data.driveUrl!.trim();
+    patch.drive_file_id = drivePreview.fileId;
+    patch.preview_url = drivePreview.previewUrl;
+    patch.thumbnail_url = driveThumbnail || currentAd.thumbnail_url;
+  }
+
   const { data: savedRow, error: saveError } = await admin.from("ads").update(patch).eq("id", currentAd.id).select("*").single();
   if (saveError || !savedRow) {
     return { ok: false, message: saveError ? (saveError.message ?? "Unable to save.") : "Unable to save creative." };
   }
   const saved = savedRow as Ad;
+
+  // Insert a new version if the drive file changed
+  if (drivePreview && drivePreview.fileId !== currentAd.drive_file_id) {
+    const { count: versionCount } = await admin
+      .from("ad_versions")
+      .select("*", { count: "exact", head: true })
+      .eq("ad_id", currentAd.id);
+    const nextVersion = (versionCount ?? 0) + 1;
+    await admin.from("ad_versions").insert({
+      ad_id: currentAd.id,
+      version_number: nextVersion,
+      drive_url: data.driveUrl!.trim(),
+      drive_file_id: drivePreview.fileId,
+      preview_url: drivePreview.previewUrl,
+      thumbnail_url: driveThumbnail,
+      notes: data.notes || null,
+      created_by: profile.id
+    });
+  }
 
   const tagError = await syncTags(saved.id, data.tags);
   if (tagError) return { ok: false, message: `Saved, but tags could not be updated: ${tagError}` };
@@ -353,21 +389,19 @@ export async function startEditing(adId: string) {
     return { ok: false, message: "This assignment is not waiting to start." };
   }
 
-  const concurrencyError = await editorConcurrencyError(admin, profile.id);
-  if (concurrencyError) return { ok: false, message: concurrencyError };
+  if (ad.editing_freeze === "frozen") {
+    return { ok: false, message: "Editing is frozen for this creative by a manager. You can start once it is unfrozen." };
+  }
+  // A manager/admin "unfrozen" override takes precedence over the editor's active-editing limit.
+  if (ad.editing_freeze !== "unfrozen") {
+    const concurrencyError = await editorConcurrencyError(admin, profile.id);
+    if (concurrencyError) return { ok: false, message: concurrencyError };
+  }
 
   const { error: updateError } = await admin.rpc("transition_editor_work_atomic", {
     p_ad_id: ad.id, p_actor_id: profile.id, p_action: "start_editing", p_editor_id: null, p_deadline: null, p_reason: null
   });
   if (updateError) return { ok: false, message: updateError.message };
-
-  // Open a new timer session for this editing session
-  await admin.from("editor_time_logs").insert({
-    ad_id: ad.id,
-    editor_id: profile.id,
-    session_started_at: new Date().toISOString(),
-    is_active: true
-  });
 
   if (ad.creator_id) await notifyUserIds(admin, [ad.creator_id], ad.id, "Editing started", `${profile.name} started editing ${ad.name}.`);
   revalidateAdPaths(ad.id);
@@ -389,6 +423,9 @@ export async function submitEditedVideo(payload: z.input<typeof editorSubmission
   }
   if (ad.production_stage !== "editing" && ad.production_stage !== "changes_requested") {
     return { ok: false, message: "This assignment is not ready for video submission." };
+  }
+  if (ad.editing_freeze === "frozen") {
+    return { ok: false, message: "Editing is frozen for this creative by a manager. You can submit once it is unfrozen." };
   }
   if (ad.production_stage === "changes_requested" && !data.changesConfirmed) {
     return { ok: false, message: "Confirm that all requested changes were completed before resubmitting." };
@@ -570,6 +607,162 @@ export async function reassignEditor(payload: z.input<typeof reassignEditorSchem
   return { ok: true };
 }
 
+/** Ends any running editor timer on a creative (unassignment only — reassignment leaves timers untouched). */
+async function closeActiveEditingSessions(admin: ReturnType<typeof createSupabaseAdminClient>, adId: string, reason: string) {
+  await admin
+    .from("editor_time_logs")
+    .update({ session_ended_at: new Date().toISOString(), is_active: false, pause_reason: reason })
+    .eq("ad_id", adId)
+    .eq("is_active", true);
+}
+
+const bulkEditorAssignmentSchema = z.object({
+  adIds: z.array(z.string().uuid()).min(1, "Select at least one creative.").max(200, "Select up to 200 creatives at a time."),
+  mode: z.enum(["assign", "unassign"]),
+  editorId: z.string().uuid().optional().or(z.literal("")),
+  deadline: z.string().trim().optional().or(z.literal("")),
+  reason: z.string().trim().max(1000).optional().or(z.literal(""))
+});
+
+export type BulkEditorAssignmentResult = {
+  adId: string;
+  name: string;
+  kind: EditorAssignmentKind;
+  ok: boolean;
+  message?: string;
+};
+
+/**
+ * Admin/manager: assign, reassign or unassign the editor on one or many creatives.
+ * - shoot_complete                         → assign (moves to "ready for edit")
+ * - ready_for_edit / editing / changes     → reassign to the chosen editor (restarts at "ready for edit")
+ * - unassign                               → removes the editor and returns the creative to
+ *                                            "pending editor assign" (shoot complete)
+ * Reassignment leaves running timers untouched (original behaviour); unassignment stops the timer
+ * because no editor remains. Every change is logged and notifies the editors.
+ * Creatives that can't take the change are skipped with a reason instead of failing the batch.
+ */
+export async function bulkSetEditorAssignment(payload: z.input<typeof bulkEditorAssignmentSchema>) {
+  const profile = await requireProfile();
+  if (profile.role !== "admin" && profile.role !== "manager") {
+    return { ok: false, message: "Only managers and admins can change editor assignments.", results: [] as BulkEditorAssignmentResult[] };
+  }
+  const parsed = bulkEditorAssignmentSchema.safeParse(payload);
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid request.", results: [] as BulkEditorAssignmentResult[] };
+  const { mode } = parsed.data;
+  const adIds = Array.from(new Set(parsed.data.adIds));
+  const editorId = parsed.data.editorId || null;
+  const deadline = parsed.data.deadline || null;
+
+  const admin = createSupabaseAdminClient();
+  let editor: { id: string; name: string } | null = null;
+  if (mode === "assign") {
+    if (!editorId) return { ok: false, message: "Choose an editor.", results: [] as BulkEditorAssignmentResult[] };
+    const { data, error } = await admin.from("profiles").select("id,name").eq("id", editorId).eq("role", "editor").eq("active", true).maybeSingle();
+    if (error || !data) return { ok: false, message: error?.message ?? "Choose an active editor.", results: [] as BulkEditorAssignmentResult[] };
+    editor = data as { id: string; name: string };
+  }
+
+  const binReady = await isRecycleBinReady();
+  const { data: rows, error: adsError } = await liveOnly(admin.from("ads").select("*").in("id", adIds), binReady);
+  if (adsError) return { ok: false, message: adsError.message, results: [] as BulkEditorAssignmentResult[] };
+  const adsById = new Map(((rows ?? []) as Ad[]).map((row) => [row.id, row]));
+
+  const reason = parsed.data.reason?.trim() || (mode === "assign" ? `Bulk reassignment by ${profile.name}` : `Editor removed by ${profile.name}`);
+  const results: BulkEditorAssignmentResult[] = [];
+  const assignedToEditor: Ad[] = [];
+  const removedFrom = new Map<string, Ad[]>();
+  const noteRemoval = (editorKey: string | null, ad: Ad) => {
+    if (!editorKey) return;
+    removedFrom.set(editorKey, [...(removedFrom.get(editorKey) ?? []), ad]);
+  };
+
+  // Sequential on purpose: each transition locks its row in the RPC, and ordering keeps
+  // notifications / activity logs deterministic.
+  for (const adId of adIds) {
+    const ad = adsById.get(adId);
+    if (!ad) {
+      results.push({ adId, name: "Creative", kind: "skip", ok: false, message: "Not found (it may have been deleted)." });
+      continue;
+    }
+    const plan = planEditorAssignment(ad, mode, { editorId, deadline });
+    if (plan.kind === "skip") {
+      results.push({ adId, name: ad.name, kind: "skip", ok: false, message: plan.reason });
+      continue;
+    }
+
+    if (plan.kind === "unassign") {
+      const previousEditorId = ad.editor_id;
+      // Optimistic concurrency: only succeeds if nobody changed the editor/stage meanwhile.
+      const { data: updated, error } = await admin
+        .from("ads")
+        .update({ editor_id: null, assigned_at: null, editing_started_at: null, production_stage: "shoot_complete" })
+        .eq("id", ad.id)
+        .eq("production_stage", ad.production_stage)
+        .eq("editor_id", previousEditorId as string)
+        .select("id");
+      if (error || !updated?.length) {
+        results.push({ adId, name: ad.name, kind: "unassign", ok: false, message: error?.message ?? "It changed while you were editing — refresh and try again." });
+        continue;
+      }
+      await closeActiveEditingSessions(admin, ad.id, `Editor removed by ${profile.name}`);
+      await logActivity(ad.id, profile.id, "editor_unassigned", {
+        previous_editor_id: previousEditorId,
+        previous_stage: ad.production_stage,
+        production_stage: "shoot_complete",
+        reason
+      });
+      noteRemoval(previousEditorId, ad);
+      results.push({ adId, name: ad.name, kind: "unassign", ok: true });
+      continue;
+    }
+
+    // assign / reassign
+    const useReassign = (reassignableEditorStages as readonly string[]).includes(ad.production_stage);
+    const { error } = await admin.rpc("transition_editor_work_atomic", {
+      p_ad_id: ad.id,
+      p_actor_id: profile.id,
+      p_action: useReassign ? "reassign_editor" : "assign_editor",
+      p_editor_id: editor!.id,
+      p_deadline: plan.deadline,
+      p_reason: useReassign ? reason : null
+    });
+    if (error) {
+      results.push({ adId, name: ad.name, kind: plan.kind, ok: false, message: error.message });
+      continue;
+    }
+    if (useReassign) noteRemoval(ad.editor_id, ad);
+    assignedToEditor.push(ad);
+    results.push({ adId, name: ad.name, kind: plan.kind, ok: true });
+  }
+
+  // One notification per affected editor instead of one per creative.
+  if (editor && assignedToEditor.length) {
+    const body = assignedToEditor.length === 1
+      ? `${profile.name} assigned ${assignedToEditor[0].name} to you.`
+      : `${profile.name} assigned ${assignedToEditor.length} creatives to you: ${assignedToEditor.slice(0, 5).map((ad) => ad.name).join(", ")}${assignedToEditor.length > 5 ? "…" : ""}`;
+    await notifyUserIds(admin, [editor.id], assignedToEditor[0].id, "New editing assignment", body);
+  }
+  for (const [previousEditorId, ads] of removedFrom) {
+    if (previousEditorId === editor?.id) continue;
+    const body = ads.length === 1
+      ? `${ads[0].name} is no longer assigned to you.`
+      : `${ads.length} creatives are no longer assigned to you: ${ads.slice(0, 5).map((ad) => ad.name).join(", ")}${ads.length > 5 ? "…" : ""}`;
+    await notifyUserIds(admin, [previousEditorId], ads[0].id, "Assignment changed", body);
+  }
+
+  for (const result of results) if (result.ok) revalidatePath(`/ads/${result.adId}`);
+  revalidateAdPaths(results.find((result) => result.ok)?.adId ?? adIds[0]);
+
+  const changed = results.filter((result) => result.ok).length;
+  const failed = results.filter((result) => !result.ok && result.kind !== "skip").length;
+  const skipped = results.filter((result) => result.kind === "skip").length;
+  const parts = [`${changed} updated`];
+  if (skipped) parts.push(`${skipped} skipped`);
+  if (failed) parts.push(`${failed} failed`);
+  return { ok: changed > 0 || (failed === 0 && skipped === 0), message: parts.join(" · "), results, changed, skipped, failed };
+}
+
 export async function unfreezeForEditing(payload: z.input<typeof unfreezeEditingSchema>) {
   const profile = await requireProfile();
   if (profile.role !== "admin" && profile.role !== "manager") {
@@ -609,6 +802,161 @@ export async function unfreezeForEditing(payload: z.input<typeof unfreezeEditing
 
   revalidateAdPaths(ad.id);
   return { ok: true };
+}
+
+const editingFreezeSchema = z.object({
+  adId: z.string().uuid(),
+  state: z.enum(["frozen", "unfrozen"])
+});
+
+
+/**
+ * Managers and admins can freeze or unfreeze editing on a single in-production creative.
+ * - frozen:   the assigned editor cannot start, resume or submit editing for it.
+ * - unfrozen: explicit override; the creative bypasses (and is not counted toward) the
+ *             editor's "max concurrent edits" limit from Settings.
+ */
+export async function setEditingFreeze(payload: z.input<typeof editingFreezeSchema>) {
+  const profile = await requireProfile();
+  if (profile.role !== "admin" && profile.role !== "manager") {
+    return { ok: false, message: "Only managers and admins can freeze or unfreeze editing." };
+  }
+  const parsed = editingFreezeSchema.safeParse(payload);
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid freeze request." };
+
+  const admin = createSupabaseAdminClient();
+  const { data: row, error } = await admin.from("ads").select("*").eq("id", parsed.data.adId).maybeSingle();
+  if (error || !row) return { ok: false, message: error?.message ?? "Ad not found." };
+  const ad = row as Ad & { deleted_at?: string | null };
+  if (ad.deleted_at) return { ok: false, message: "This creative is in the Recycle Bin." };
+  if (!canToggleEditingFreeze(ad.production_stage)) {
+    return { ok: false, message: "Editing can only be frozen or unfrozen while a creative is in production." };
+  }
+  if ((ad.editing_freeze ?? null) === parsed.data.state) {
+    // If it's already marked unfrozen but is still stuck in ready_for_edit with an assigned editor,
+    // we still need to actually transition it to editing so the video unfreezes for the editor.
+    const needsTransitionToEditing = parsed.data.state === "unfrozen" && ad.production_stage === "ready_for_edit" && Boolean(ad.editor_id);
+    if (!needsTransitionToEditing) {
+      return { ok: true, state: parsed.data.state, stage: ad.production_stage };
+    }
+  }
+
+  // When unfreezing an ad that is waiting in ready_for_edit with an assigned editor,
+  // transition it to editing atomically so the editor can actually work on it immediately.
+  if (parsed.data.state === "unfrozen" && ad.production_stage === "ready_for_edit") {
+    if (!ad.editor_id) {
+      return { ok: false, message: "Assign an editor before unfreezing this creative." };
+    }
+    const { error: transitionError } = await admin.rpc("transition_editor_work_atomic", {
+      p_ad_id: ad.id,
+      p_actor_id: profile.id,
+      p_action: "force_start_editing",
+      p_editor_id: null,
+      p_deadline: null,
+      p_reason: null
+    });
+    if (transitionError) {
+      // Fallback in case of RPC issues
+      const nowIso = new Date().toISOString();
+      const { error: directError } = await admin
+        .from("ads")
+        .update({
+          production_stage: "editing",
+          editing_started_at: nowIso,
+          editing_freeze: "unfrozen",
+          editing_freeze_by: profile.id,
+          editing_freeze_at: nowIso
+        })
+        .eq("id", ad.id);
+      if (directError) return { ok: false, message: directError.message };
+      await admin.from("editor_time_logs").insert({
+        ad_id: ad.id,
+        editor_id: ad.editor_id,
+        session_started_at: nowIso,
+        is_active: true
+      });
+      await logActivity(ad.id, profile.id, "editor_unfrozen_for_editing", {
+        previous_stage: ad.production_stage,
+        production_stage: "editing",
+        editor_id: ad.editor_id,
+        bypassed_active_limit: true
+      });
+    }
+
+    await notifyUserIds(
+      admin,
+      [ad.editor_id],
+      ad.id,
+      "Editing unfrozen",
+      `${profile.name} allowed ${ad.name} to start editing immediately.`
+    );
+
+    revalidateAdPaths(ad.id);
+    return { ok: true, state: "unfrozen" as const, stage: "editing" as const };
+  }
+
+  const { error: updateError } = await admin
+    .from("ads")
+    .update({ editing_freeze: parsed.data.state, editing_freeze_by: profile.id, editing_freeze_at: new Date().toISOString() })
+    .eq("id", ad.id);
+  if (updateError) {
+    const missingColumn = updateError.code === "PGRST204" || updateError.code === "42703" || /editing_freeze/.test(updateError.message);
+    return {
+      ok: false,
+      message: missingColumn
+        ? "Freeze controls need a database update. Apply the latest migration (20261006120000_recycle_bin_retention_and_editing_freeze) and try again."
+        : updateError.message
+    };
+  }
+
+  // Freezing mid-edit stops the editor's running timer so tracked time stays accurate.
+  if (parsed.data.state === "frozen" && ad.editor_id && (ad.production_stage === "editing" || ad.production_stage === "changes_requested")) {
+    await admin
+      .from("editor_time_logs")
+      .update({ session_ended_at: new Date().toISOString(), is_active: false, pause_reason: `Editing frozen by ${profile.name}` })
+      .eq("ad_id", ad.id)
+      .eq("is_active", true);
+  }
+
+  // Unfreezing mid-edit resumes the editor's timer if it was paused.
+  if (parsed.data.state === "unfrozen" && ad.editor_id && (ad.production_stage === "editing" || ad.production_stage === "changes_requested")) {
+    const { data: existingActive } = await admin
+      .from("editor_time_logs")
+      .select("id")
+      .eq("ad_id", ad.id)
+      .eq("editor_id", ad.editor_id)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (!existingActive) {
+      await admin.from("editor_time_logs").insert({
+        ad_id: ad.id,
+        editor_id: ad.editor_id,
+        session_started_at: new Date().toISOString(),
+        is_active: true
+      });
+    }
+  }
+
+  await logActivity(ad.id, profile.id, parsed.data.state === "frozen" ? "editing_frozen" : "editing_unfrozen", {
+    editor_id: ad.editor_id,
+    production_stage: ad.production_stage,
+    overrides_editor_limit: parsed.data.state === "unfrozen"
+  });
+  if (ad.editor_id) {
+    await notifyUserIds(
+      admin,
+      [ad.editor_id],
+      ad.id,
+      parsed.data.state === "frozen" ? "Editing frozen" : "Editing unfrozen",
+      parsed.data.state === "frozen"
+        ? `${profile.name} froze editing on ${ad.name}. You will be notified when it is unfrozen.`
+        : `${profile.name} unfroze ${ad.name}. You can edit it regardless of your active editing limit.`
+    );
+  }
+
+  revalidateAdPaths(ad.id);
+  return { ok: true, state: parsed.data.state, stage: ad.production_stage };
 }
 
 export async function assignEditor(adId: string, editorId: string, deadline?: string | null) {
@@ -662,8 +1010,8 @@ export async function creatorReviewAd(adId: string, decision: "approve" | "reque
   if (error || !data) return { ok: false, message: error?.message ?? "Ad not found." };
   const ad = data as Ad;
 
-  if (profile.role !== "content_creator" || ad.creator_id !== profile.id) {
-    return { ok: false, message: "Only the assigned content creator can complete creator review." };
+  if (!isCreatorCapableRole(profile.role) || ad.creator_id !== profile.id) {
+    return { ok: false, message: "Only the assigned creator can complete creator review." };
   }
   if (ad.status !== "pending_review" || ad.production_stage !== "creator_review") {
     return { ok: false, message: "This ad is not waiting for creator review." };
@@ -734,7 +1082,8 @@ export async function resolveCreatorChangeRequest(payload: z.input<typeof creato
     return { ok: false, message: "This creative is not waiting on creator changes." };
   }
 
-  const { data: campaign, error: campaignError } = await admin.from("campaigns").select("id").eq("id", data.campaignId).eq("active", true).maybeSingle();
+  const binReady = await isRecycleBinReady();
+  const { data: campaign, error: campaignError } = await liveOnly(admin.from("campaigns").select("id").eq("id", data.campaignId).eq("active", true), binReady).maybeSingle();
   if (campaignError || !campaign) return { ok: false, message: campaignError?.message ?? "Choose an active campaign." };
 
   const { data: product, error: productError } = await admin.from("products").select("id").eq("id", data.productId).eq("active", true).maybeSingle();
@@ -899,7 +1248,7 @@ export async function reviewAd(adId: string, decision: "approve" | "request_chan
           production_stage: "final_review"
         }
       });
-    } else if ((isAdminReopen || isManagerReopen) && (error.message.includes("Creative is not available for final review") || error.message.includes("Only managers and admins"))) {
+    } else if (isAdminReopen || isManagerReopen) {
       // Fallback: perform reopen directly if DB RPC has not yet been upgraded
       const nextStage = resolvedTarget === "creator" ? "creator_changes_requested" : "changes_requested";
       const { error: updateError } = await admin.from("ads").update({
@@ -990,7 +1339,7 @@ export async function reviewAd(adId: string, decision: "approve" | "request_chan
   }
 
   revalidatePath("/dashboard");
-  revalidatePath("/library");
+  revalidatePath("/library"); invalidateLibraryCache();
   revalidatePath(`/ads/${adId}`);
   revalidatePath("/analytics");
 
@@ -1006,6 +1355,18 @@ export async function deleteAd(adId: string) {
   const parsedAdId = z.string().uuid().safeParse(adId);
   if (!parsedAdId.success) {
     return { ok: false, message: "Invalid ad id." };
+  }
+
+  // Recycle Bin: keep the creative (script, video link, history) restorable for the retention window.
+  if (await isRecycleBinReady()) {
+    const moved = await softDeleteAd(parsedAdId.data, profile.id);
+    if (!moved.ok) return { ok: false, message: moved.message };
+    revalidatePath("/dashboard");
+    revalidatePath("/library"); invalidateLibraryCache();
+    revalidatePath("/analytics");
+    revalidatePath("/admin/audit");
+    revalidatePath("/admin/settings");
+    return { ok: true, movedToRecycleBin: true };
   }
 
   const admin = createSupabaseAdminClient();
@@ -1037,7 +1398,7 @@ export async function deleteAd(adId: string) {
   });
 
   revalidatePath("/dashboard");
-  revalidatePath("/library");
+  revalidatePath("/library"); invalidateLibraryCache();
   revalidatePath("/analytics");
   revalidatePath("/admin/audit");
   return { ok: true };
@@ -1083,7 +1444,7 @@ export async function bulkAddTags(adIds: string[], tags: string[]) {
   }
 
   revalidatePath("/dashboard");
-  revalidatePath("/library");
+  revalidatePath("/library"); invalidateLibraryCache();
 
   return { ok: true, count: allowedIds.length };
 }
@@ -1123,7 +1484,7 @@ export async function dismissDownloadedBadge(adId: string) {
     metadata: {}
   });
   revalidatePath("/dashboard");
-  revalidatePath("/library");
+  revalidatePath("/library"); invalidateLibraryCache();
   revalidatePath("/campaigns");
   revalidatePath("/campaigns/[id]", "page");
   return { ok: true };
@@ -1195,7 +1556,7 @@ export async function bulkSetDownloadedBadge(adIds: string[], downloaded: boolea
     metadata: { downloaded_tag_id: downloadedTagId ?? null }
   })));
   revalidatePath("/dashboard");
-  revalidatePath("/library");
+  revalidatePath("/library"); invalidateLibraryCache();
   revalidatePath("/campaigns");
   revalidatePath("/campaigns/[id]", "page");
   return { ok: true, count: existingAdIds.length, downloaded: parsed.data.downloaded };
@@ -1414,10 +1775,13 @@ export async function resumeEditingTimer(adId: string) {
   if (!parsedId.success) return { ok: false, message: "Invalid ad id." };
 
   const admin = createSupabaseAdminClient();
-  const { data: ad, error: adError } = await admin.from("ads").select("editor_id,production_stage,name").eq("id", parsedId.data).maybeSingle();
+  const { data: ad, error: adError } = await admin.from("ads").select("*").eq("id", parsedId.data).maybeSingle();
   if (adError || !ad) return { ok: false, message: adError?.message ?? "Ad not found." };
   if (profile.role !== "editor" || ad.editor_id !== profile.id) {
     return { ok: false, message: "Only the assigned editor can resume the timer." };
+  }
+  if ((ad as Ad).editing_freeze === "frozen") {
+    return { ok: false, message: "Editing is frozen for this creative by a manager. You can resume once it is unfrozen." };
   }
   if (!(["editing", "changes_requested"] as string[]).includes(ad.production_stage)) {
     return { ok: false, message: "Timer can only be resumed while actively editing." };
@@ -1462,19 +1826,28 @@ function friendlyAdSaveError(error: { code?: string; message: string }) {
 }
 
 async function editorConcurrencyError(admin: ReturnType<typeof createSupabaseAdminClient>, editorId: string) {
-  const [{ count, error }, { data: settings, error: settingsError }] = await Promise.all([
-    admin
+  const binReady = await isRecycleBinReady();
+  const [{ count, error }, { data: settings, error: settingsError }, exclusions] = await Promise.all([
+    liveOnly(admin
       .from("ads")
       .select("id", { count: "exact", head: true })
       .eq("editor_id", editorId)
-      .in("production_stage", inProgressEditingStages),
-    admin.from("app_settings").select("max_concurrent_edits").eq("id", 1).single()
+      .in("production_stage", inProgressEditingStages), binReady),
+    admin.from("app_settings").select("max_concurrent_edits").eq("id", 1).single(),
+    // Creatives that are explicitly unfrozen (override) or frozen (paused by manager) do not count toward the limit.
+    liveOnly(admin
+      .from("ads")
+      .select("id", { count: "exact", head: true })
+      .eq("editor_id", editorId)
+      .in("production_stage", inProgressEditingStages)
+      .in("editing_freeze", ["unfrozen", "frozen"]), binReady)
   ]);
 
   if (error) return error.message;
   if (settingsError) return settingsError.message;
+  const excluded = exclusions.error ? 0 : exclusions.count ?? 0;
   const maxConcurrentEdits = settings?.max_concurrent_edits ?? 2;
-  if ((count ?? 0) >= maxConcurrentEdits) {
+  if (Math.max(0, (count ?? 0) - excluded) >= maxConcurrentEdits) {
     return `You already have ${maxConcurrentEdits} videos in progress. Submit one before starting another.`;
   }
   return null;
@@ -1540,8 +1913,8 @@ async function logActivity(adId: string, actorId: string, action: string, metada
 }
 
 function revalidateAdPaths(adId: string) {
-  revalidatePath("/dashboard");
-  revalidatePath("/library");
+  revalidatePath("/dashboard"); invalidateDashboardCache();
+  revalidatePath("/library"); invalidateLibraryCache();
   revalidatePath(`/ads/${adId}`);
   revalidatePath("/analytics");
   revalidatePath("/campaigns");
@@ -1607,10 +1980,11 @@ export async function bulkAssignCampaign(adIds: string[], campaignId: string) {
   const admin = createSupabaseAdminClient();
 
   // Validate target campaign
-  const { data: campaign, error: campaignError } = await admin
+  const binReadyForCampaign = await isRecycleBinReady();
+  const { data: campaign, error: campaignError } = await liveOnly(admin
     .from("campaigns")
     .select("id, name, active")
-    .eq("id", campaignId)
+    .eq("id", campaignId), binReadyForCampaign)
     .maybeSingle();
 
   if (campaignError || !campaign) {
@@ -1688,7 +2062,7 @@ export async function bulkAssignCampaign(adIds: string[], campaignId: string) {
     }
   }
 
-  revalidatePath("/library");
+  revalidatePath("/library"); invalidateLibraryCache();
   revalidatePath("/dashboard");
   revalidatePath("/campaigns");
   revalidatePath("/campaigns/[id]", "page");

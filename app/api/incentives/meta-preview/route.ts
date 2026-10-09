@@ -11,16 +11,27 @@ type MetaCreative = {
   asset_feed_spec?: unknown;
 };
 type MetaAdPayload = { id?: string; name?: string; creative?: MetaCreative };
-type MetaVideoPayload = { id?: string; source?: string };
+type MetaVideoPayload = { id?: string; source?: string; picture?: string };
 
 export async function GET(request: NextRequest) {
+  const requestedVideoId = request.nextUrl.searchParams.get("videoId")?.trim() || null;
+  const thumbnail = request.nextUrl.searchParams.get("thumbnail") === "1";
+  const token = process.env.META_ACCESS_TOKEN;
+
+  if (thumbnail && requestedVideoId) {
+    if (!token) return NextResponse.json({ error: "Meta credentials are not configured." }, { status: 503 });
+    const videoData = await graph<MetaVideoPayload & { thumbnails?: { data?: Array<{ uri: string; is_preferred?: boolean }> } }>(`${requestedVideoId}?fields=id,picture,thumbnails{uri,is_preferred}`, token).catch(() => null);
+    const preferredThumb = videoData?.thumbnails?.data?.find((t) => t.is_preferred)?.uri;
+    const pic = preferredThumb || videoData?.picture;
+    if (pic) return NextResponse.redirect(pic, { headers: { "Cache-Control": "public, max-age=86400" } });
+    return NextResponse.json({ error: "Thumbnail not found" }, { status: 404 });
+  }
+
   await requireRole(["admin", "manager", "content_creator", "editor"]);
   const adId = request.nextUrl.searchParams.get("adId")?.trim() ?? "";
   const expectedCreativeId = request.nextUrl.searchParams.get("creativeId")?.trim() || null;
-  const requestedVideoId = request.nextUrl.searchParams.get("videoId")?.trim() || null;
   const stream = request.nextUrl.searchParams.get("stream") === "1";
   const download = request.nextUrl.searchParams.get("download") === "1";
-  const token = process.env.META_ACCESS_TOKEN;
 
   if (!/^\d+$/.test(adId)) return NextResponse.json({ error: "A valid Meta ad ID is required." }, { status: 400 });
   if (expectedCreativeId && !/^\d+$/.test(expectedCreativeId)) return NextResponse.json({ error: "Invalid Meta creative ID." }, { status: 400 });
@@ -38,9 +49,10 @@ export async function GET(request: NextRequest) {
 
     const videoIds = collectVideoIds(creative);
     const videoId = requestedVideoId ?? creative.video_id ?? (videoIds.length === 1 ? videoIds[0] : null);
-    if (requestedVideoId && !videoIds.includes(requestedVideoId)) {
-      return NextResponse.json({ error: `Video ${requestedVideoId} is not part of Meta creative ${creative.id}.`, availableVideoIds: videoIds }, { status: 409 });
-    }
+    // A requested video ID comes from this ad's own Creative → Media breakdown
+    // (stored per creative row). Advantage+/flexible creatives frequently do not
+    // enumerate those variants in asset_feed_spec, so absence from the spec is
+    // not a mismatch; Meta still validates access when the video is fetched.
     if (!videoId && videoIds.length > 1) {
       return NextResponse.json({ error: "This is a multi-video Meta creative. Open an individual atomic video row to play the exact variant.", availableVideoIds: videoIds }, { status: 409 });
     }
@@ -53,7 +65,7 @@ export async function GET(request: NextRequest) {
     const identity = { adId, creativeId: creative.id, videoId };
     const mediaUrl = `/api/incentives/meta-preview?${new URLSearchParams({ ...identity, stream: "1" }).toString()}`;
     const downloadUrl = `/api/incentives/meta-preview?${new URLSearchParams({ ...identity, download: "1" }).toString()}`;
-    return NextResponse.json({ ...identity, name: ad.name ?? null, mediaType: "video", mediaUrl, downloadUrl, thumbnailUrl: creative.thumbnail_url ?? null, source: "live_meta" }, { headers: { "Cache-Control": "private, no-store, max-age=0" } });
+    return NextResponse.json({ ...identity, name: ad.name ?? null, mediaType: "video", mediaUrl, downloadUrl, thumbnailUrl: video.picture ?? creative.thumbnail_url ?? null, source: "live_meta" }, { headers: { "Cache-Control": "private, no-store, max-age=0" } });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Meta preview lookup failed." }, { status: 502 });
   }
@@ -74,14 +86,14 @@ function collectVideoIds(value: unknown) {
 }
 
 async function resolveVideo(videoId: string, creative: MetaCreative, token: string) {
-  const direct = await graph<MetaVideoPayload>(`${videoId}?fields=id,source`, token).catch(() => null);
+  const direct = await graph<MetaVideoPayload>(`${videoId}?fields=id,source,picture`, token).catch(() => null);
   if (direct?.source) return direct;
   const pageId = findPageId(creative);
   if (!pageId) return direct ?? { id: videoId };
   const accounts = await graph<{ data?: Array<{ id?: string; access_token?: string }> }>("me/accounts?fields=id,access_token&limit=100", token).catch(() => null);
   const pageToken = accounts?.data?.find((page) => page.id === pageId)?.access_token;
   if (!pageToken) return direct ?? { id: videoId };
-  return graph<MetaVideoPayload>(`${videoId}?fields=id,source`, pageToken).catch(() => direct ?? { id: videoId });
+  return graph<MetaVideoPayload>(`${videoId}?fields=id,source,picture`, pageToken).catch(() => direct ?? { id: videoId });
 }
 
 function findPageId(value: unknown): string | null {

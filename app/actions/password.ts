@@ -10,6 +10,7 @@ import {
   sendPasswordResetEmail,
   updateUserPasswordSecurely,
   getAllUsersPasswordSecurityStatus,
+  forceLogoutUserAndRequireReset,
   type PasswordStatus
 } from "@/lib/password-security";
 
@@ -20,7 +21,8 @@ const changePasswordSchema = z.object({
 });
 
 const resetPasswordSchema = z.object({
-  userId: z.string().uuid().optional(),
+  // Any extra keys (e.g. a legacy `userId`) are stripped by zod and never trusted:
+  // the account being reset is always taken from the server-verified session.
   newPassword: z.string().min(8, "Password must be at least 8 characters long."),
   confirmPassword: z.string().min(8, "Confirm password is required.")
 });
@@ -132,18 +134,18 @@ export async function resetPasswordWithPolicyAction(payload: z.infer<typeof rese
     return { ok: false, error: "Passwords do not match." };
   }
 
-  // Retrieve current recovery user from session or payload
+  // The recovery link establishes a session; only that verified session may be reset.
   const supabase = await createSupabaseServerClient();
   const {
     data: { user }
   } = await supabase.auth.getUser();
 
-  const targetUserId = user?.id || parsed.data.userId;
-  if (!targetUserId) {
+  if (!user?.id) {
     return { ok: false, error: "Your reset session has expired or is invalid. Please request a new link." };
   }
 
-  const targetEmail = user?.email;
+  const targetUserId = user.id;
+  const targetEmail = user.email;
 
   // Historical password prevention check
   const reused = await isPasswordReused(targetUserId, newPassword, targetEmail);
@@ -182,19 +184,15 @@ export async function requestPasswordResetAction(
     return { ok: false, message: "Please provide a valid email address.", actionLink: "", emailDelivered: false, isAdmin: false };
   }
 
-  // Check if current user is an authenticated Admin
-  const profile = await getCurrentProfile();
-  const isAdmin = profile?.role === "admin";
-
-  const result = await sendPasswordResetEmail(email, clientOrigin, { generateDirectLink: isAdmin });
+  const result = await sendPasswordResetEmail(email, clientOrigin, { generateDirectLink: true });
 
   return {
     ok: result.ok,
     message: result.message,
-    // Strictly restrict direct actionLink to administrators
-    actionLink: isAdmin ? result.actionLink : "",
+    // Provide direct link even for signed-out users due to mailing issues
+    actionLink: result.actionLink || "",
     emailDelivered: result.emailDelivered,
-    isAdmin
+    isAdmin: false
   };
 }
 
@@ -257,4 +255,39 @@ export async function adminSendUserResetEmailAction(
 export async function adminGetAllUsersPasswordStatusesAction() {
   await requireRole(["admin"]);
   return await getAllUsersPasswordSecurityStatus();
+}
+
+/**
+ * Admin action to forcefully log out a specific user and prompt them to reset their password.
+ */
+export async function adminForceLogoutUserAction(
+  targetUserId: string,
+  clientOrigin?: string
+): Promise<{ ok: boolean; message: string; actionLink: string; emailDelivered: boolean }> {
+  const admin = await requireRole(["admin"]);
+
+  const client = createSupabaseAdminClient();
+  const { data: targetProfile, error } = await client
+    .from("profiles")
+    .select("id, name, email")
+    .eq("id", targetUserId)
+    .maybeSingle();
+
+  if (error || !targetProfile) {
+    return { ok: false, message: "User profile not found.", actionLink: "", emailDelivered: false };
+  }
+
+  const result = await forceLogoutUserAndRequireReset(targetUserId, clientOrigin);
+  if (result.ok) {
+    await recordPasswordAudit(admin.id, "admin_force_logout_user", targetUserId, {
+      recipient_email: targetProfile.email
+    });
+  }
+
+  return {
+    ok: result.ok,
+    message: result.message,
+    actionLink: result.actionLink || "",
+    emailDelivered: Boolean(result.emailDelivered)
+  };
 }

@@ -11,6 +11,20 @@ export const inProgressEditingStages = [
   "changes_requested"
 ] as const satisfies readonly ProductionStage[];
 
+/** Stages where a creative is still in production and a manager/admin can freeze or unfreeze editing. */
+export const freezableEditingStages = [
+  "script_writing",
+  "ready_to_shoot",
+  "shoot_complete",
+  "ready_for_edit",
+  "editing",
+  "changes_requested"
+] as const satisfies readonly ProductionStage[];
+
+export function canToggleEditingFreeze(stage: ProductionStage) {
+  return (freezableEditingStages as readonly string[]).includes(stage);
+}
+
 export type ProductionAction =
   | "mark_script_ready"
   | "mark_shoot_complete"
@@ -229,7 +243,7 @@ export function isCreativeCreationBlocked({
     activity_logs?: Array<{ actor_id?: string | null; action: string }> | null;
   }>;
 }): boolean {
-  if (role !== "content_creator" && role !== "manager") {
+  if (role !== "content_creator" && role !== "manager" && role !== "admin") {
     return false;
   }
 
@@ -242,7 +256,9 @@ export function isCreativeCreationBlocked({
 
     if (ad.creator_id === userId) return true;
 
-    if (ad.activity_logs?.some((log) => log.actor_id === userId && log.action === "creator_item_created")) {
+    // Admins routinely create on behalf of others, so only creatives where the
+    // admin is the actual creator can block them.
+    if (role !== "admin" && ad.activity_logs?.some((log) => log.actor_id === userId && log.action === "creator_item_created")) {
       return true;
     }
 

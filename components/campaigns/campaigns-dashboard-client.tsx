@@ -37,6 +37,7 @@ import {
   BulkActionsBar
 } from "@/components/campaigns/bulk-download-progress";
 import { CreativeStatusBadge } from "@/components/campaigns/campaign-detail-client";
+import { SearchableFilterDropdown } from "@/components/campaigns/searchable-filter-dropdown";
 import { AdPreviewModal } from "@/components/dashboard/ad-preview-modal";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -221,6 +222,7 @@ export function CampaignsDashboardClient({
   const [adEditorFilter, setAdEditorFilter] = useState<string>("all");
   const [adStageFilter, setAdStageFilter] = useState<string>("all");
   const [adDownloadFilter, setAdDownloadFilter] = useState<"all" | "downloaded" | "not_downloaded">("all");
+  const [adTagFilter, setAdTagFilter] = useState<string[]>([]);
   const [showAdFilters, setShowAdFilters] = useState(false);
   const [updatingDownloadedId, setUpdatingDownloadedId] = useState<string | null>(null);
   const [isBulkUpdatingDownloaded, setIsBulkUpdatingDownloaded] = useState(false);
@@ -323,6 +325,18 @@ export function CampaignsDashboardClient({
       allEditors: Array.from(editorsMap.entries()).map(([id, name]) => ({ id, name }))
     };
   }, [campaignOverviews]);
+
+  const allCampaignTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const creative of allCreatives) {
+      for (const t of creative.tags ?? []) {
+        if (t.name && t.name.toLowerCase() !== "downloaded") {
+          set.add(t.name);
+        }
+      }
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [allCreatives]);
 
   // Filtered overviews (for Campaigns view)
   const filteredOverviews = useMemo(() => {
@@ -449,6 +463,11 @@ export function CampaignsDashboardClient({
         }
       }
 
+      if (adTagFilter.length > 0) {
+        const hasTag = ad.tags?.some((t) => adTagFilter.includes(t.name));
+        if (!hasTag) return false;
+      }
+
       return true;
     });
   }, [
@@ -459,6 +478,7 @@ export function CampaignsDashboardClient({
     adEditorFilter,
     adStageFilter,
     adDownloadFilter,
+    adTagFilter,
     adSearch
   ]);
 
@@ -469,7 +489,8 @@ export function CampaignsDashboardClient({
     adCreatorFilter !== "all" ||
     adEditorFilter !== "all" ||
     adStageFilter !== "all" ||
-    adDownloadFilter !== "all";
+    adDownloadFilter !== "all" ||
+    adTagFilter.length > 0;
 
   const resetAdFilters = () => {
     setAdSearch("");
@@ -479,6 +500,7 @@ export function CampaignsDashboardClient({
     setAdEditorFilter("all");
     setAdStageFilter("all");
     setAdDownloadFilter("all");
+    setAdTagFilter([]);
   };
 
   // Overall KPIs rollup
@@ -579,13 +601,16 @@ export function CampaignsDashboardClient({
 
   const handleDeleteCampaign = (campaignId: string, campaignName: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm(`Are you sure you want to delete campaign "${campaignName}"?`)) return;
+    if (!confirm(`Delete campaign "${campaignName}"? Its creatives are NOT deleted; they stay in the Creative Library without a campaign. The campaign moves to the Recycle Bin, where an admin or manager can restore it until the retention period ends.`)) return;
 
     startTransition(async () => {
       const response = await runServerAction(() => deleteInternalCampaign(campaignId));
       if (!response.ok) {
         alert(response.message ?? "Failed to delete campaign.");
         return;
+      }
+      if ("movedToRecycleBin" in response && response.movedToRecycleBin) {
+        toast({ title: "Moved to Recycle Bin", description: `${campaignName} can be restored from the Recycle Bin.`, tone: "success" });
       }
       router.refresh();
     });
@@ -1080,6 +1105,31 @@ export function CampaignsDashboardClient({
                   ))}
                 </div>
               ) : null}
+            </div>
+          );
+        }
+      },
+      {
+        id: "tags",
+        header: "Tags",
+        sortableValue: (ad) => (ad.tags ?? []).map((t) => t.name).sort().join(", "),
+        defaultWidth: 160,
+        minWidth: 100,
+        cell: (ad) => {
+          const displayTags = (ad.tags ?? []).filter((tag) => tag.name.toLowerCase() !== "downloaded");
+          if (!displayTags.length) {
+            return <span className="text-[11px] text-muted-foreground italic">—</span>;
+          }
+          return (
+            <div className="flex flex-wrap gap-1 max-h-12 overflow-y-auto py-0.5">
+              {displayTags.map((tag) => (
+                <span
+                  key={tag.id ?? tag.name}
+                  className="inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground font-mono"
+                >
+                  #{tag.name}
+                </span>
+              ))}
             </div>
           );
         }
@@ -1770,85 +1820,80 @@ export function CampaignsDashboardClient({
               </div>
             </div>
 
-            {/* Collapsible Advanced Filters for Ads */}
+            {/* Collapsible Advanced Filters for Ads with Search */}
             {showAdFilters && (
-              <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border sm:grid-cols-5 text-xs">
-                <div>
-                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Campaign</label>
-                  <Select
-                    value={adCampaignFilter}
-                    onChange={(e) => setAdCampaignFilter(e.target.value)}
-                    className="h-8 text-xs"
-                  >
-                    <option value="all">All Campaigns</option>
-                    {campaignOverviews.map((ov) => (
-                      <option key={ov.campaign.id} value={ov.campaign.id}>
-                        {ov.campaign.name}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
+              <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border sm:grid-cols-3 lg:grid-cols-6 text-xs">
+                <SearchableFilterDropdown
+                  label="Campaign"
+                  value={adCampaignFilter}
+                  onChange={setAdCampaignFilter}
+                  allLabel="All Campaigns"
+                  options={campaignOverviews.map((ov) => ({ value: ov.campaign.id, label: ov.campaign.name }))}
+                />
 
-                <div>
-                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Download Status</label>
-                  <Select
-                    value={adDownloadFilter}
-                    onChange={(e) => setAdDownloadFilter(e.target.value as "all" | "downloaded" | "not_downloaded")}
-                    className="h-8 text-xs"
-                  >
-                    <option value="all">All Download States</option>
-                    <option value="downloaded">Downloaded</option>
-                    <option value="not_downloaded">Yet to download</option>
-                  </Select>
-                </div>
+                <SearchableFilterDropdown
+                  label="Tags"
+                  value={adTagFilter}
+                  onChange={setAdTagFilter}
+                  isMulti
+                  prefix="#"
+                  allLabel="All Tags"
+                  options={allCampaignTags.map((t) => ({ value: t, label: t }))}
+                />
 
-                <div>
-                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Product</label>
-                  <Select
-                    value={adProductFilter}
-                    onChange={(e) => setAdProductFilter(e.target.value)}
-                    className="h-8 text-xs"
-                  >
-                    <option value="all">All Products</option>
-                    {allProducts.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
+                <SearchableFilterDropdown
+                  label="Stage & Status"
+                  value={adStageFilter}
+                  onChange={setAdStageFilter}
+                  allLabel="All Statuses & Stages"
+                  options={[
+                    { value: "approved", label: "Approved" },
+                    { value: "in_review", label: "In Review (All)" },
+                    { value: "final_review", label: "Final Review" },
+                    { value: "creator_review", label: "Creator Review" },
+                    { value: "in_creation", label: "In Creation (All)" },
+                    { value: "editing", label: "Editing" },
+                    { value: "ready_for_edit", label: "Ready for Edit" },
+                    { value: "shoot_complete", label: "Shoot Complete" },
+                    { value: "ready_to_shoot", label: "Ready to Shoot" },
+                    { value: "script_writing", label: "Script in Progress" }
+                  ]}
+                />
 
-                <div>
-                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Creator</label>
-                  <Select
-                    value={adCreatorFilter}
-                    onChange={(e) => setAdCreatorFilter(e.target.value)}
-                    className="h-8 text-xs"
-                  >
-                    <option value="all">All Creators</option>
-                    {allCreators.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
+                <SearchableFilterDropdown
+                  label="Download Status"
+                  value={adDownloadFilter}
+                  onChange={(val) => setAdDownloadFilter(val as "all" | "downloaded" | "not_downloaded")}
+                  allLabel="All Download States"
+                  options={[
+                    { value: "downloaded", label: "Downloaded" },
+                    { value: "not_downloaded", label: "Yet to download" }
+                  ]}
+                />
 
-                <div>
-                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Editor</label>
-                  <Select
-                    value={adEditorFilter}
-                    onChange={(e) => setAdEditorFilter(e.target.value)}
-                    className="h-8 text-xs"
-                  >
-                    <option value="all">All Editors</option>
-                    {allEditors.map((ed) => (
-                      <option key={ed.id} value={ed.id}>
-                        {ed.name}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
+                <SearchableFilterDropdown
+                  label="Product"
+                  value={adProductFilter}
+                  onChange={setAdProductFilter}
+                  allLabel="All Products"
+                  options={allProducts.map((p) => ({ value: p.id, label: p.name }))}
+                />
+
+                <SearchableFilterDropdown
+                  label="Creator"
+                  value={adCreatorFilter}
+                  onChange={setAdCreatorFilter}
+                  allLabel="All Creators"
+                  options={allCreators.map((c) => ({ value: c.id, label: c.name }))}
+                />
+
+                <SearchableFilterDropdown
+                  label="Editor"
+                  value={adEditorFilter}
+                  onChange={setAdEditorFilter}
+                  allLabel="All Editors"
+                  options={allEditors.map((ed) => ({ value: ed.id, label: ed.name }))}
+                />
               </div>
             )}
           </div>
@@ -1896,7 +1941,7 @@ export function CampaignsDashboardClient({
       )}
 
       {/* Video Preview Modal */}
-      {previewAd ? <AdPreviewModal ad={previewAd} onClose={() => setPreviewAd(null)} /> : null}
+      {previewAd ? <AdPreviewModal ad={previewAd} role={profile.role} onClose={() => setPreviewAd(null)} /> : null}
 
       {/* Full Script Modal */}
       {selectedScriptAd ? (

@@ -1,6 +1,8 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { DAY_MS } from "@/lib/retention";
+import { getRetentionSettings } from "@/lib/retention-settings";
 
 export type DownloadLogSource = "creative_library" | "campaigns" | "single_ad";
 export type DownloadLogStatus = "preparing" | "building" | "ready" | "failed";
@@ -28,7 +30,7 @@ export type DownloadLog = {
   created_at: string;
 };
 
-const RETENTION_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+// Retention is admin-configurable (Settings → Download Logs); see getRetentionSettings().
 const LOCAL_STORE_FILE = path.join(process.cwd(), "data", "download-logs.json");
 
 let supabaseTableAvailable: boolean | null = null;
@@ -72,7 +74,8 @@ export async function createDownloadLog(input: {
   zipFilePath?: string | null;
 }): Promise<DownloadLog> {
   const now = new Date();
-  const expiresAt = new Date(now.getTime() + RETENTION_MS);
+  const { downloadDays } = await getRetentionSettings();
+  const expiresAt = new Date(now.getTime() + downloadDays * DAY_MS);
 
   const log: DownloadLog = {
     id: input.id,
@@ -193,7 +196,7 @@ export async function updateDownloadLog(
 }
 
 export async function getDownloadLogs(): Promise<DownloadLog[]> {
-  // Trigger automatic cleanup of records older than 3 days
+  // Trigger automatic cleanup of records past their retention window
   await cleanupExpiredDownloadLogs().catch(() => undefined);
 
   if (isSupabaseConfigured() && supabaseTableAvailable !== false) {
@@ -321,4 +324,42 @@ export async function cleanupExpiredDownloadLogs(): Promise<number> {
   }
 
   return expired.length;
+}
+
+/**
+ * Re-date every existing log to `created_at + days` after an admin changes the retention
+ * window, so the new value applies to archives that already exist. Returns how many
+ * logs are now past the new window (they are removed by the next cleanup pass).
+ */
+export async function applyDownloadRetentionDays(days: number): Promise<number> {
+  const windowMs = days * DAY_MS;
+  const redate = (log: DownloadLog) => ({
+    ...log,
+    expires_at: new Date(new Date(log.created_at).getTime() + windowMs).toISOString()
+  });
+
+  const localLogs = await readLocalStore();
+  if (localLogs.length > 0) await writeLocalStore(localLogs.map(redate));
+
+  if (isSupabaseConfigured() && supabaseTableAvailable !== false) {
+    try {
+      const admin = createSupabaseAdminClient();
+      const { data, error } = await admin.from("download_logs").select("id,created_at");
+      if (!error && data) {
+        supabaseTableAvailable = true;
+        await Promise.all(
+          (data as Pick<DownloadLog, "id" | "created_at">[]).map((row) =>
+            admin
+              .from("download_logs")
+              .update({ expires_at: new Date(new Date(row.created_at).getTime() + windowMs).toISOString() })
+              .eq("id", row.id)
+          )
+        );
+      }
+    } catch {
+      // ignore: local store and future logs still honour the new window
+    }
+  }
+
+  return cleanupExpiredDownloadLogs().catch(() => 0);
 }

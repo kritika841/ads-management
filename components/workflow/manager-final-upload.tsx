@@ -65,9 +65,9 @@ export function ManagerFinalUpload({
 
   if (success) {
     return (
-      <section className="panel overflow-hidden border-2 border-green-500/40 bg-green-500/5">
+      <section className="panel overflow-hidden border-2 border-success/40 bg-success/5">
         <div className="flex flex-col items-center gap-3 p-8 text-center">
-          <CheckCircle2 className="size-10 text-green-500" aria-hidden />
+          <CheckCircle2 className="size-10 text-success" aria-hidden />
           <p className="font-semibold text-foreground">Final clip uploaded &amp; approved</p>
           <p className="text-sm text-muted-foreground">The ad has been marked as approved with the final video.</p>
         </div>

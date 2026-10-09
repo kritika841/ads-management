@@ -6,6 +6,7 @@ export const PERFORMANCE_METRIC_KEYS = [
   "purchases",
   "revenue",
   "cpa",
+  "cpc",
   "roas",
   "ctr",
   "cpm"
@@ -37,6 +38,7 @@ export const PERFORMANCE_METRICS_INFO: Record<
   purchases: { label: "Purchases", shortLabel: "Purchases", description: "Attributed purchase conversions" },
   revenue: { label: "Revenue", shortLabel: "Revenue", description: "Attributed purchase revenue" },
   cpa: { label: "Cost / purchase (CPA)", shortLabel: "CPA", description: "Cost per acquired purchase" },
+  cpc: { label: "Cost per click (CPC)", shortLabel: "CPC", description: "Cost per landing page click (link click)" },
   roas: { label: "Return on ad spend (ROAS)", shortLabel: "ROAS", description: "Revenue divided by spend" },
   ctr: { label: "Click-through rate (CTR)", shortLabel: "CTR", description: "Click rate percentage" },
   cpm: { label: "Cost per mille (CPM)", shortLabel: "CPM", description: "Cost per 1,000 impressions" }

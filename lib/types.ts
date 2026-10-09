@@ -81,10 +81,12 @@ export type Product = {
   updated_at: string;
 };
 
+export type EditingFreezeState = "frozen" | "unfrozen";
+
 export type Ad = {
   id: string;
   name: string;
-  campaign_id: string;
+  campaign_id: string | null;
   product_id: string | null;
   creator_id: string | null;
   editor_id: string | null;
@@ -111,6 +113,8 @@ export type Ad = {
   raw_footage_shared_at: string | null;
   assigned_at?: string | null;
   editing_started_at: string | null;
+  /** null = default (editor limit applies), frozen = editing blocked, unfrozen = manager/admin override of the editor limit. */
+  editing_freeze?: EditingFreezeState | null;
   creator_reviewed_at: string | null;
   final_approved_at: string | null;
   workflow_status_changed_at: string;
@@ -307,6 +311,14 @@ export type AppSettings = {
   manager_creative_scope?: import("@/lib/metric-visibility").ManagerCreativeScope;
   hidden_metrics_by_role?: import("@/lib/metric-visibility").HiddenMetricsByRole;
   bulk_add_to_campaign_roles?: ("admin" | "content_creator" | "editor" | "manager")[];
+  overview_metrics?: import("@/lib/metric-visibility").PerformanceMetricKey[];
+  override_all_users?: boolean;
+  users_with_all_ads_access?: string[];
+  hidden_campaigns_by_user?: Record<string, string[]>;
+  /** How long export archives stay in Download Logs before they expire (default 3). */
+  download_retention_days?: number;
+  /** How long deleted campaigns, creatives and scripts stay restorable in the Recycle Bin (default 7). */
+  recycle_bin_retention_days?: number;
   updated_at: string;
 };
 

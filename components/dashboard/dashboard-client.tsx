@@ -4,9 +4,11 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { AlertTriangle, ArrowDown, ArrowRight, ArrowUp, CalendarClock, Check, ChevronsUpDown, Download, ExternalLink, Eye, Filter, FolderKanban, Grid2X2, ListFilter, Loader2, Maximize2, Play, Plus, Search, Square, SquareCheck, Table2, Tags, UserCheck, Video, X } from "lucide-react";
-import { assignEditor, bulkAddTags, bulkAssignCampaign, bulkSetDownloadedBadge, dismissDownloadedBadge, reviewAd } from "@/app/actions/ads";
+import { AlertTriangle, ArrowDown, ArrowRight, ArrowUp, CalendarClock, Check, ChevronsUpDown, Download, ExternalLink, Eye, Filter, FolderKanban, Grid2X2, ListFilter, Loader2, Maximize2, Pause, Play, Plus, RotateCcw, Search, Square, SquareCheck, Table2, Tags, UserCheck, Video, Volume2, VolumeX, X } from "lucide-react";
+import { bulkAddTags, bulkAssignCampaign, bulkSetDownloadedBadge, bulkSetEditorAssignment, dismissDownloadedBadge, reviewAd } from "@/app/actions/ads";
+import { BulkEditorAssignmentModal, type BulkEditorAssignmentRequest } from "@/components/dashboard/bulk-editor-assignment-modal";
 import { AdPreviewModal } from "@/components/dashboard/ad-preview-modal";
+import { MultiSelectFilter } from "@/components/dashboard/multi-select-filter";
 import { BulkAssignCampaignModal } from "@/components/dashboard/bulk-assign-campaign-modal";
 import { DeleteAdButton } from "@/components/dashboard/delete-ad-button";
 import { CreatorItemForm } from "@/components/workflow/creator-item-form";
@@ -21,14 +23,16 @@ import { runServerAction } from "@/lib/client-action";
 import { downloadProgressLabel, downloadWithProgress, type DownloadProgress } from "@/lib/client-download";
 import type { ExportJobSnapshot } from "@/lib/export-job-types";
 import { canBulkAddToCampaign, canDeleteAd } from "@/lib/permissions";
-import { readDashboardFilters, writeDashboardFilters, type DashboardView } from "@/lib/dashboard-filter-state";
-import { creatorEditableStages, getProductionStageLabel, isCreativeCreationBlocked, isFinalMediaVisible, productionStageLabels, productionStages, workflowStageAgeLabel } from "@/lib/production-workflow";
-import type { AdStatus, AdWithRelations, AppSettings, Campaign, Product, Profile } from "@/lib/types";
+import { creatorCapableProfiles, isCreatorCapableRole } from "@/lib/creators";
+import { clearSavedDashboardFilters, emptyDashboardFilters, loadSavedDashboardFilters, readDashboardFilters, saveDashboardFilters, writeDashboardFilters, type DashboardFilterState, type DashboardView } from "@/lib/dashboard-filter-state";
+import { getSavedLibraryTabLocal, LIBRARY_QUEUE_COOKIE, LIBRARY_REVIEW_TAB_COOKIE, parseLibraryReviewTab, rememberLibraryTab, type LibraryReviewTab } from "@/lib/library-tab-state";
+import { canToggleEditingFreeze, creatorEditableStages, getProductionStageLabel, isCreativeCreationBlocked, isFinalMediaVisible, productionStageLabels, productionStages, workflowStageAgeLabel } from "@/lib/production-workflow";
+import { EditingFreezeBadge, FreezeEditingToggle } from "@/components/workflow/freeze-editing-toggle";
+import type { AdStatus, AdWithRelations, AppSettings, Campaign, EditingFreezeState, Product, Profile, ProductionStage } from "@/lib/types";
 import { cn, dateOnlyDaysFromToday, formatDateOnly } from "@/lib/utils";
 import { matchesQueue, queueForRole, queuesForRole, type QueueKey } from "@/lib/work-queues";
 
 const gridPageSize = 18;
-const maxSimultaneousVideos = 5;
 
 function isDownloaded(ad: AdWithRelations) {
   return ad.tags.some((tag) => tag.name.toLowerCase() === "downloaded");
@@ -36,13 +40,15 @@ function isDownloaded(ad: AdWithRelations) {
 
 export function DashboardClient({
   profile,
-  ads,
+  ads: adsProp,
   campaigns,
   products,
   profiles,
   availableTags,
   editorWorkloads,
   initialQueue,
+  initialReviewTab = "all",
+  initialFilters,
   mediaTokens,
   allowManagerFinalApproval = true,
   settings
@@ -55,34 +61,98 @@ export function DashboardClient({
   availableTags: string[];
   editorWorkloads: Record<string, number>;
   initialQueue: QueueKey;
+  initialReviewTab?: LibraryReviewTab;
+  initialFilters?: DashboardFilterState;
   mediaTokens: Record<string, string>;
   allowManagerFinalApproval?: boolean;
   settings?: AppSettings;
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  // Freeze toggles apply immediately; the server page keeps a short in-memory cache, so a
+  // refresh within that window could otherwise briefly show the previous state.
+  const [freezeOverrides, setFreezeOverrides] = useState<Record<string, EditingFreezeState>>({});
+  const [stageOverrides, setStageOverrides] = useState<Record<string, ProductionStage>>({});
+  // Deleted creatives disappear immediately and stay hidden even if a refresh briefly returns
+  // the pre-delete snapshot, so the grid never re-flows twice.
+  const [removedIds, setRemovedIds] = useState<Set<string>>(() => new Set());
+  const ads = useMemo(() => {
+    const visible = removedIds.size ? adsProp.filter((item) => !removedIds.has(item.id)) : adsProp;
+    if (!Object.keys(freezeOverrides).length && !Object.keys(stageOverrides).length) {
+      return visible;
+    }
+    return visible.map((item) => {
+      let updated = item;
+      if (freezeOverrides[item.id]) {
+        updated = { ...updated, editing_freeze: freezeOverrides[item.id] };
+      }
+      if (stageOverrides[item.id]) {
+        updated = { ...updated, production_stage: stageOverrides[item.id] };
+      }
+      return updated;
+    });
+  }, [adsProp, freezeOverrides, stageOverrides, removedIds]);
+  const handleFreezeChange = (adId: string, state: EditingFreezeState, stage?: ProductionStage) => {
+    setFreezeOverrides((current) => ({ ...current, [adId]: state }));
+    if (stage) {
+      setStageOverrides((current) => ({ ...current, [adId]: stage }));
+    }
+  };
+  const handleDeleted = (adId: string) => {
+    setRemovedIds((current) => new Set(current).add(adId));
+    setSelectedIds((current) => { if (!current.has(adId)) return current; const next = new Set(current); next.delete(adId); return next; });
+    setPlayingAdIds((current) => { if (!current.has(adId)) return current; const next = new Set(current); next.delete(adId); return next; });
+  };
   const queueOptions = useMemo(() => queuesForRole(profile.role), [profile.role]);
-  const [queue, setQueue] = useState<QueueKey>(initialQueue);
-  const [reviewSubTab, setReviewSubTab] = useState<"all" | "new" | "editor" | "creator">("all");
+  const [queue, setQueue] = useState<QueueKey>(() => {
+    if (typeof window !== "undefined") {
+      const urlQueue = new URLSearchParams(window.location.search).get("queue");
+      if (urlQueue) {
+        const validated = queueForRole(profile.role, urlQueue);
+        if (validated) return validated;
+      }
+      const local = getSavedLibraryTabLocal(LIBRARY_QUEUE_COOKIE);
+      if (local) {
+        const validated = queueForRole(profile.role, local);
+        if (validated) return validated;
+      }
+    }
+    return queueForRole(profile.role, initialQueue) ?? queuesForRole(profile.role)[0].key;
+  });
+  const [reviewSubTab, setReviewSubTab] = useState<LibraryReviewTab>(() => {
+    if (typeof window !== "undefined") {
+      const urlReview = new URLSearchParams(window.location.search).get("review");
+      if (urlReview) {
+        const validated = parseLibraryReviewTab(urlReview);
+        if (validated) return validated;
+      }
+      const local = getSavedLibraryTabLocal(LIBRARY_REVIEW_TAB_COOKIE);
+      if (local) {
+        const validated = parseLibraryReviewTab(local);
+        if (validated) return validated;
+      }
+    }
+    return initialReviewTab;
+  });
   const canApprove = profile.role === "admin" || profile.role === "manager";
-  const [query, setQuery] = useState("");
-  const [stage, setStage] = useState("all");
-  const [editor, setEditor] = useState("all");
-  const [creator, setCreator] = useState("all");
-  const [campaign, setCampaign] = useState("all");
-  const [product, setProduct] = useState("all");
-  const [platform, setPlatform] = useState("all");
-  const [tag, setTag] = useState<string[]>([]);
-  const [download, setDownload] = useState("all");
-  const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
-  const [deadline, setDeadline] = useState("all");
-  const [sort, setSort] = useState("all");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [view, setView] = useState<DashboardView>("grid");
+  const canViewDownloadState = profile.role === "admin";
+  const [query, setQuery] = useState(initialFilters?.q ?? "");
+  // Every list filter holds an array (empty = no filter), exactly like the Tags filter.
+  const [stage, setStage] = useState<string[]>(initialFilters?.stage ?? []);
+  const [editor, setEditor] = useState<string[]>(initialFilters?.editor ?? []);
+  const [creator, setCreator] = useState<string[]>(initialFilters?.creator ?? []);
+  const [campaign, setCampaign] = useState<string[]>(initialFilters?.campaign ?? []);
+  const [product, setProduct] = useState<string[]>(initialFilters?.product ?? []);
+  const [platform, setPlatform] = useState<string[]>(initialFilters?.platform ?? []);
+  const [tag, setTag] = useState<string[]>(initialFilters?.tag ?? []);
+  const [download, setDownload] = useState<string[]>(canViewDownloadState ? (initialFilters?.download ?? []) : []);
+  const [deadline, setDeadline] = useState<string[]>(initialFilters?.deadline ?? []);
+  const [sort, setSort] = useState(initialFilters?.sort ?? "all");
+  const [dateFrom, setDateFrom] = useState(initialFilters?.dateFrom ?? "");
+  const [dateTo, setDateTo] = useState(initialFilters?.dateTo ?? "");
+  const [view, setView] = useState<DashboardView>(initialFilters?.view ?? "grid");
   const [urlInitialized, setUrlInitialized] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [tagDropdownRef, setTagDropdownRef] = useState<HTMLDivElement | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editingAd, setEditingAd] = useState<AdWithRelations | null>(null);
   const [previewAd, setPreviewAd] = useState<AdWithRelations | null>(null);
@@ -106,14 +176,16 @@ export function DashboardClient({
   const [isBulkAssigningCampaign, setIsBulkAssigningCampaign] = useState(false);
   const canBulkCampaign = canBulkAddToCampaign(profile.role, settings);
   const [isBulkUpdatingDownloaded, setIsBulkUpdatingDownloaded] = useState(false);
+  const [bulkEditorModalOpen, setBulkEditorModalOpen] = useState(false);
+  const [isBulkAssigningEditor, setIsBulkAssigningEditor] = useState(false);
   const [isPending, startTransition] = useTransition();
   const searchRef = useRef<HTMLInputElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
-  const editors = profiles.filter((item) => item.role === "editor");
-  const creators = profiles.filter((item) => item.role === "content_creator");
+  const editors = profiles.filter((item) => item.role === "editor" && item.active);
+  // Admins and managers can author creatives too, so they appear alongside content creators.
+  const creators = creatorCapableProfiles(profiles).filter((item) => item.active);
   const ordinaryAvailableTags = availableTags.filter((item) => item.toLowerCase() !== "downloaded");
   const canCreate = profile.role === "content_creator" || profile.role === "admin" || profile.role === "manager";
-  const canViewDownloadState = profile.role === "admin";
   const createBlocked = isCreativeCreationBlocked({ role: profile.role, userId: profile.id, ads });
 
   function handleCreateClick() {
@@ -126,31 +198,95 @@ export function DashboardClient({
   }
 
   useEffect(() => {
-    const saved = window.localStorage.getItem("adflow-dashboard-view");
-    const state = readDashboardFilters(window.location.search, saved);
-    setQuery(state.q); setStage(state.stage); setEditor(state.editor); setCreator(state.creator);
-    setCampaign(state.campaign); setProduct(state.product); setPlatform(state.platform);
-    setTag(state.tag ? state.tag.split(",").filter((item) => Boolean(item) && item.toLowerCase() !== "downloaded") : []); setDownload(canViewDownloadState ? state.download : "all"); setDeadline(state.deadline); setSort(state.sort); setView(state.view);
-    setUrlInitialized(true);
-  }, [canViewDownloadState]);
-  useEffect(() => { window.localStorage.setItem("adflow-dashboard-view", view); }, [view]);
-  useEffect(() => {
-    if (!urlInitialized) return;
-    const url = writeDashboardFilters(new URL(window.location.href), { q: query, stage, editor, creator, campaign, product, platform, tag: tag.join(","), download, deadline, sort, view });
-    window.history.replaceState(null, "", url);
-  }, [campaign, creator, deadline, download, editor, platform, product, query, sort, stage, tag, urlInitialized, view]);
+    const savedView = window.localStorage.getItem("adflow-dashboard-view");
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasUrlFilters = Array.from(urlParams.keys()).some(
+      (key) => key !== "queue" && key !== "review"
+    );
 
-  useEffect(() => {
-    if (!tagDropdownOpen) return;
-    function handleClickOutside(event: MouseEvent) {
-      if (!tagDropdownRef?.contains(event.target as Node)) {
-        setTagDropdownOpen(false);
+    let state = readDashboardFilters(window.location.search, savedView);
+
+    if (!hasUrlFilters) {
+      const savedFilters = loadSavedDashboardFilters();
+      if (savedFilters) {
+        state = {
+          ...emptyDashboardFilters,
+          ...savedFilters,
+          view: (savedFilters.view ?? savedView ?? "grid") as DashboardView
+        };
       }
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [tagDropdownOpen, tagDropdownRef]);
-  useEffect(() => { setQueue(queueForRole(profile.role, initialQueue) ?? queueOptions[0].key); }, [initialQueue, profile.role, queueOptions]);
+
+    const urlQueue = urlParams.get("queue");
+    if (!urlQueue) {
+      const savedQueue = getSavedLibraryTabLocal(LIBRARY_QUEUE_COOKIE);
+      const validQueue = queueForRole(profile.role, savedQueue);
+      if (validQueue && validQueue !== queue) {
+        setQueue(validQueue);
+      }
+    }
+
+    setQuery(state.q ?? "");
+    setStage(state.stage ?? []);
+    setEditor(state.editor ?? []);
+    setCreator(state.creator ?? []);
+    setCampaign(state.campaign ?? []);
+    setProduct(state.product ?? []);
+    setPlatform(state.platform ?? []);
+    setTag((state.tag ?? []).filter((item) => item.toLowerCase() !== "downloaded"));
+    setDownload(canViewDownloadState ? (state.download ?? []) : []);
+    setDeadline(state.deadline ?? []);
+    setSort(state.sort ?? "all");
+    setDateFrom(state.dateFrom ?? "");
+    setDateTo(state.dateTo ?? "");
+    if (state.view) setView(state.view);
+
+    setUrlInitialized(true);
+  }, [canViewDownloadState, profile.role]);
+
+  useEffect(() => {
+    if (!urlInitialized) return;
+    window.localStorage.setItem("adflow-dashboard-view", view);
+  }, [urlInitialized, view]);
+
+  useEffect(() => {
+    if (!urlInitialized) return;
+    const currentState: DashboardFilterState = {
+      q: query,
+      stage,
+      editor,
+      creator,
+      campaign,
+      product,
+      platform,
+      tag,
+      download,
+      deadline,
+      sort,
+      dateFrom,
+      dateTo,
+      view
+    };
+
+    const url = new URL(window.location.href);
+    url.searchParams.set("queue", queue);
+    if (queue === "needs_review" || queue === "creator_review" || queue === "final_review") {
+      if (reviewSubTab !== "all") {
+        url.searchParams.set("review", reviewSubTab);
+      } else {
+        url.searchParams.delete("review");
+      }
+    } else {
+      url.searchParams.delete("review");
+    }
+
+    writeDashboardFilters(url, currentState);
+    window.history.replaceState(null, "", url);
+
+    saveDashboardFilters(currentState);
+    rememberLibraryTab(LIBRARY_QUEUE_COOKIE, queue);
+    rememberLibraryTab(LIBRARY_REVIEW_TAB_COOKIE, reviewSubTab);
+  }, [campaign, creator, dateFrom, dateTo, deadline, download, editor, platform, product, query, queue, reviewSubTab, sort, stage, tag, urlInitialized, view]);
   useEffect(() => {
     function keydown(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
@@ -163,48 +299,71 @@ export function DashboardClient({
 
   const isReviewQueue = queue === "needs_review" || queue === "creator_review" || queue === "final_review";
 
+  // Pre-filter ads by all active user filters (search query, tags, creators, products, etc.)
+  // so that tab counts throughout the top bar reflect the matching count for each status queue.
+  const adsMatchingFilters = useMemo(() => {
+    const text = query.trim().toLowerCase();
+    return ads.filter((ad) => {
+      if (stage.length > 0 && !stage.includes(ad.production_stage)) return false;
+      if (editor.length > 0 && (ad.editor_id === null || !editor.includes(ad.editor_id))) return false;
+      if (creator.length > 0 && (ad.creator_id === null || !creator.includes(ad.creator_id))) return false;
+      if (campaign.length > 0 && (ad.campaign_id === null || !campaign.includes(ad.campaign_id))) return false;
+      if (product.length > 0 && (ad.product_id === null || !product.includes(ad.product_id))) return false;
+      if (platform.length > 0 && !platform.some((selected) => ad.platforms.includes(selected as AdWithRelations["platforms"][number]))) return false;
+      if (tag.length > 0 && !tag.some((selectedTag) => ad.tags.some((item) => item.name === selectedTag))) return false;
+      if (canViewDownloadState && download.length === 1) {
+        if (download[0] === "downloaded" && !isDownloaded(ad)) return false;
+        if (download[0] === "not_downloaded" && isDownloaded(ad)) return false;
+      }
+      if (deadline.length > 0) {
+        if (!ad.deadline || ad.status === "approved" || ad.status === "published") return false;
+        const days = dateOnlyDaysFromToday(ad.deadline);
+        const matchesDeadline = deadline.some((selected) => {
+          if (selected === "overdue") return days < 0;
+          if (selected === "today") return days === 0;
+          return days >= 0 && days <= 3;
+        });
+        if (!matchesDeadline) return false;
+      }
+      if (text) {
+        const searchable = `${ad.name} ${ad.script_text ?? ""} ${ad.creator?.name ?? ""} ${ad.editor?.name ?? ""} ${ad.campaign?.name ?? ""} ${ad.product?.name ?? ""} ${ad.tags.map((item) => item.name).join(" ")}`.toLowerCase();
+        if (!searchable.includes(text)) return false;
+      }
+      if (dateFrom || dateTo) {
+        const adDate = ad.created_at.slice(0, 10);
+        if (dateFrom && adDate < dateFrom) return false;
+        if (dateTo && adDate > dateTo) return false;
+      }
+      return true;
+    });
+  }, [ads, campaign, canViewDownloadState, creator, dateFrom, dateTo, deadline, download, editor, platform, product, query, stage, tag]);
+
+  const queueCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const option of queueOptions) {
+      counts[option.key] = adsMatchingFilters.filter((ad) => matchesQueue(ad, option.key)).length;
+    }
+    return counts;
+  }, [adsMatchingFilters]);
+
   const reviewCounts = useMemo(() => {
-    const inReviewAds = ads.filter((ad) => matchesQueue(ad, "needs_review"));
+    const inReviewAds = adsMatchingFilters.filter((ad) => matchesQueue(ad, "needs_review"));
     return {
       all: inReviewAds.length,
       new: inReviewAds.filter((ad) => ad.review_submission_type === "new").length,
       editor: inReviewAds.filter((ad) => ad.review_submission_type === "editor_resubmission").length,
       creator: inReviewAds.filter((ad) => ad.review_submission_type === "creator_resubmission").length
     };
-  }, [ads]);
+  }, [adsMatchingFilters]);
 
   const filteredAds = useMemo(() => {
-    const text = query.trim().toLowerCase();
-    const filtered = ads
+    const filtered = adsMatchingFilters
       .filter((ad) => matchesQueue(ad, queue))
       .filter((ad) => {
         if (!isReviewQueue || reviewSubTab === "all") return true;
         if (reviewSubTab === "new") return ad.review_submission_type === "new";
         if (reviewSubTab === "editor") return ad.review_submission_type === "editor_resubmission";
         if (reviewSubTab === "creator") return ad.review_submission_type === "creator_resubmission";
-        return true;
-      })
-      .filter((ad) => stage === "all" || ad.production_stage === stage)
-      .filter((ad) => editor === "all" || ad.editor_id === editor)
-      .filter((ad) => creator === "all" || ad.creator_id === creator)
-      .filter((ad) => campaign === "all" || ad.campaign_id === campaign)
-      .filter((ad) => product === "all" || ad.product_id === product)
-      .filter((ad) => platform === "all" || ad.platforms.includes(platform as AdWithRelations["platforms"][number]))
-      .filter((ad) => tag.length === 0 || tag.some((selectedTag) => ad.tags.some((item) => item.name === selectedTag)))
-      .filter((ad) => !canViewDownloadState || download === "all" || (download === "downloaded" ? isDownloaded(ad) : !isDownloaded(ad)))
-      .filter((ad) => {
-        if (deadline === "all") return true;
-        if (!ad.deadline || ad.status === "approved" || ad.status === "published") return false;
-        const days = dateOnlyDaysFromToday(ad.deadline);
-        if (deadline === "overdue") return days < 0;
-        if (deadline === "today") return days === 0;
-        return days >= 0 && days <= 3;
-      })
-      .filter((ad) => !text || `${ad.name} ${ad.script_text ?? ""} ${ad.creator?.name ?? ""} ${ad.editor?.name ?? ""} ${ad.campaign?.name ?? ""} ${ad.product?.name ?? ""} ${ad.tags.map((item) => item.name).join(" ")}`.toLowerCase().includes(text))
-      .filter((ad) => {
-        const adDate = ad.created_at.slice(0, 10);
-        if (dateFrom && adDate < dateFrom) return false;
-        if (dateTo && adDate > dateTo) return false;
         return true;
       });
     return filtered.sort((a, b) => {
@@ -213,10 +372,10 @@ export function DashboardClient({
       if (sort === "oldest") return a.created_at.localeCompare(b.created_at);
       return b.updated_at.localeCompare(a.updated_at);
     }).map((ad) => canViewDownloadState ? ad : ({ ...ad, tags: ad.tags.filter((tag) => tag.name.toLowerCase() !== "downloaded") }));
-  }, [ads, campaign, canViewDownloadState, creator, dateFrom, dateTo, deadline, download, editor, isReviewQueue, platform, product, query, queue, reviewSubTab, sort, stage, tag]);
+  }, [adsMatchingFilters, canViewDownloadState, isReviewQueue, queue, reviewSubTab, sort]);
 
-  const filtersActive = [stage, editor, creator, campaign, product, platform, download, deadline, sort].some((value) => value !== "all") || tag.length > 0 || !!dateFrom || !!dateTo;
-  const gridFilterKey = [queue, query, stage, editor, creator, campaign, product, platform, ...tag, download, deadline, sort, reviewSubTab].join("|");
+  const filtersActive = sort !== "all" || [stage, editor, creator, campaign, product, platform, tag, download, deadline].some((value) => value.length > 0) || !!dateFrom || !!dateTo;
+  const gridFilterKey = [queue, query, ...stage, "|", ...editor, "|", ...creator, "|", ...campaign, "|", ...product, "|", ...platform, "|", ...tag, "|", ...download, "|", ...deadline, sort, reviewSubTab].join("|");
   const visibleGridAds = filteredAds.slice(0, visibleGridCount);
   const hasMoreGridAds = view === "grid" && visibleGridCount < filteredAds.length;
 
@@ -244,26 +403,33 @@ export function DashboardClient({
 
   useEffect(() => {
     if (view !== "grid") return;
-    const candidates = visibleGridAds.filter((ad) => ad.drive_file_id && mediaTokens[ad.id]).slice(0, 4);
+    // Warm only the first couple of cards, off the critical path, so the rest of the page keeps its bandwidth.
+    const candidates = visibleGridAds.filter((ad) => ad.drive_file_id && mediaTokens[ad.id]).slice(0, 2);
     if (!candidates.length) return;
-    const timer = window.setTimeout(() => {
+    const warm = () => {
       void Promise.allSettled(candidates.map((ad) => fetch(mediaUrl(ad, mediaTokens[ad.id], true))));
-    }, 250);
+    };
+    const idle = (window as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number; cancelIdleCallback?: (id: number) => void });
+    if (idle.requestIdleCallback) {
+      const id = idle.requestIdleCallback(warm, { timeout: 2000 });
+      return () => idle.cancelIdleCallback?.(id);
+    }
+    const timer = window.setTimeout(warm, 800);
     return () => window.clearTimeout(timer);
   }, [mediaTokens, view, visibleGridAds]);
 
   const activeFilters = useMemo(() => {
-    const labelFor = (items: { id: string; name: string }[], value: string) => items.find((item) => item.id === value)?.name ?? value;
+    const labelFor = (items: { id: string; name: string }[], values: string[]) => values.map((value) => items.find((item) => item.id === value)?.name ?? value).join(", ");
     const chips: { key: string; label: string; clear: () => void }[] = [];
-    if (stage !== "all") chips.push({ key: "stage", label: `Status: ${productionStageLabels[stage as keyof typeof productionStageLabels] ?? stage}`, clear: () => setStage("all") });
-    if (editor !== "all") chips.push({ key: "editor", label: `Editor: ${labelFor(editors, editor)}`, clear: () => setEditor("all") });
-    if (creator !== "all") chips.push({ key: "creator", label: `Creator: ${labelFor(creators, creator)}`, clear: () => setCreator("all") });
-    if (campaign !== "all") chips.push({ key: "campaign", label: `Campaign: ${labelFor(campaigns, campaign)}`, clear: () => setCampaign("all") });
-    if (product !== "all") chips.push({ key: "product", label: `Product: ${labelFor(products, product)}`, clear: () => setProduct("all") });
-    if (platform !== "all") chips.push({ key: "platform", label: `Platform: ${platform}`, clear: () => setPlatform("all") });
+    if (stage.length > 0) chips.push({ key: "stage", label: `Status: ${stage.map((value) => productionStageLabels[value as keyof typeof productionStageLabels] ?? value).join(", ")}`, clear: () => setStage([]) });
+    if (editor.length > 0) chips.push({ key: "editor", label: `Editor: ${labelFor(editors, editor)}`, clear: () => setEditor([]) });
+    if (creator.length > 0) chips.push({ key: "creator", label: `Creator: ${labelFor(creators, creator)}`, clear: () => setCreator([]) });
+    if (campaign.length > 0) chips.push({ key: "campaign", label: `Campaign: ${labelFor(campaigns, campaign)}`, clear: () => setCampaign([]) });
+    if (product.length > 0) chips.push({ key: "product", label: `Product: ${labelFor(products, product)}`, clear: () => setProduct([]) });
+    if (platform.length > 0) chips.push({ key: "platform", label: `Platform: ${platform.join(", ")}`, clear: () => setPlatform([]) });
     if (tag.length > 0) chips.push({ key: "tag", label: `Tags: ${tag.map((item) => `#${item}`).join(", ")}`, clear: () => setTag([]) });
-    if (download !== "all") chips.push({ key: "download", label: download === "downloaded" ? "Downloaded" : "Yet to download", clear: () => setDownload("all") });
-    if (deadline !== "all") chips.push({ key: "deadline", label: `Deadline: ${deadline === "soon" ? "Due in 3 days" : deadline === "today" ? "Due today" : "Overdue"}`, clear: () => setDeadline("all") });
+    if (download.length > 0) chips.push({ key: "download", label: download.map((value) => value === "downloaded" ? "Downloaded" : "Yet to download").join(", "), clear: () => setDownload([]) });
+    if (deadline.length > 0) chips.push({ key: "deadline", label: `Deadline: ${deadline.map((value) => value === "soon" ? "Due in 3 days" : value === "today" ? "Due today" : "Overdue").join(", ")}`, clear: () => setDeadline([]) });
     if (sort !== "all") chips.push({ key: "sort", label: `Sort: ${sort === "deadline" ? "Deadline first" : sort === "waiting" ? "Waiting longest" : "Oldest created"}`, clear: () => setSort("all") });
     if (dateFrom) chips.push({ key: "dateFrom", label: `From: ${dateFrom}`, clear: () => setDateFrom("") });
     if (dateTo) chips.push({ key: "dateTo", label: `To: ${dateTo}`, clear: () => setDateTo("") });
@@ -271,9 +437,10 @@ export function DashboardClient({
   }, [campaign, campaigns, creator, creators, dateFrom, dateTo, deadline, download, editor, editors, platform, product, products, sort, stage, tag]);
 
   function clearFilters(clearSearch = false) {
-    setStage("all"); setEditor("all"); setCreator("all"); setCampaign("all"); setProduct("all");
-    setPlatform("all"); setTag([]); setDownload("all"); setDeadline("all"); setSort("all"); setDateFrom(""); setDateTo("");
+    setStage([]); setEditor([]); setCreator([]); setCampaign([]); setProduct([]);
+    setPlatform([]); setTag([]); setDownload([]); setDeadline([]); setSort("all"); setDateFrom(""); setDateTo("");
     if (clearSearch) setQuery("");
+    clearSavedDashboardFilters();
   }
 
   function openCreatorForm(ad?: AdWithRelations) {
@@ -291,14 +458,26 @@ export function DashboardClient({
     setEditingAd(ad ?? null); setFormOpen(true);
   }
 
+  function selectReviewSubTab(next: LibraryReviewTab) {
+    setReviewSubTab(next);
+    const url = new URL(window.location.href);
+    if (next === "all") url.searchParams.delete("review");
+    else url.searchParams.set("review", next);
+    window.history.replaceState(null, "", url);
+    rememberLibraryTab(LIBRARY_REVIEW_TAB_COOKIE, next);
+  }
+
   function selectQueue(nextQueue: QueueKey) {
     setQueue(nextQueue);
-    if (nextQueue !== "needs_review" && nextQueue !== "creator_review" && nextQueue !== "final_review") {
-      setReviewSubTab("all");
-    }
     const url = new URL(window.location.href);
     url.searchParams.set("queue", nextQueue);
+    if (nextQueue !== "needs_review" && nextQueue !== "creator_review" && nextQueue !== "final_review") {
+      setReviewSubTab("all");
+      url.searchParams.delete("review");
+      rememberLibraryTab(LIBRARY_REVIEW_TAB_COOKIE, "all");
+    }
     window.history.replaceState(null, "", url);
+    rememberLibraryTab(LIBRARY_QUEUE_COOKIE, nextQueue);
   }
 
   function decide(ad: AdWithRelations, decision: "approve" | "request_changes", note = "") {
@@ -330,8 +509,9 @@ export function DashboardClient({
       } else {
         const resolvedTarget = target ?? "editor";
         const isIntermediate = decision === "approve" && profile.role === "manager" && !allowManagerFinalApproval;
+        const isReopen = decision === "request_changes" && ad.production_stage === "approved";
         toast({
-          title: decision === "approve" ? `${ad.name} approved` : "Changes requested",
+          title: decision === "approve" ? `${ad.name} approved` : isReopen ? "Creative reopened" : "Changes requested",
           description: decision === "approve"
             ? (isIntermediate ? "Forwarded to Administrator for final approval." : "The creative is now approved.")
             : resolvedTarget === "creator"
@@ -349,11 +529,37 @@ export function DashboardClient({
   function assign(ad: AdWithRelations, editorId: string, deadline: string) {
     setActingAdId(ad.id);
     startTransition(async () => {
-      const response = await runServerAction(() => assignEditor(ad.id, editorId, deadline || null));
-      if (!response.ok) toast({ title: "Assignment not saved", description: response.message ?? "Unable to assign editor.", tone: "error" });
-      else { toast({ title: "Editor assigned", description: `${ad.name} moved to editing.`, tone: "success" }); router.refresh(); }
+      // Same server path as bulk assignment: assigns when the creative is waiting for an editor,
+      // reassigns (stopping the previous editor's timer) when one is already assigned.
+      const response = await runServerAction(() => bulkSetEditorAssignment({ adIds: [ad.id], mode: "assign", editorId, deadline }));
+      const result = response.results?.[0];
+      if (!response.ok || !result?.ok) toast({ title: "Assignment not saved", description: result?.message ?? response.message ?? "Unable to assign editor.", tone: "error" });
+      else { toast({ title: result.kind === "reassign" ? "Editor reassigned" : "Editor assigned", description: `${ad.name} is ready for editing.`, tone: "success" }); router.refresh(); }
       setActingAdId(null);
     });
+  }
+
+  async function submitBulkEditor(request: BulkEditorAssignmentRequest) {
+    if (!selectedIds.size || isBulkAssigningEditor) return;
+    setIsBulkAssigningEditor(true);
+    try {
+      const response = await runServerAction(() => bulkSetEditorAssignment({ adIds: Array.from(selectedIds), ...request }));
+      const failures = (response.results ?? []).filter((item) => !item.ok && item.kind !== "skip");
+      if (!response.ok) {
+        toast({ title: "Editor assignment not saved", description: failures[0]?.message ?? response.message ?? "Try again.", tone: "error" });
+        return;
+      }
+      toast({
+        title: request.mode === "unassign" ? "Editors removed" : "Editor assignment updated",
+        description: failures.length ? `${response.message}. First error: ${failures[0].name} — ${failures[0].message}` : response.message,
+        tone: failures.length ? "info" : "success"
+      });
+      setSelectedIds(new Set());
+      setBulkEditorModalOpen(false);
+      router.refresh();
+    } finally {
+      setIsBulkAssigningEditor(false);
+    }
   }
 
   function toggleSelect(id: string) {
@@ -370,11 +576,14 @@ export function DashboardClient({
 
   function playVideo(ad: AdWithRelations) {
     if (playingAdIds.has(ad.id)) return;
-    if (playingAdIds.size >= maxSimultaneousVideos) {
-      toast({ title: "Five videos are already playing", description: "Stop one video before starting another.", tone: "info" });
-      return;
-    }
-    setPlayingAdIds((current) => new Set(current).add(ad.id));
+    // No cap: any number of cards can buffer and play at the same time. Each player releases its
+    // own connection when it is stopped or scrolled out by a filter change.
+    setPlayingAdIds((current) => {
+      if (current.has(ad.id)) return current;
+      const next = new Set(current);
+      next.add(ad.id);
+      return next;
+    });
   }
 
   function stopVideo(id: string) {
@@ -540,14 +749,14 @@ export function DashboardClient({
       </div>
     ) : null}
 
-    <div className="mt-6 overflow-x-auto pb-1"><div className="inline-flex min-w-max rounded-md border border-border bg-card p-1 shadow-sm">{queueOptions.map((option) => <button key={option.key} className={cn("flex h-9 items-center gap-2 rounded px-3 text-sm font-medium transition", queue === option.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")} onClick={() => selectQueue(option.key)}>{option.label}<span className={cn("rounded-full px-1.5 py-0.5 text-[10px]", queue === option.key ? "bg-primary-foreground/15" : "bg-muted text-muted-foreground")}>{ads.filter((ad) => matchesQueue(ad, option.key)).length}</span></button>)}</div></div>
+    <div className="mt-6 overflow-x-auto pb-1"><div className="inline-flex min-w-max rounded-md border border-border bg-card p-1 shadow-sm">{queueOptions.map((option) => <button key={option.key} className={cn("flex h-9 items-center gap-2 rounded px-3 text-sm font-medium transition", queue === option.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")} onClick={() => selectQueue(option.key)}>{option.label}<span className={cn("rounded-full px-1.5 py-0.5 text-[10px]", queue === option.key ? "bg-primary-foreground/15" : "bg-muted text-muted-foreground")}>{queueCounts[option.key] ?? 0}</span></button>)}</div></div>
 
     {isReviewQueue ? (
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <div className="inline-flex rounded-lg border border-border bg-card p-1 shadow-sm">
           <button
             type="button"
-            onClick={() => setReviewSubTab("all")}
+            onClick={() => selectReviewSubTab("all")}
             className={cn(
               "flex h-8 items-center gap-1.5 rounded px-3 text-xs font-medium transition",
               reviewSubTab === "all" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
@@ -560,7 +769,7 @@ export function DashboardClient({
           </button>
           <button
             type="button"
-            onClick={() => setReviewSubTab("new")}
+            onClick={() => selectReviewSubTab("new")}
             className={cn(
               "flex h-8 items-center gap-1.5 rounded px-3 text-xs font-medium transition",
               reviewSubTab === "new" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
@@ -573,7 +782,7 @@ export function DashboardClient({
           </button>
           <button
             type="button"
-            onClick={() => setReviewSubTab("editor")}
+            onClick={() => selectReviewSubTab("editor")}
             className={cn(
               "flex h-8 items-center gap-1.5 rounded px-3 text-xs font-medium transition",
               reviewSubTab === "editor" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
@@ -586,7 +795,7 @@ export function DashboardClient({
           </button>
           <button
             type="button"
-            onClick={() => setReviewSubTab("creator")}
+            onClick={() => selectReviewSubTab("creator")}
             className={cn(
               "flex h-8 items-center gap-1.5 rounded px-3 text-xs font-medium transition",
               reviewSubTab === "creator" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
@@ -606,36 +815,7 @@ export function DashboardClient({
     <section className="panel mt-4 p-3">
       <div className="flex flex-col gap-2 lg:flex-row"><div className="relative flex-1"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden /><Input ref={searchRef} className="pl-9 pr-10" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search ads, scripts, people, products, or tags" /><kbd className="pointer-events-none absolute right-2 top-1/2 hidden h-6 min-w-6 -translate-y-1/2 items-center justify-center rounded border border-border bg-muted px-1.5 text-[11px] font-medium text-muted-foreground sm:inline-flex">/</kbd></div><Button variant={filtersOpen || filtersActive ? "primary" : "secondary"} onClick={() => setFiltersOpen((current) => !current)}><Filter className="size-4" aria-hidden />Filters{filtersActive ? <span className="size-1.5 rounded-full bg-current" /> : null}</Button><div className="flex rounded-lg border border-border bg-muted p-1"><Button size="icon" variant={view === "grid" ? "secondary" : "ghost"} className="size-8" title="Grid view" onClick={() => setView("grid")}><Grid2X2 className="size-4" aria-hidden /></Button><Button size="icon" variant={view === "table" ? "secondary" : "ghost"} className="size-8" title="Table view" onClick={() => setView("table")}><Table2 className="size-4" aria-hidden /></Button></div></div>
       {activeFilters.length || query ? <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">{query ? <FilterChip label={`Search: ${query}`} onRemove={() => setQuery("")} /> : null}{activeFilters.map((filter) => <FilterChip key={filter.key} label={filter.label} onRemove={filter.clear} />)}<button type="button" className="h-7 px-2 text-xs font-medium text-muted-foreground hover:text-foreground" onClick={() => clearFilters(true)}>Clear all</button></div> : null}
-      {filtersOpen ? <div className="mt-3 border-t border-border pt-3"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><FilterSelect label="Status" value={stage} onChange={setStage} options={productionStages.map((item) => ({ value: item, label: productionStageLabels[item] }))} />{profile.role === "admin" || profile.role === "manager" ? <><FilterSelect label="Editor" value={editor} onChange={setEditor} options={editors.map((item) => ({ value: item.id, label: item.name }))} /><FilterSelect label="Creator" value={creator} onChange={setCreator} options={creators.map((item) => ({ value: item.id, label: item.name }))} /></> : null}<FilterSelect label="Campaign" value={campaign} onChange={setCampaign} options={campaigns.map((item) => ({ value: item.id, label: item.name }))} /><FilterSelect label="Product" value={product} onChange={setProduct} options={products.map((item) => ({ value: item.id, label: item.name }))} /><FilterSelect label="Platform" value={platform} onChange={setPlatform} options={platforms.map((item) => ({ value: item, label: item }))} /><div className="relative" ref={(node) => setTagDropdownRef(node)}>
-            <label className="space-y-1">
-              <span className="text-xs font-medium text-muted-foreground">Tag</span>
-              <button type="button" className="flex h-10 w-full items-center justify-between rounded-lg border border-input bg-card px-3 text-sm text-foreground transition-[border-color,box-shadow,background-color] duration-150 hover:border-ring/50 focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20" onClick={() => setTagDropdownOpen((current) => !current)}>
-                <span className={cn("block min-w-0 truncate", tag.length ? "text-foreground" : "text-muted-foreground")}>{tag.length ? tag.map((item) => `#${item}`).join(", ") : "All tags"}</span>
-                <span className="text-muted-foreground">▾</span>
-              </button>
-            </label>
-            {tagDropdownOpen ? (
-              <div className="absolute left-0 right-0 z-50 mt-2 w-full min-w-full rounded-xl border border-border bg-card p-3 shadow-soft">
-                <div className="max-h-60 space-y-2 overflow-y-auto pr-2">
-                  {ordinaryAvailableTags.map((item) => (
-                    <label key={item} className="flex items-center gap-2 rounded-lg border border-border/70 bg-background px-3 py-2 text-sm hover:border-ring/50">
-                      <input type="checkbox" className="h-4 w-4 rounded border-border text-primary shadow-sm focus:ring-ring" checked={tag.includes(item)} onChange={(event) => {
-                        if (event.target.checked) {
-                          setTag((current) => Array.from(new Set([...current, item])));
-                        } else {
-                          setTag((current) => current.filter((value) => value !== item));
-                        }
-                      }} />
-                      <span className="truncate">#{item}</span>
-                    </label>
-                  ))}
-                </div>
-                <div className="mt-3 flex justify-end">
-                  <Button size="sm" variant="secondary" onClick={() => setTagDropdownOpen(false)}>Done</Button>
-                </div>
-              </div>
-            ) : null}
-          </div>{profile.role === "admin" ? <FilterSelect label="Download" value={download} onChange={setDownload} options={[{ value: "downloaded", label: "Downloaded" }, { value: "not_downloaded", label: "Yet to download" }]} /> : null}<FilterSelect label="Deadline" value={deadline} onChange={setDeadline} options={[{ value: "overdue", label: "Overdue" }, { value: "today", label: "Due today" }, { value: "soon", label: "Due in 3 days" }]} /><FilterSelect label="Sort" value={sort} onChange={setSort} options={[{ value: "deadline", label: "Deadline first" }, { value: "waiting", label: "Waiting longest" }, { value: "oldest", label: "Oldest created" }]} /><div><label className="space-y-1"><span className="text-xs font-medium text-muted-foreground">Created from</span><input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="flex h-10 w-full rounded-lg border border-input bg-card px-3 text-sm text-foreground transition-[border-color,box-shadow,background-color] duration-150 hover:border-ring/50 focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20" /></label></div><div><label className="space-y-1"><span className="text-xs font-medium text-muted-foreground">Created to</span><input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="flex h-10 w-full rounded-lg border border-input bg-card px-3 text-sm text-foreground transition-[border-color,box-shadow,background-color] duration-150 hover:border-ring/50 focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20" /></label></div></div></div> : null}
+      {filtersOpen ? <div className="mt-3 border-t border-border pt-3"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><MultiSelectFilter label="Status" values={stage} onChange={setStage} options={productionStages.map((item) => ({ value: item, label: productionStageLabels[item] }))} />{profile.role === "admin" || profile.role === "manager" ? <><MultiSelectFilter label="Editor" values={editor} onChange={setEditor} options={editors.map((item) => ({ value: item.id, label: item.name }))} /><MultiSelectFilter label="Creator" values={creator} onChange={setCreator} options={creators.map((item) => ({ value: item.id, label: item.name }))} /></> : null}<MultiSelectFilter label="Campaign" values={campaign} onChange={setCampaign} options={campaigns.map((item) => ({ value: item.id, label: item.name }))} /><MultiSelectFilter label="Product" values={product} onChange={setProduct} options={products.map((item) => ({ value: item.id, label: item.name }))} /><MultiSelectFilter label="Platform" values={platform} onChange={setPlatform} options={platforms.map((item) => ({ value: item, label: item }))} /><MultiSelectFilter label="Tag" values={tag} onChange={setTag} optionPrefix="#" allLabel="All tags" options={ordinaryAvailableTags.map((item) => ({ value: item, label: item }))} />{profile.role === "admin" ? <MultiSelectFilter label="Download" values={download} onChange={setDownload} options={[{ value: "downloaded", label: "Downloaded" }, { value: "not_downloaded", label: "Yet to download" }]} /> : null}<MultiSelectFilter label="Deadline" values={deadline} onChange={setDeadline} options={[{ value: "overdue", label: "Overdue" }, { value: "today", label: "Due today" }, { value: "soon", label: "Due in 3 days" }]} /><FilterSelect label="Sort" value={sort} onChange={setSort} options={[{ value: "deadline", label: "Deadline first" }, { value: "waiting", label: "Waiting longest" }, { value: "oldest", label: "Oldest created" }]} /><div><label className="space-y-1"><span className="text-xs font-medium text-muted-foreground">Created from</span><input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="flex h-10 w-full rounded-lg border border-input bg-card px-3 text-sm text-foreground transition-[border-color,box-shadow,background-color] duration-150 hover:border-ring/50 focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20" /></label></div><div><label className="space-y-1"><span className="text-xs font-medium text-muted-foreground">Created to</span><input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="flex h-10 w-full rounded-lg border border-input bg-card px-3 text-sm text-foreground transition-[border-color,box-shadow,background-color] duration-150 hover:border-ring/50 focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20" /></label></div></div></div> : null}
     </section>
 
     <div className="mt-4 flex items-center justify-between gap-3 flex-wrap">
@@ -650,6 +830,12 @@ export function DashboardClient({
               <Button size="sm" variant="secondary" onClick={() => setBulkCampaignModalOpen(true)}>
                 <FolderKanban className="size-3.5" aria-hidden />
                 Add to campaign
+              </Button>
+            ) : null}
+            {canApprove ? (
+              <Button id="bulk-editor-assignment" size="sm" variant="secondary" onClick={() => setBulkEditorModalOpen(true)}>
+                <UserCheck className="size-3.5" aria-hidden />
+                Assign editor
               </Button>
             ) : null}
             <Button size="sm" variant="secondary" onClick={() => setBulkTagModalOpen(true)}>
@@ -692,12 +878,83 @@ export function DashboardClient({
         }}
       />
     ) : null}
-    {filteredAds.length ? view === "grid" ? <><section className="mt-3 grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">{visibleGridAds.map((ad) => <WorkflowCard key={ad.id} ad={ad} mediaToken={mediaTokens[ad.id]} profile={profile} canApprove={canApprove} allowManagerFinalApproval={allowManagerFinalApproval} editors={editors} editorWorkloads={editorWorkloads} pending={actingAdId === ad.id} playing={playingAdIds.has(ad.id)} selected={selectedIds.has(ad.id)} downloading={downloadingIds.has(ad.id)} downloadProgress={downloadProgress[ad.id]} onToggleSelect={() => toggleSelect(ad.id)} onPlay={() => playVideo(ad)} onStopPlaying={() => stopVideo(ad.id)} onPlaybackError={() => { stopVideo(ad.id); toast({ title: "Video unavailable", description: `${ad.name} could not be played.`, tone: "error" }); }} onQuickPreview={() => setPreviewAd(ad)} onOpenDrive={() => { if (ad.drive_url) window.open(ad.drive_url, "_blank", "noopener,noreferrer"); }} onDownload={() => downloadOne(ad)} onEdit={() => openCreatorForm(ad)} onApprove={() => decide(ad, "approve")} onRequestChanges={() => setCancelAd(ad)} onAssignEditor={(editorId, deadline) => assign(ad, editorId, deadline)} />)}</section>{hasMoreGridAds ? <div ref={loadMoreRef} className="flex h-20 items-center justify-center" role="status" aria-label="Loading more creatives"><Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden /><span className="sr-only">Loading more creatives</span></div> : null}</> : <WorkflowTable ads={filteredAds} profile={profile} canApprove={canApprove} allowManagerFinalApproval={allowManagerFinalApproval} pendingId={actingAdId} selectedIds={selectedIds} downloadingIds={downloadingIds} downloadProgress={downloadProgress} onToggleSelect={toggleSelect} onApprove={(ad) => decide(ad, "approve")} onRequestChanges={setCancelAd} onDownload={downloadOne} /> : <EmptyQueue canCreate={canCreate} createBlocked={createBlocked} onCreate={handleCreateClick} />}
+    {filteredAds.length ? view === "grid" ? <><section className="mt-3 grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">{visibleGridAds.map((ad) => <WorkflowCard key={ad.id} ad={ad} mediaToken={mediaTokens[ad.id]} profile={profile} canApprove={canApprove} allowManagerFinalApproval={allowManagerFinalApproval} editors={editors} editorWorkloads={editorWorkloads} pending={actingAdId === ad.id} playing={playingAdIds.has(ad.id)} selected={selectedIds.has(ad.id)} downloading={downloadingIds.has(ad.id)} downloadProgress={downloadProgress[ad.id]} onToggleSelect={() => toggleSelect(ad.id)} onPlay={() => playVideo(ad)} onFreezeChange={handleFreezeChange} onPlaybackError={() => { stopVideo(ad.id); toast({ title: "Video unavailable", description: `${ad.name} could not be played.`, tone: "error" }); }} onQuickPreview={() => setPreviewAd(ad)} onOpenDrive={() => { if (ad.drive_url) window.open(ad.drive_url, "_blank", "noopener,noreferrer"); }} onDownload={() => downloadOne(ad)} onEdit={() => openCreatorForm(ad)} onApprove={() => decide(ad, "approve")} onRequestChanges={() => setCancelAd(ad)} onReopen={(target) => { setCancelTarget(target); setCancelAd(ad); }} onAssignEditor={(editorId, deadline) => assign(ad, editorId, deadline)} onDeleted={handleDeleted} />)}</section>{hasMoreGridAds ? <div ref={loadMoreRef} className="flex h-20 items-center justify-center" role="status" aria-label="Loading more creatives"><Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden /><span className="sr-only">Loading more creatives</span></div> : null}</> : <WorkflowTable ads={filteredAds} profile={profile} canApprove={canApprove} allowManagerFinalApproval={allowManagerFinalApproval} pendingId={actingAdId} selectedIds={selectedIds} downloadingIds={downloadingIds} downloadProgress={downloadProgress} onToggleSelect={toggleSelect} onApprove={(ad) => decide(ad, "approve")} onRequestChanges={setCancelAd} onDownload={downloadOne} onFreezeChange={handleFreezeChange} onQuickPreview={setPreviewAd} onDeleted={handleDeleted} /> : <EmptyQueue canCreate={canCreate} createBlocked={createBlocked} onCreate={handleCreateClick} />}
 
     {formOpen ? <Modal open labelledBy="creator-form-title" onClose={() => { setFormOpen(false); setEditingAd(null); }} className="p-0 sm:p-6"><section className="mx-auto min-h-full w-full bg-card shadow-float sm:min-h-0 sm:max-w-5xl sm:rounded-xl"><div className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-border bg-card px-5 sm:rounded-t-lg"><div><h2 id="creator-form-title" className="text-lg font-semibold text-foreground">{editingAd ? (editingAd && !creatorEditableStages.includes(editingAd.production_stage as (typeof creatorEditableStages)[number]) && (profile.role === "admin" || profile.role === "manager") ? "Override edit creative" : "Update creative") : "Add creative"}</h2><p className="text-xs text-muted-foreground">{editingAd && !creatorEditableStages.includes(editingAd.production_stage as (typeof creatorEditableStages)[number]) && (profile.role === "admin" || profile.role === "manager") ? "Admin/manager override — all fields editable." : "Set the current preparation status and save."}</p></div><Button size="icon" variant="ghost" title="Close" onClick={() => { setFormOpen(false); setEditingAd(null); }}><X className="size-5" aria-hidden /></Button></div><div className="p-5"><CreatorItemForm profile={profile} creators={creators} editors={editors} campaigns={campaigns.filter((item) => item.active)} products={products.filter((item) => item.active)} initialAd={editingAd} availableTags={availableTags} editorWorkloads={editorWorkloads} overrideMode={Boolean(editingAd && !creatorEditableStages.includes(editingAd.production_stage as (typeof creatorEditableStages)[number]) && (profile.role === "admin" || profile.role === "manager"))} onSaved={() => { setFormOpen(false); setEditingAd(null); router.refresh(); }} /></div></section></Modal> : null}
 
-    {cancelAd ? <Modal open labelledBy="changes-title" onClose={() => { setCancelAd(null); setCancelTarget(""); }} className="flex items-center justify-center p-4"><section className="w-full max-w-lg rounded-xl border border-border bg-card shadow-float dark:shadow-none"><div className="flex items-start justify-between border-b border-border px-5 py-4"><div><h2 id="changes-title" className="text-lg font-semibold text-foreground">Request changes</h2><p className="mt-1 text-sm text-muted-foreground">Tell the creator or editor exactly what must change.</p></div><Button size="icon" variant="ghost" className="size-9" title="Close" onClick={() => { setCancelAd(null); setCancelTarget(""); }}><X className="size-5" aria-hidden /></Button></div><div className="space-y-4 p-5"><Textarea className="min-h-32" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} placeholder="Required changes" /><Select value={cancelTarget} onChange={(event) => setCancelTarget(event.target.value as "creator" | "editor" | "") }><option value="">Choose target (Creator or Editor)</option><option value="creator">Creator</option><option value="editor">Editor</option></Select></div><div className="flex justify-end gap-2 border-t border-border px-5 py-4"><Button variant="secondary" onClick={() => { setCancelAd(null); setCancelTarget(""); }}>Keep in review</Button><Button variant="danger" disabled={isPending || !cancelReason.trim() || !cancelTarget} onClick={() => decide(cancelAd, "request_changes", cancelReason.trim())}>{isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <X className="size-4" aria-hidden />}Send changes</Button></div></section></Modal> : null}
-    <AdPreviewModal ad={previewAd} onClose={() => setPreviewAd(null)} />
+    {cancelAd ? (
+      <Modal open labelledBy="changes-title" onClose={() => { setCancelAd(null); setCancelTarget(""); }} className="flex items-center justify-center p-4">
+        <section className="w-full max-w-lg rounded-xl border border-border bg-card shadow-float dark:shadow-none">
+          <div className="flex items-start justify-between border-b border-border px-5 py-4">
+            <div>
+              <h2 id="changes-title" className="text-lg font-semibold text-foreground">
+                {cancelAd.production_stage === "approved" ? "Reopen creative for revision" : "Request changes"}
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {cancelAd.production_stage === "approved"
+                  ? `Send "${cancelAd.name}" back for revisions.`
+                  : "Tell the creator or editor exactly what must change."}
+              </p>
+            </div>
+            <Button size="icon" variant="ghost" className="size-9" title="Close" onClick={() => { setCancelAd(null); setCancelTarget(""); }}>
+              <X className="size-5" aria-hidden />
+            </Button>
+          </div>
+          <div className="space-y-4 p-5">
+            <div>
+              <label htmlFor="changes-reason-input" className="mb-1.5 block text-xs font-medium text-foreground">
+                Required changes / reason <span className="text-destructive">*</span>
+              </label>
+              <Textarea
+                id="changes-reason-input"
+                className="min-h-32"
+                value={cancelReason}
+                onChange={(event) => setCancelReason(event.target.value)}
+                placeholder={cancelAd.production_stage === "approved" ? "Explain what needs to be changed or revised..." : "Required changes"}
+              />
+            </div>
+            <div>
+              <label htmlFor="changes-target-select" className="mb-1.5 block text-xs font-medium text-foreground">
+                Revision target <span className="text-destructive">*</span>
+              </label>
+              <Select
+                id="changes-target-select"
+                value={cancelTarget}
+                onChange={(event) => setCancelTarget(event.target.value as "creator" | "editor" | "")}
+              >
+                <option value="">Choose target (Creator or Editor)</option>
+                <option value="editor">Editor ({cancelAd.editor?.name ?? "Editor"})</option>
+                <option value="creator">Creator ({cancelAd.creator?.name ?? "Creator"})</option>
+              </Select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
+            <Button variant="secondary" onClick={() => { setCancelAd(null); setCancelTarget(""); }}>
+              {cancelAd.production_stage === "approved" ? "Keep approved" : "Keep in review"}
+            </Button>
+            <Button
+              variant="danger"
+              disabled={isPending || !cancelReason.trim() || !cancelTarget}
+              onClick={() => decide(cancelAd, "request_changes", cancelReason.trim())}
+              className="gap-1.5"
+            >
+              {isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <RotateCcw className="size-4" aria-hidden />}
+              {cancelAd.production_stage === "approved" ? "Reopen & send changes" : "Send changes"}
+            </Button>
+          </div>
+        </section>
+      </Modal>
+    ) : null}
+    <AdPreviewModal
+      ad={previewAd ? {
+        ...previewAd,
+        editing_freeze: freezeOverrides[previewAd.id] ?? previewAd.editing_freeze,
+        production_stage: stageOverrides[previewAd.id] ?? previewAd.production_stage
+      } : null}
+      role={profile.role}
+      onFreezeChange={handleFreezeChange}
+      onClose={() => setPreviewAd(null)}
+    />
     {bulkTagModalOpen ? <BulkTagModal count={selectedIds.size} availableTags={ordinaryAvailableTags} pending={isBulkTagging} onClose={() => setBulkTagModalOpen(false)} onSubmit={submitBulkTags} /> : null}
     {bulkCampaignModalOpen ? (
       <BulkAssignCampaignModal
@@ -707,6 +964,17 @@ export function DashboardClient({
         pending={isBulkAssigningCampaign}
         onClose={() => setBulkCampaignModalOpen(false)}
         onSubmit={submitBulkCampaign}
+      />
+    ) : null}
+    {bulkEditorModalOpen ? (
+      <BulkEditorAssignmentModal
+        selectedAds={ads.filter((ad) => selectedIds.has(ad.id))}
+        editors={editors}
+        editorWorkloads={editorWorkloads}
+        profile={profile}
+        pending={isBulkAssigningEditor}
+        onClose={() => setBulkEditorModalOpen(false)}
+        onSubmit={submitBulkEditor}
       />
     ) : null}
   </main>;
@@ -767,13 +1035,17 @@ function BulkTagModal({ count, availableTags, pending, onClose, onSubmit }: { co
   );
 }
 
-function WorkflowCard({ ad, mediaToken, profile, canApprove = true, allowManagerFinalApproval = true, editors, editorWorkloads, pending, playing, selected, downloading, downloadProgress, onToggleSelect, onPlay, onStopPlaying, onPlaybackError, onQuickPreview, onOpenDrive, onDownload, onEdit, onApprove, onRequestChanges, onAssignEditor }: { ad: AdWithRelations; mediaToken?: string; profile: Profile; canApprove?: boolean; allowManagerFinalApproval?: boolean; editors: Profile[]; editorWorkloads: Record<string, number>; pending: boolean; playing: boolean; selected: boolean; downloading: boolean; downloadProgress?: DownloadProgress; onToggleSelect: () => void; onPlay: () => void; onStopPlaying: () => void; onPlaybackError: () => void; onQuickPreview: () => void; onOpenDrive: () => void; onDownload: () => void; onEdit: () => void; onApprove: () => void; onRequestChanges: () => void; onAssignEditor: (editorId: string, deadline: string) => void }) {
+function WorkflowCard({ ad, mediaToken, profile, canApprove = true, allowManagerFinalApproval = true, editors, editorWorkloads, pending, playing, selected, downloading, downloadProgress, onToggleSelect, onPlay, onFreezeChange, onPlaybackError, onQuickPreview, onOpenDrive, onDownload, onEdit, onApprove, onRequestChanges, onReopen, onAssignEditor, onDeleted }: { ad: AdWithRelations; mediaToken?: string; profile: Profile; canApprove?: boolean; allowManagerFinalApproval?: boolean; editors: Profile[]; editorWorkloads: Record<string, number>; pending: boolean; playing: boolean; selected: boolean; downloading: boolean; downloadProgress?: DownloadProgress; onToggleSelect: () => void; onPlay: () => void; onFreezeChange: (adId: string, state: EditingFreezeState, stage?: ProductionStage) => void; onPlaybackError: () => void; onQuickPreview: () => void; onOpenDrive: () => void; onDownload: () => void; onEdit: () => void; onApprove: () => void; onRequestChanges: () => void; onReopen?: (target: "creator" | "editor") => void; onAssignEditor: (editorId: string, deadline: string) => void; onDeleted: (adId: string) => void }) {
   const router = useRouter();
   const { toast } = useToast();
+  const isApproved = ad.production_stage === "approved";
+  const defaultRevisionTarget: "creator" | "editor" = ad.editor_id ? "editor" : "creator";
+  const [revisionTarget, setRevisionTarget] = useState<"creator" | "editor">(defaultRevisionTarget);
   const [selectedEditor, setSelectedEditor] = useState("");
   const [selectedDeadline, setSelectedDeadline] = useState(ad.deadline ?? "");
   const [dismissingDownloaded, setDismissingDownloaded] = useState(false);
   const [downloadedDismissed, setDownloadedDismissed] = useState(false);
+  const [showAllTags, setShowAllTags] = useState(false);
   const mediaVisible = isFinalMediaVisible(ad.production_stage);
   const canPreview = mediaVisible && Boolean(ad.drive_file_id);
   const canOpenInDrive = mediaVisible && Boolean(ad.drive_url);
@@ -781,15 +1053,18 @@ function WorkflowCard({ ad, mediaToken, profile, canApprove = true, allowManager
   const reviewer = profile.role === "admin" || profile.role === "manager";
   const canFinalReview = reviewer && (ad.production_stage === "creator_review" || ad.production_stage === "final_review");
   const canAssignEditor = (ad.production_stage === "shoot_complete" || ad.production_stage === "ready_for_edit") && reviewer;
-  const activeEditors = editors.filter((item) => item.active);
+  const activeEditors = editors.filter((item) => item.active && item.id !== (ad.production_stage === "ready_for_edit" ? ad.editor_id : null));
+  const isReassign = ad.production_stage === "ready_for_edit" && Boolean(ad.editor_id);
   const downloaded = isDownloaded(ad) && !downloadedDismissed;
-  const visibleTags = ad.tags.filter((tag) => tag.name.toLowerCase() !== "downloaded").slice(0, 3);
+  const allAdTags = ad.tags.filter((tag) => tag.name.toLowerCase() !== "downloaded");
+  const visibleTags = showAllTags ? allAdTags : allAdTags.slice(0, 10);
+  const remainingTagsCount = allAdTags.length - 10;
   const creatorChangeRequested =
-    (profile.role === "content_creator" || profile.role === "manager") &&
-    (ad.creator_id === profile.id || Boolean(ad.activity_logs?.some((l) => l.actor_id === profile.id && l.action === "creator_item_created"))) &&
+    isCreatorCapableRole(profile.role) &&
+    (ad.creator_id === profile.id || (profile.role !== "admin" && Boolean(ad.activity_logs?.some((l) => l.actor_id === profile.id && l.action === "creator_item_created")))) &&
     ad.production_stage === "creator_changes_requested";
   const creatorEditable = creatorEditableStages.includes(ad.production_stage as (typeof creatorEditableStages)[number]) && (reviewer || (profile.role === "content_creator" && ad.creator_id === profile.id));
-  const actionLabel = creatorChangeRequested ? "Resubmit creative" : creatorEditable ? "Update" : profile.role === "editor" && ad.production_stage === "ready_for_edit" ? "Open assignment" : profile.role === "editor" && (ad.production_stage === "editing" || ad.production_stage === "changes_requested") ? "Submit video" : profile.role === "content_creator" && ad.production_stage === "creator_review" ? "Review edit" : "Open";
+  const actionLabel = creatorChangeRequested ? "Resubmit creative" : creatorEditable ? "Update" : profile.role === "editor" && ad.production_stage === "ready_for_edit" ? "Open assignment" : profile.role === "editor" && (ad.production_stage === "editing" || ad.production_stage === "changes_requested") ? "Submit video" : isCreatorCapableRole(profile.role) && ad.creator_id === profile.id && ad.production_stage === "creator_review" ? "Review edit" : "Open";
 
   async function dismissDownloaded() {
     if (dismissingDownloaded) return;
@@ -812,7 +1087,7 @@ function WorkflowCard({ ad, mediaToken, profile, canApprove = true, allowManager
       <button type="button" onClick={(e) => { e.stopPropagation(); onToggleSelect(); }} aria-label={selected ? "Deselect" : "Select"} aria-pressed={selected} className={cn("absolute right-3 z-20 flex size-7 items-center justify-center rounded-md border transition-all duration-150", profile.role === "admin" && downloaded ? "top-12" : "top-3", selected ? "border-primary bg-primary text-primary-foreground opacity-100" : "border-border bg-card/80 text-muted-foreground opacity-0 group-hover/card:opacity-100")}>{selected ? <SquareCheck className="size-4" aria-hidden /> : <Square className="size-4" aria-hidden />}</button>
       <div className="relative">
         {canPreview ? (
-          playing ? <InlineCardVideo ad={ad} mediaToken={mediaToken} poster={thumbnail} onClose={onStopPlaying} onError={onPlaybackError} /> :
+          playing ? <InlineCardVideo ad={ad} mediaToken={mediaToken} poster={thumbnail} onError={onPlaybackError} /> :
           <button className="relative block aspect-video w-full overflow-hidden bg-neutral-950" onPointerEnter={() => { if (mediaToken) { void fetch(mediaUrl(ad, mediaToken, true)).catch(() => undefined); } }} onFocus={() => { if (mediaToken) { void fetch(mediaUrl(ad, mediaToken, true)).catch(() => undefined); } }} onClick={onPlay} aria-label={`Play ${ad.name}`}>
             {thumbnail ? <CardThumbnail src={thumbnail} name={ad.name} /> : <MediaPlaceholder label="Final video submitted" />}
             <span className="absolute left-1/2 top-1/2 inline-flex size-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-black/65 text-white shadow-lg backdrop-blur-sm transition duration-200 group-hover/card:scale-105 group-hover/card:bg-black/80"><Play className="ml-0.5 size-5 fill-current" aria-hidden /></span>
@@ -833,13 +1108,32 @@ function WorkflowCard({ ad, mediaToken, profile, canApprove = true, allowManager
             <div className="mt-2 flex flex-wrap gap-1.5">
               {ad.product?.name ? <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">Product · {ad.product.name}</span> : null}
               {visibleTags.map((tag) => <span key={tag.id} className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">#{tag.name}</span>)}
+              {remainingTagsCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowAllTags((v) => !v);
+                  }}
+                  className="inline-flex items-center rounded-full border border-border bg-card px-2 py-0.5 text-[10px] font-semibold text-primary transition hover:bg-muted"
+                  aria-label={showAllTags ? "Show fewer tags" : `Show ${remainingTagsCount} more tags`}
+                >
+                  {showAllTags ? "Show less" : `+${remainingTagsCount} more`}
+                </button>
+              ) : null}
             </div>
           </div>
-          <div className="flex gap-0.5">{canDeleteAd(profile.role) ? <DeleteAdButton adId={ad.id} adName={ad.name} compact /> : null}{canPreview ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-50" title="Download video" disabled={downloading} onClick={(e) => { e.stopPropagation(); onDownload(); }}>{downloading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Download className="size-4" aria-hidden />}</button> : null}{canPreview ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" title="Quick preview" aria-label={`Quick preview ${ad.name}`} onClick={onQuickPreview}><Maximize2 className="size-4" aria-hidden /></button> : null}{canOpenInDrive ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" title="Open final video in Google Drive" aria-label={`Open ${ad.name} in Google Drive`} onClick={onOpenDrive}><Eye className="size-4" aria-hidden /></button> : null}</div>
+          <div className="flex gap-0.5">{canDeleteAd(profile.role) ? <DeleteAdButton adId={ad.id} adName={ad.name} compact onDeleted={onDeleted} /> : null}{canPreview ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-50" title="Download video" disabled={downloading} onClick={(e) => { e.stopPropagation(); onDownload(); }}>{downloading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Download className="size-4" aria-hidden />}</button> : null}<button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" title="Expand details" aria-label={`Expand ${ad.name}`} onClick={onQuickPreview}><Maximize2 className="size-4" aria-hidden /></button>{canOpenInDrive ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" title="Open final video in Google Drive" aria-label={`Open ${ad.name} in Google Drive`} onClick={onOpenDrive}><Eye className="size-4" aria-hidden /></button> : null}</div>
         </div>
         {downloadProgress ? <DownloadProgressBar progress={downloadProgress} /> : null}
         <div className="mt-4 grid grid-cols-2 gap-3 border-y border-border py-3"><Person label="Creator" person={ad.creator} /><Person label="Editor" person={ad.editor} /></div>
         <div className="mt-3 flex items-center justify-between gap-3 text-xs"><span className="font-medium text-muted-foreground" suppressHydrationWarning>{workflowStageAgeLabel(ad.production_stage, ad.workflow_status_changed_at)}</span><Deadline deadline={ad.deadline} status={ad.status} /></div>
+        {canToggleEditingFreeze(ad.production_stage) && (reviewer || ad.editing_freeze) ? (
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <EditingFreezeBadge state={ad.editing_freeze} />
+            {reviewer ? <FreezeEditingToggle variant="compact" adId={ad.id} adName={ad.name} stage={ad.production_stage} state={ad.editing_freeze} onChanged={(next, stage) => onFreezeChange(ad.id, next, stage)} /> : null}
+          </div>
+        ) : null}
 
         {(ad.production_stage === "creator_changes_requested" ||
           ad.production_stage === "changes_requested" ||
@@ -892,14 +1186,52 @@ function WorkflowCard({ ad, mediaToken, profile, canApprove = true, allowManager
           </div>
         ) : canAssignEditor ? (
           <div className="mt-3 space-y-2">
-            <Select value={selectedEditor} onChange={(event) => setSelectedEditor(event.target.value)} aria-label="Choose editor">
-              <option value="">Choose editor</option>
+            {isReassign ? <p className="text-[11px] text-muted-foreground">Assigned to <span className="font-medium text-foreground">{ad.editor?.name ?? "an editor"}</span> · choose another editor to reassign</p> : null}
+            <Select value={selectedEditor} onChange={(event) => setSelectedEditor(event.target.value)} aria-label={isReassign ? "Reassign to editor" : "Choose editor"}>
+              <option value="">{isReassign ? "Reassign to…" : "Choose editor"}</option>
               {activeEditors.map((editor) => <option key={editor.id} value={editor.id}>{editor.name} · {editorWorkloads[editor.id] ?? 0} assigned</option>)}
             </Select>
             <Input type="date" value={selectedDeadline ?? ""} onChange={(event) => setSelectedDeadline(event.target.value)} aria-label="Deadline" />
             <div className="grid grid-cols-2 gap-2">
-              <Button size="sm" disabled={!selectedEditor || !selectedDeadline || pending} title={!selectedDeadline ? "Choose a deadline before assigning" : undefined} onClick={() => onAssignEditor(selectedEditor, selectedDeadline)}>{pending ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <UserCheck className="size-3.5" aria-hidden />}Assign</Button>
+              <Button size="sm" disabled={!selectedEditor || !selectedDeadline || pending} title={!selectedDeadline ? "Choose a deadline before assigning" : undefined} onClick={() => onAssignEditor(selectedEditor, selectedDeadline)}>{pending ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <UserCheck className="size-3.5" aria-hidden />}{isReassign ? "Reassign" : "Assign"}</Button>
               <Button size="sm" variant="secondary" onClick={onEdit}>Update</Button>
+            </div>
+          </div>
+        ) : isApproved && reviewer && onReopen ? (
+          <div className="mt-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <label htmlFor={`target-${ad.id}`} className="text-[11px] font-medium text-muted-foreground shrink-0">
+                Revision target:
+              </label>
+              <Select
+                id={`target-${ad.id}`}
+                value={revisionTarget}
+                onChange={(event) => setRevisionTarget(event.target.value as "creator" | "editor")}
+                className="h-8 text-xs w-auto min-w-[140px] max-w-[200px]"
+                aria-label={`Revision target for ${ad.name}`}
+              >
+                <option value="editor">Editor ({ad.editor?.name ?? "Assigned editor"})</option>
+                <option value="creator">Creator ({ad.creator?.name ?? "Creator"})</option>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={pending}
+                onClick={() => onReopen(revisionTarget)}
+                className="gap-1.5 text-xs font-medium text-foreground hover:bg-muted"
+                title="Reopen approved creative and send back for revision"
+              >
+                <RotateCcw className="size-3.5 text-warning" aria-hidden />
+                Resend creative
+              </Button>
+              <Link
+                href={`/ads/${ad.id}`}
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-border bg-card text-xs font-medium text-foreground hover:bg-muted"
+              >
+                Open<ArrowRight className="size-3.5" aria-hidden />
+              </Link>
             </div>
           </div>
         ) : creatorChangeRequested ? (
@@ -920,13 +1252,201 @@ function CardThumbnail({ src, name }: { src: string; name: string }) {
   return <Image src={src} alt={`${name} thumbnail`} fill sizes="(min-width: 1536px) 32vw, (min-width: 640px) 50vw, 100vw" className="object-cover" unoptimized onError={() => setFailed(true)} />;
 }
 
-function InlineCardVideo({ ad, mediaToken, poster, onClose, onError }: { ad: AdWithRelations; mediaToken?: string; poster: string | null; onClose: () => void; onError: () => void }) {
-  const [buffering, setBuffering] = useState(true);
+/** Compact thumbnail for the table view; uses the same endpoint and visibility rule as the grid cards. */
+function RowThumbnail({ adId, name, fileId }: { adId: string; name: string; fileId?: string | null }) {
+  const [failed, setFailed] = useState(false);
+  const showImage = Boolean(fileId) && !failed;
+  return (
+    <span className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-muted text-muted-foreground">
+      {showImage ? (
+        <Image src={`/api/ads/${adId}/thumbnail?v=${encodeURIComponent(fileId!)}`} alt={`${name} thumbnail`} fill sizes="48px" className="object-cover object-center" unoptimized loading="lazy" onError={() => setFailed(true)} />
+      ) : (
+        <Video className="size-4" aria-hidden />
+      )}
+    </span>
+  );
+}
+
+function formatClock(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
+  const whole = Math.floor(seconds);
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+}
+
+/**
+ * Inline card player. Native controls are intentionally off: in Chromium they paint their own
+ * loading / "cannot play" glyph (the large cross) over the poster while the first bytes arrive.
+ * Instead the whole frame is the control — tap to pause, tap again to resume — with a slim
+ * progress bar, time and mute toggle that appear on hover or while paused.
+ */
+function InlineCardVideo({ ad, mediaToken, poster, onError }: { ad: AdWithRelations; mediaToken?: string; poster: string | null; onError: () => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  // Buffering is only surfaced after a short grace period. Most stalls resolve in well under a
+  // second, and flashing a spinner for those is what made playback feel janky.
+  const [showSpinner, setShowSpinner] = useState(false);
+  const spinnerTimer = useRef<number | null>(null);
+  const [paused, setPaused] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
+  const [progress, setProgress] = useState({ current: 0, duration: 0, buffered: 0 });
   // A server refresh issues a fresh signed token. Capturing the URL at mount
   // keeps the active media element's src unchanged, so live dashboard updates
   // cannot reset playback to the beginning.
   const [source] = useState(() => mediaUrl(ad, mediaToken));
-  return <div className="relative aspect-video w-full overflow-hidden bg-neutral-950"><video src={source} poster={poster ?? undefined} className="size-full object-contain" controls autoPlay playsInline preload="auto" onCanPlay={() => setBuffering(false)} onPlaying={() => setBuffering(false)} onWaiting={() => setBuffering(true)} onError={onError} />{buffering ? <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/25" role="status"><span className="inline-flex items-center gap-2 rounded-lg bg-black/70 px-3 py-2 text-xs font-medium text-white backdrop-blur-sm"><Loader2 className="size-4 animate-spin" aria-hidden />Buffering video...</span></div> : null}<button type="button" className="absolute bottom-3 right-3 z-20 inline-flex size-8 items-center justify-center rounded-full border border-white/20 bg-black/65 text-white backdrop-blur-sm transition hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white" aria-label={`Stop playing ${ad.name}`} onClick={onClose}><X className="size-4" aria-hidden /></button></div>;
+
+  function clearSpinnerTimer() {
+    if (spinnerTimer.current !== null) {
+      window.clearTimeout(spinnerTimer.current);
+      spinnerTimer.current = null;
+    }
+  }
+  function beginBuffering(delay = 700) {
+    if (spinnerTimer.current !== null) return;
+    spinnerTimer.current = window.setTimeout(() => { spinnerTimer.current = null; setShowSpinner(true); }, delay);
+  }
+  function endBuffering() {
+    clearSpinnerTimer();
+    setShowSpinner(false);
+  }
+
+  async function startPlayback(video: HTMLVideoElement) {
+    try {
+      await video.play();
+    } catch (cause) {
+      // Autoplay with sound can be refused (e.g. the tap was consumed elsewhere); fall back to
+      // muted playback rather than leaving the card frozen on its poster.
+      if (cause instanceof DOMException && cause.name === "NotAllowedError") {
+        video.muted = true;
+        setMuted(true);
+        try { await video.play(); } catch { setPaused(true); endBuffering(); }
+      }
+    }
+  }
+
+  function togglePlayback() {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused || video.ended) void startPlayback(video);
+    else video.pause();
+  }
+
+  function toggleMute(event: React.MouseEvent) {
+    event.stopPropagation();
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = !video.muted;
+    setMuted(video.muted);
+  }
+
+  function seek(event: React.MouseEvent<HTMLDivElement>) {
+    event.stopPropagation();
+    const video = videoRef.current;
+    if (!video || !Number.isFinite(video.duration) || video.duration <= 0) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+    video.currentTime = ratio * video.duration;
+  }
+
+  function syncProgress() {
+    const video = videoRef.current;
+    if (!video) return;
+    const duration = Number.isFinite(video.duration) ? video.duration : 0;
+    let buffered = 0;
+    for (let index = 0; index < video.buffered.length; index += 1) {
+      if (video.buffered.start(index) <= video.currentTime + 0.25) buffered = Math.max(buffered, video.buffered.end(index));
+    }
+    setProgress({ current: video.currentTime, duration, buffered });
+  }
+
+  useEffect(() => {
+    // Quick feedback for the first frame (the user just tapped), longer grace for mid-play stalls.
+    beginBuffering(350);
+    const video = videoRef.current;
+    if (video) void startPlayback(video);
+    return () => {
+      clearSpinnerTimer();
+      // Release the connection as soon as the card stops playing so it cannot compete with the next video.
+      // The deferred check keeps React strict-mode's simulated unmount from tearing down a live player.
+      window.setTimeout(() => {
+        if (!video || video.isConnected) return;
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+      }, 0);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const percent = progress.duration ? (progress.current / progress.duration) * 100 : 0;
+  const bufferedPercent = progress.duration ? Math.min(100, (progress.buffered / progress.duration) * 100) : 0;
+
+  return (
+    <div
+      className="group/player relative aspect-video w-full cursor-pointer overflow-hidden bg-neutral-950"
+      role="button"
+      tabIndex={0}
+      aria-label={paused ? `Play ${ad.name}` : `Pause ${ad.name}`}
+      onClick={togglePlayback}
+      onKeyDown={(event) => { if (event.key === " " || event.key === "Enter") { event.preventDefault(); togglePlayback(); } }}
+    >
+      <video
+        ref={videoRef}
+        src={source}
+        poster={poster ?? undefined}
+        className="pointer-events-none size-full object-contain"
+        playsInline
+        preload="auto"
+        disablePictureInPicture
+        controlsList="nodownload noplaybackrate noremoteplayback"
+        onCanPlay={endBuffering}
+        onPlaying={() => { endBuffering(); setPaused(false); setHasStarted(true); }}
+        onPause={() => { endBuffering(); setPaused(true); }}
+        onEnded={() => setPaused(true)}
+        onWaiting={() => beginBuffering(hasStarted ? 700 : 350)}
+        onSeeking={() => beginBuffering(400)}
+        onSeeked={endBuffering}
+        onTimeUpdate={syncProgress}
+        onProgress={syncProgress}
+        onLoadedMetadata={syncProgress}
+        onVolumeChange={() => setMuted(Boolean(videoRef.current?.muted))}
+        onError={() => { endBuffering(); onError(); }}
+      />
+
+      {showSpinner && !paused ? (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center" role="status" aria-label="Loading video">
+          <span className="inline-flex size-11 items-center justify-center rounded-full bg-black/45 backdrop-blur-sm">
+            <Loader2 className="size-5 animate-spin text-white/90" aria-hidden />
+          </span>
+        </div>
+      ) : null}
+
+      {paused ? (
+        <span className="pointer-events-none absolute left-1/2 top-1/2 inline-flex size-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-black/60 text-white shadow-lg backdrop-blur-sm transition-transform duration-150 group-hover/player:scale-105">
+          <Play className="ml-0.5 size-5 fill-current" aria-hidden />
+        </span>
+      ) : (
+        <span className="pointer-events-none absolute left-1/2 top-1/2 inline-flex size-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white opacity-0 backdrop-blur-sm transition-opacity duration-150 group-hover/player:opacity-100" aria-hidden>
+          <Pause className="size-5 fill-current" />
+        </span>
+      )}
+
+      <div
+        className={cn(
+          "absolute inset-x-0 bottom-0 flex items-center gap-2 bg-gradient-to-t from-black/70 to-transparent px-3 pb-2 pt-6 text-[11px] font-medium text-white transition-opacity duration-150",
+          paused ? "opacity-100" : "opacity-0 group-hover/player:opacity-100 group-focus-visible/player:opacity-100"
+        )}
+      >
+        <span className="tabular-nums">{formatClock(progress.current)} / {formatClock(progress.duration)}</span>
+        <div className="relative h-1.5 flex-1 cursor-pointer rounded-full bg-neutral-100/25" onClick={seek} role="slider" aria-label="Seek" aria-valuemin={0} aria-valuemax={Math.round(progress.duration)} aria-valuenow={Math.round(progress.current)} tabIndex={-1}>
+          <span className="absolute inset-y-0 left-0 rounded-full bg-neutral-100/40" style={{ width: `${bufferedPercent}%` }} />
+          <span className="absolute inset-y-0 left-0 rounded-full bg-primary" style={{ width: `${percent}%` }} />
+        </div>
+        <button type="button" className="inline-flex size-7 items-center justify-center rounded-md hover:bg-neutral-100/15" onClick={toggleMute} aria-label={muted ? "Unmute" : "Mute"} title={muted ? "Unmute" : "Mute"}>
+          {muted ? <VolumeX className="size-4" aria-hidden /> : <Volume2 className="size-4" aria-hidden />}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function mediaUrl(ad: AdWithRelations, token?: string, warm = false) {
@@ -943,7 +1463,7 @@ function MediaPlaceholder({ label }: { label: string }) {
 type TableSortKey = "name" | "status" | "creator" | "editor" | "waiting";
 type TableSort = { key: TableSortKey; direction: "asc" | "desc" };
 
-function WorkflowTable({ ads, profile, canApprove = true, allowManagerFinalApproval = true, pendingId, selectedIds, downloadingIds, downloadProgress, onToggleSelect, onApprove, onRequestChanges, onDownload }: { ads: AdWithRelations[]; profile: Profile; canApprove?: boolean; allowManagerFinalApproval?: boolean; pendingId: string | null; selectedIds: Set<string>; downloadingIds: Set<string>; downloadProgress: Record<string, DownloadProgress>; onToggleSelect: (id: string) => void; onApprove: (ad: AdWithRelations) => void; onRequestChanges: (ad: AdWithRelations) => void; onDownload: (ad: AdWithRelations) => void }) {
+function WorkflowTable({ ads, profile, canApprove = true, allowManagerFinalApproval = true, pendingId, selectedIds, downloadingIds, downloadProgress, onToggleSelect, onApprove, onRequestChanges, onDownload, onFreezeChange, onQuickPreview, onDeleted }: { ads: AdWithRelations[]; profile: Profile; canApprove?: boolean; allowManagerFinalApproval?: boolean; pendingId: string | null; selectedIds: Set<string>; downloadingIds: Set<string>; downloadProgress: Record<string, DownloadProgress>; onToggleSelect: (id: string) => void; onApprove: (ad: AdWithRelations) => void; onRequestChanges: (ad: AdWithRelations) => void; onDownload: (ad: AdWithRelations) => void; onFreezeChange: (adId: string, state: EditingFreezeState, stage?: ProductionStage) => void; onQuickPreview: (ad: AdWithRelations) => void; onDeleted: (adId: string) => void }) {
   const router = useRouter();
   const reviewer = profile.role === "admin" || profile.role === "manager";
   const [tableSort, setTableSort] = useState<TableSort>({ key: "waiting", direction: "asc" });
@@ -969,20 +1489,21 @@ function WorkflowTable({ ads, profile, canApprove = true, allowManagerFinalAppro
         <tbody className="divide-y divide-border">
           {sortedAds.map((ad) => {
             const reviewable = reviewer && (ad.production_stage === "creator_review" || ad.production_stage === "final_review");
+            const isApproved = ad.production_stage === "approved";
             const isSelected = selectedIds.has(ad.id);
             const canDownload = isFinalMediaVisible(ad.production_stage) && Boolean(ad.drive_file_id);
             const isDownloadingRow = downloadingIds.has(ad.id);
             const progress = downloadProgress[ad.id];
             const ordinaryTags = ad.tags.filter((tag) => tag.name.toLowerCase() !== "downloaded").slice(0, 2);
             const creatorChangeRequested =
-              (profile.role === "content_creator" || profile.role === "manager") &&
-              (ad.creator_id === profile.id || Boolean(ad.activity_logs?.some((l) => l.actor_id === profile.id && l.action === "creator_item_created"))) &&
+              isCreatorCapableRole(profile.role) &&
+              (ad.creator_id === profile.id || (profile.role !== "admin" && Boolean(ad.activity_logs?.some((l) => l.actor_id === profile.id && l.action === "creator_item_created")))) &&
               ad.production_stage === "creator_changes_requested";
             const open = () => router.push(`/ads/${ad.id}`);
             return (
               <tr key={ad.id} className={`cursor-pointer transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${isSelected ? "bg-accent/40" : ""}`} role="link" tabIndex={0} onClick={open} onKeyDown={(event) => { if (event.key === "Enter") open(); }}>
                 <td className="px-3 py-3" onClick={(event) => { event.stopPropagation(); onToggleSelect(ad.id); }}><button type="button" aria-label={isSelected ? "Deselect" : "Select"} aria-pressed={isSelected} className={`flex size-7 items-center justify-center rounded-md border transition-colors ${isSelected ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:border-ring"}`}>{isSelected ? <SquareCheck className="size-4" aria-hidden /> : <Square className="size-4" aria-hidden />}</button></td>
-                <td className="px-4 py-3"><p className="font-medium text-foreground">{ad.name}</p><p className="text-xs text-muted-foreground">{ad.campaign?.name}</p>{progress ? <DownloadProgressBar progress={progress} compact /> : <div className="mt-1 flex flex-wrap gap-1.5">{ad.product?.name ? <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">Product · {ad.product.name}</span> : null}{ordinaryTags.map((tag) => <span key={tag.id} className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">#{tag.name}</span>)}{profile.role === "admin" && isDownloaded(ad) ? <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-[10px] font-semibold text-success"><Download className="size-2.5" aria-hidden />Downloaded</span> : null}</div>}</td>
+                <td className="px-4 py-3"><div className="flex items-center gap-3"><RowThumbnail adId={ad.id} name={ad.name} fileId={isFinalMediaVisible(ad.production_stage) ? ad.drive_file_id : null} /><div className="min-w-0"><p className="font-medium text-foreground">{ad.name}</p><p className="text-xs text-muted-foreground">{ad.campaign?.name}</p>{progress ? <DownloadProgressBar progress={progress} compact /> : <div className="mt-1 flex flex-wrap gap-1.5">{ad.product?.name ? <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">Product · {ad.product.name}</span> : null}{ordinaryTags.map((tag) => <span key={tag.id} className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">#{tag.name}</span>)}{profile.role === "admin" && isDownloaded(ad) ? <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-[10px] font-semibold text-success"><Download className="size-2.5" aria-hidden />Downloaded</span> : null}</div>}</div></div></td>
                 <td className="px-4 py-3">
                   <ProductionStageBadge stage={ad.production_stage} role={profile.role} allowManagerFinalApproval={allowManagerFinalApproval} approvalStage={ad.approval_stage} className="bg-muted text-muted-foreground shadow-none" />
                   {ad.production_stage === "creator_changes_requested" ? (
@@ -1003,7 +1524,7 @@ function WorkflowTable({ ads, profile, canApprove = true, allowManagerFinalAppro
                 <td className="px-4 py-3">{ad.creator?.name ?? "Unassigned"}</td>
                 <td className="px-4 py-3">{ad.editor?.name ?? "Unassigned"}</td>
                 <td className="px-4 py-3 text-muted-foreground normal-case" suppressHydrationWarning>{workflowStageAgeLabel(ad.production_stage, ad.workflow_status_changed_at)}</td>
-                <td className="px-4 py-3"><div className="flex justify-end gap-2" onClick={(event) => event.stopPropagation()}>{reviewable ? <>{profile.role === "manager" && !allowManagerFinalApproval && ad.approval_stage === "admin_final" ? <span className="inline-flex items-center gap-1 text-xs text-primary font-medium px-1.5 py-1 rounded bg-primary/10" title="Approved by manager. Waiting for administrator final approval."><Check className="size-3" aria-hidden />Awaiting Admin</span> : <Button size="sm" disabled={pendingId === ad.id} onClick={() => onApprove(ad)}>Approve</Button>}<Button size="sm" variant="secondary" onClick={() => onRequestChanges(ad)}>Changes</Button></> : creatorChangeRequested ? <Button size="sm" variant="secondary" onClick={open}>Resubmit<ArrowRight className="size-3.5" aria-hidden /></Button> : <Button size="sm" variant="secondary" onClick={open}>Open<ArrowRight className="size-3.5" aria-hidden /></Button>}{canDownload ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-50" title="Download video" disabled={isDownloadingRow} onClick={() => onDownload(ad)}>{isDownloadingRow ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Download className="size-4" aria-hidden />}</button> : null}{canDeleteAd(profile.role) ? <DeleteAdButton adId={ad.id} adName={ad.name} compact /> : null}</div></td>
+                <td className="px-4 py-3"><div className="flex items-center justify-end gap-2" onClick={(event) => event.stopPropagation()}>{canToggleEditingFreeze(ad.production_stage) ? <>{ad.editing_freeze ? <EditingFreezeBadge state={ad.editing_freeze} /> : null}{reviewer ? <FreezeEditingToggle variant="compact" adId={ad.id} adName={ad.name} stage={ad.production_stage} state={ad.editing_freeze} onChanged={(next, stage) => onFreezeChange(ad.id, next, stage)} /> : null}</> : null}{reviewable ? <>{profile.role === "manager" && !allowManagerFinalApproval && ad.approval_stage === "admin_final" ? <span className="inline-flex items-center gap-1 text-xs text-primary font-medium px-1.5 py-1 rounded bg-primary/10" title="Approved by manager. Waiting for administrator final approval."><Check className="size-3" aria-hidden />Awaiting Admin</span> : <Button size="sm" disabled={pendingId === ad.id} onClick={() => onApprove(ad)}>Approve</Button>}<Button size="sm" variant="secondary" onClick={() => onRequestChanges(ad)}>Changes</Button></> : creatorChangeRequested ? <Button size="sm" variant="secondary" onClick={open}>Resubmit<ArrowRight className="size-3.5" aria-hidden /></Button> : isApproved && reviewer ? <><Button size="sm" variant="secondary" onClick={() => onRequestChanges(ad)} className="gap-1 text-xs" title="Reopen creative for revision"><RotateCcw className="size-3 text-warning" aria-hidden />Reopen</Button><Button size="sm" variant="secondary" onClick={open}>Open<ArrowRight className="size-3.5" aria-hidden /></Button></> : <Button size="sm" variant="secondary" onClick={open}>Open<ArrowRight className="size-3.5" aria-hidden /></Button>}{canDownload ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-50" title="Download video" disabled={isDownloadingRow} onClick={() => onDownload(ad)}>{isDownloadingRow ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Download className="size-4" aria-hidden />}</button> : null}<button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" title="Expand details" aria-label={`Expand ${ad.name}`} onClick={() => onQuickPreview(ad)}><Maximize2 className="size-4" aria-hidden /></button>{canDeleteAd(profile.role) ? <DeleteAdButton adId={ad.id} adName={ad.name} compact onDeleted={onDeleted} /> : null}</div></td>
               </tr>
             );
           })}
@@ -1042,7 +1563,7 @@ function BulkDownloadProgress({ job, progress, count, complete, onDismiss }: { j
           <p className="mt-0.5 text-xs text-muted-foreground">
             {detail}
             <span className="block mt-1 text-[11px] text-muted-foreground/90">
-              {preparing ? "Zipping continues in the background if you close this tab. " : ""}The archive is saved for 3 days in{" "}
+              {preparing ? "Zipping continues in the background if you close this tab. " : ""}The archive is saved for {job?.retentionDays ?? 3} day{(job?.retentionDays ?? 3) === 1 ? "" : "s"} in{" "}
               <Link
                 href="/admin/settings#downloads"
                 className="inline-flex items-center gap-0.5 font-medium text-primary hover:underline"

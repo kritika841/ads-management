@@ -136,6 +136,7 @@ async function main() {
   }
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  ({ parseServiceAccountCredentials } = await import("../lib/google-credentials.js"));
   const auth = createDriveAuth();
   const drive = google.drive({ version: "v3", auth });
 
@@ -490,7 +491,14 @@ function buildRawClipTitle(clip, fallbackFolderName = null) {
 }
 
 function createDriveAuth() {
-  const credentials = parseDriveCredentials();
+  let credentials = null;
+  try {
+    credentials = parseDriveCredentials();
+  } catch (error) {
+    // A malformed JSON value must not take the whole pipeline down when a key file is configured.
+    if (!GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH) throw error;
+    console.warn(`[drive] ${error.message} Falling back to GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH.`);
+  }
   if (credentials) {
     return new google.auth.GoogleAuth({
       credentials,
@@ -510,21 +518,15 @@ function createDriveAuth() {
   );
 }
 
+// Loaded from lib/google-credentials.js (ESM) at the start of main().
+let parseServiceAccountCredentials = null;
+
 function parseDriveCredentials() {
   if (!GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON) return null;
-
-  try {
-    const source = GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON.trim().replace(/^"(.*)"$/, "$1");
-    const payload =
-      source.startsWith("{") || !fs.existsSync(source)
-        ? source
-        : fs.readFileSync(source, "utf8");
-    return JSON.parse(payload);
-  } catch (error) {
-    throw new Error(
-      `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON could not be parsed as JSON or read as a file path: ${error.message}`
-    );
-  }
+  if (!parseServiceAccountCredentials) throw new Error("Credential parser not loaded.");
+  // Tolerates the production .env form `"{\"type\":...}"` (dotenv keeps the backslashes), raw
+  // newlines in the private key, base64 and key-file paths.
+  return parseServiceAccountCredentials(GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON);
 }
 
 async function processCaptionBackfill(supabase) {

@@ -5,6 +5,8 @@ import { sanitizeScriptHtml } from "@/lib/sanitize";
 import { DEFAULT_HIDDEN_METRICS, type HiddenMetricsByRole } from "@/lib/metric-visibility";
 import { readMetricVisibilityFile } from "@/lib/metric-visibility-server";
 import { readCampaignGoals } from "@/lib/campaign-goals";
+import { DEFAULT_DOWNLOAD_RETENTION_DAYS, DEFAULT_RECYCLE_BIN_RETENTION_DAYS, normalizeRetentionDays } from "@/lib/retention";
+import { isRecycleBinReady, liveOnly } from "@/lib/recycle-bin";
 import type {
   ActivityLog,
   AdVersion,
@@ -26,6 +28,30 @@ import type {
   ReviewAction,
   ReviewSubmissionType
 } from "@/lib/types";
+import type { EditingFreezeState } from "@/lib/types";
+
+// Per-creative editing freeze lives in a column added by a later migration. It is read through a
+// separate, failure-tolerant query so the library keeps loading before that migration is applied.
+let freezeColumnMissingUntil = 0;
+
+export async function getEditingFreezeMap(): Promise<Map<string, EditingFreezeState>> {
+  const map = new Map<string, EditingFreezeState>();
+  if (Date.now() < freezeColumnMissingUntil) return map;
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = await supabase.from("ads").select("id,editing_freeze").not("editing_freeze", "is", null);
+    if (error) {
+      freezeColumnMissingUntil = Date.now() + 60_000;
+      return map;
+    }
+    for (const row of (data ?? []) as { id: string; editing_freeze: EditingFreezeState | null }[]) {
+      if (row.editing_freeze === "frozen" || row.editing_freeze === "unfrozen") map.set(row.id, row.editing_freeze);
+    }
+  } catch {
+    // treat as "no overrides"
+  }
+  return map;
+}
 
 export async function getNotifications(userId: string) {
   try {
@@ -51,8 +77,9 @@ export async function getNotifications(userId: string) {
 
 export async function getCampaigns() {
   const supabase = await createSupabaseServerClient();
+  const binReady = await isRecycleBinReady();
   const [campaignsResult, campaignGoals] = await Promise.all([
-    supabase.from("campaigns").select("*").order("name", { ascending: true }),
+    liveOnly(supabase.from("campaigns").select("*").order("name", { ascending: true }), binReady),
     readCampaignGoals()
   ]);
 
@@ -155,11 +182,12 @@ export async function getTags() {
 
 export async function getEditorWorkloads() {
   const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
+  const binReady = await isRecycleBinReady();
+  const { data, error } = await liveOnly(admin
     .from("ads")
     .select("editor_id,production_stage")
     .not("editor_id", "is", null)
-    .in("production_stage", activeEditorStages);
+    .in("production_stage", activeEditorStages), binReady);
   if (error) throw error;
 
   return (data ?? []).reduce<Record<string, number>>((counts, ad) => {
@@ -170,14 +198,26 @@ export async function getEditorWorkloads() {
 
 export async function getEditorInProgressCount(editorId: string) {
   const admin = createSupabaseAdminClient();
-  const { count, error } = await admin
+  const binReady = await isRecycleBinReady();
+  const { count, error } = await liveOnly(admin
     .from("ads")
     .select("id", { count: "exact", head: true })
     .eq("editor_id", editorId)
-    .in("production_stage", inProgressEditingStages);
+    .in("production_stage", inProgressEditingStages), binReady);
   if (error) throw error;
 
-  return count ?? 0;
+  // Creatives that are explicitly "unfroze" (manager override) or "frozen" (paused by manager)
+  // do not count toward the active editing concurrency limit, freeing up the editor to work on other queue items.
+  let excluded = 0;
+  const freezeExclusionQuery = await liveOnly(admin
+    .from("ads")
+    .select("id", { count: "exact", head: true })
+    .eq("editor_id", editorId)
+    .in("production_stage", inProgressEditingStages)
+    .in("editing_freeze", ["unfrozen", "frozen"]), binReady);
+  if (!freezeExclusionQuery.error) excluded = freezeExclusionQuery.count ?? 0;
+
+  return Math.max(0, (count ?? 0) - excluded);
 }
 
 export async function getAppSettings() {
@@ -196,6 +236,8 @@ export async function getAppSettings() {
     manager_creative_scope: "all",
     hidden_metrics_by_role: { content_creator: [], editor: [], manager: [] },
     bulk_add_to_campaign_roles: ["admin"],
+    download_retention_days: DEFAULT_DOWNLOAD_RETENTION_DAYS,
+    recycle_bin_retention_days: DEFAULT_RECYCLE_BIN_RETENTION_DAYS,
     updated_at: new Date().toISOString()
   };
 
@@ -229,7 +271,13 @@ export async function getAppSettings() {
         editor: hiddenMetrics.editor ?? [],
         manager: hiddenMetrics.manager ?? []
       },
-      bulk_add_to_campaign_roles: bulkRoles
+      bulk_add_to_campaign_roles: bulkRoles,
+      overview_metrics: fileMetrics.overview_metrics ?? ["spend", "purchases", "revenue", "cpa", "cpc", "roas"],
+      override_all_users: Boolean(fileMetrics.override_all_users),
+      users_with_all_ads_access: fileMetrics.users_with_all_ads_access ?? [],
+      hidden_campaigns_by_user: fileMetrics.hidden_campaigns_by_user ?? {},
+      download_retention_days: normalizeRetentionDays(record.download_retention_days, DEFAULT_DOWNLOAD_RETENTION_DAYS),
+      recycle_bin_retention_days: normalizeRetentionDays(record.recycle_bin_retention_days, DEFAULT_RECYCLE_BIN_RETENTION_DAYS)
     } as AppSettings;
   } catch (err) {
     console.warn("[getAppSettings] Falling back to default settings:", err);
@@ -243,15 +291,18 @@ export type DashboardAdSummaryItem = {
   production_stage: ProductionStage;
   deadline: string | null;
   workflow_status_changed_at: string;
+  creator_id: string | null;
+  editor_id: string | null;
   campaign?: { id: string; name: string } | null;
 };
 
 export async function getDashboardAds(): Promise<DashboardAdSummaryItem[]> {
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase
+  const binReady = await isRecycleBinReady();
+  const { data, error } = await liveOnly(supabase
     .from("ads")
-    .select("id, name, production_stage, deadline, workflow_status_changed_at, campaign:campaigns(id, name)")
-    .order("updated_at", { ascending: false });
+    .select("id, name, production_stage, deadline, workflow_status_changed_at, creator_id, editor_id, campaign:campaigns(id, name)")
+    .order("updated_at", { ascending: false }), binReady);
 
   if (error) {
     console.error("[getDashboardAds] Query error:", error.message || error);
@@ -263,9 +314,10 @@ export async function getDashboardAds(): Promise<DashboardAdSummaryItem[]> {
 
 export async function getAds() {
   const supabase = await createSupabaseServerClient();
+  const binReady = await isRecycleBinReady();
 
-  const [adsResult, reviewsResult, activityResult] = await Promise.all([
-    supabase
+  const [adsResult, reviewsResult, activityResult, freezeMap] = await Promise.all([
+    liveOnly(supabase
       .from("ads")
       .select(`
         id, name, campaign_id, editor_id, creator_id, status, approval_stage, production_stage,
@@ -280,7 +332,7 @@ export async function getAds() {
         product:products(id,name,sku,image_url),
         ad_tags(tags(id,name))
       `)
-      .order("updated_at", { ascending: false }),
+      .order("updated_at", { ascending: false }), binReady),
     supabase
       .from("review_actions")
       .select("id,ad_id,decision,note,created_at,reviewer:profiles!review_actions_reviewer_id_fkey(id,name,role)")
@@ -297,7 +349,8 @@ export async function getAds() {
         "creator_requested_changes",
         "final_changes_requested"
       ])
-      .order("created_at", { ascending: false })
+      .order("created_at", { ascending: false }),
+    getEditingFreezeMap()
   ]);
 
   if (adsResult.error) {
@@ -336,6 +389,7 @@ export async function getAds() {
 
   const adsWithNested = (adsResult.data ?? []).map((ad) => ({
     ...ad,
+    editing_freeze: freezeMap.get(ad.id) ?? null,
     review_actions: reviewMap.get(ad.id) ?? [],
     activity_logs: activityMap.get(ad.id) ?? []
   }));
@@ -345,7 +399,8 @@ export async function getAds() {
 
 export async function getAllAdsForAnalytics() {
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase
+  const binReady = await isRecycleBinReady();
+  const { data, error } = await liveOnly(supabase
     .from("ads")
     .select(
       `
@@ -358,7 +413,7 @@ export async function getAllAdsForAnalytics() {
         ad_versions(id)
       `
     )
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: true }), binReady);
 
   if (error) {
     throw error;
@@ -388,7 +443,7 @@ export async function getAdDetail(adId: string) {
     throw error;
   }
 
-  if (!ad) {
+  if (!ad || (ad as { deleted_at?: string | null }).deleted_at) {
     return null;
   }
 
@@ -680,9 +735,10 @@ export async function getEditorAverageEditTimes(): Promise<Record<string, number
 
 export async function getCampaignsWithOverview(profile?: Profile): Promise<CampaignOverview[]> {
   const admin = createSupabaseAdminClient();
+  const binReady = await isRecycleBinReady();
   const [campaignsResult, adsResult, incentiveResult, campaignGoals, appSettings] = await Promise.all([
-    admin.from("campaigns").select("*").order("name", { ascending: true }),
-    admin
+    liveOnly(admin.from("campaigns").select("*").order("name", { ascending: true }), binReady),
+    liveOnly(admin
       .from("ads")
       .select(
         `
@@ -695,7 +751,7 @@ export async function getCampaignsWithOverview(profile?: Profile): Promise<Campa
           ad_versions(id)
         `
       )
-      .order("updated_at", { ascending: false }),
+      .order("updated_at", { ascending: false }), binReady),
     admin.from("incentive_creatives").select("ad_id,latest_spend,latest_purchases,latest_cpa"),
     readCampaignGoals(),
     getAppSettings()

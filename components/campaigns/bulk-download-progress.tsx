@@ -220,7 +220,7 @@ export function BulkDownloadProgress({
             <p className="mt-0.5 text-xs text-muted-foreground">
               {detail}
               <span className="block mt-1 text-[11px] text-muted-foreground/90">
-                {preparing ? "Zipping continues in the background if you close this tab. " : ""}The archive is saved for 3 days in{" "}
+                {preparing ? "Zipping continues in the background if you close this tab. " : ""}The archive is saved for {job?.retentionDays ?? 3} day{(job?.retentionDays ?? 3) === 1 ? "" : "s"} in{" "}
                 <Link
                   href="/admin/settings#downloads"
                   className="inline-flex items-center gap-0.5 font-medium text-primary hover:underline"

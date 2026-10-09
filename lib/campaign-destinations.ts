@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-export type CampaignDestination = "default" | "testing" | "winner" | "loser";
+export type CampaignDestination = "default" | "hidden" | "overview" | "testing" | "winner" | "loser" | string;
 
 export type CampaignDestinationRecord = {
   campaignId: string;

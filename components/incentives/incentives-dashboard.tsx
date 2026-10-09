@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 import { Fragment, useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Award, CheckCircle2, CircleDollarSign, Download, Gauge, Loader2, Megaphone, Pencil, Play, Plus, RefreshCw, Search, Target, Trash2, Trophy, Video, X } from "lucide-react";
+import { Award, CheckCircle2, CircleDollarSign, Download, Eye, EyeOff, Gauge, Loader2, Megaphone, MousePointerClick, Pencil, Percent, Play, Plus, RefreshCw, Search, Target, Trash2, TrendingUp, Trophy, Users, Video, X } from "lucide-react";
 import { deleteIncentiveCampaign, deactivateIncentiveCampaign, removeIncentiveCreative, saveIncentiveCampaign, updateCampaignDestination } from "@/app/actions/incentives";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
@@ -13,7 +13,7 @@ import { MetricVisibilitySettings } from "@/components/incentives/metric-visibil
 import { ReliableMetaVideo, type LiveMetaVideo } from "@/components/incentives/reliable-meta-video";
 import { runServerAction } from "@/lib/client-action";
 import { calculateMonthlyIncentive, evaluateIncentiveCreative, type IncentiveCampaign, type IncentiveCreative, type MetaAd } from "@/lib/incentives";
-import type { HiddenMetricsByRole, ManagerCreativeScope } from "@/lib/metric-visibility";
+import { PERFORMANCE_METRIC_KEYS, type HiddenMetricsByRole, type ManagerCreativeScope, type PerformanceMetricKey } from "@/lib/metric-visibility";
 import type { Product, Profile } from "@/lib/types";
 import { cn } from "@/lib/utils";
 type EligibleAd = {
@@ -93,6 +93,11 @@ export function IncentivesDashboard({
     campaignDestinations,
     hiddenMetricsByRole,
     managerCreativeScope = "all",
+    overviewMetrics,
+    overrideAllUsers = false,
+    usersWithAllAdsAccess = [],
+    hiddenCampaignsByUser = {},
+    allProfiles = []
 }: {
     campaigns: IncentiveCampaign[];
     creatives: IncentiveCreative[];
@@ -105,13 +110,32 @@ export function IncentivesDashboard({
     campaignDestinations?: Record<string, { destination: string; campaignName?: string | null }>;
     hiddenMetricsByRole?: HiddenMetricsByRole;
     managerCreativeScope?: ManagerCreativeScope;
+    overviewMetrics?: PerformanceMetricKey[];
+    overrideAllUsers?: boolean;
+    usersWithAllAdsAccess?: string[];
+    hiddenCampaignsByUser?: Record<string, string[]>;
+    allProfiles?: Profile[];
 }) {
     const router = useRouter();
     const reviewer = profile.role === "admin" || (profile.role === "manager" && managerCreativeScope !== "own");
     const [message, setMessage] = useState<string | null>(null);
     const [syncing, setSyncing] = useState(false);
     const [section, setSection] = useState<"overview" | "winning" | "losing" | "active" | "paused" | "testing" | "settings" | "mapping" | null>(null);
-    const [overviewPeriod, setOverviewPeriod] = useState<IncentivesPeriodSummary>({ from: dashboardToday(), to: dashboardToday(), totalSpend: 0 });
+    const [overviewPeriod, setOverviewPeriod] = useState<IncentivesPeriodSummary>({
+        from: dashboardToday(),
+        to: dashboardToday(),
+        totalSpend: 0,
+        totalImpressions: 0,
+        totalReach: 0,
+        totalClicks: 0,
+        totalPurchases: 0,
+        totalRevenue: 0,
+        cpa: null,
+        cpc: null,
+        roas: 0,
+        ctr: 0,
+        cpm: 0
+    });
     const roleHiddenMetrics = profile.role === "admin"
         ? []
         : profile.role === "manager"
@@ -119,7 +143,10 @@ export function IncentivesDashboard({
         : profile.role === "editor"
         ? (hiddenMetricsByRole?.editor ?? [])
         : (hiddenMetricsByRole?.content_creator ?? []);
-    const isSpendHidden = roleHiddenMetrics.includes("spend");
+    const activeOverviewMetrics = useMemo(() => {
+        const metrics = overviewMetrics && overviewMetrics.length > 0 ? overviewMetrics : PERFORMANCE_METRIC_KEYS;
+        return metrics.filter((key) => !roleHiddenMetrics.includes(key));
+    }, [overviewMetrics, roleHiddenMetrics]);
     useEffect(() => {
         const applyHash = () => {
             const raw = window.location.hash.replace(/^#/, "").toLowerCase();
@@ -130,7 +157,93 @@ export function IncentivesDashboard({
         window.addEventListener("hashchange", applyHash);
         return () => window.removeEventListener("hashchange", applyHash);
     }, []);
-    const updateOverviewPeriod = useCallback((summary: IncentivesPeriodSummary) => setOverviewPeriod((current) => current.from === summary.from && current.to === summary.to && current.totalSpend === summary.totalSpend ? current : summary), []);
+    const updateOverviewPeriod = useCallback((summary: IncentivesPeriodSummary) => {
+        setOverviewPeriod((current) => {
+            if (
+                current.from === summary.from &&
+                current.to === summary.to &&
+                current.totalSpend === summary.totalSpend &&
+                current.totalImpressions === summary.totalImpressions &&
+                current.totalReach === summary.totalReach &&
+                current.totalClicks === summary.totalClicks &&
+                current.totalPurchases === summary.totalPurchases &&
+                current.totalRevenue === summary.totalRevenue &&
+                current.cpa === summary.cpa &&
+                current.cpc === summary.cpc &&
+                current.roas === summary.roas &&
+                current.ctr === summary.ctr &&
+                current.cpm === summary.cpm
+            ) {
+                return current;
+            }
+            return summary;
+        });
+    }, []);
+
+    const overviewKpiConfigs: Record<
+        PerformanceMetricKey,
+        {
+            icon: typeof Target;
+            label: string;
+            getValue: (p: IncentivesPeriodSummary) => string;
+        }
+    > = useMemo(() => ({
+        spend: {
+            icon: CircleDollarSign,
+            label: "Total spend",
+            getValue: (p) => money(p.totalSpend)
+        },
+        impressions: {
+            icon: Eye,
+            label: "Total impressions",
+            getValue: (p) => formatCompactNumber(p.totalImpressions)
+        },
+        reach: {
+            icon: Users,
+            label: "Total reach",
+            getValue: (p) => formatCompactNumber(p.totalReach)
+        },
+        clicks: {
+            icon: MousePointerClick,
+            label: "Total clicks",
+            getValue: (p) => formatCompactNumber(p.totalClicks)
+        },
+        purchases: {
+            icon: Award,
+            label: "Total purchases",
+            getValue: (p) => formatCompactNumber(p.totalPurchases)
+        },
+        revenue: {
+            icon: Trophy,
+            label: "Total revenue",
+            getValue: (p) => money(p.totalRevenue)
+        },
+        cpa: {
+            icon: Target,
+            label: "Average CPA",
+            getValue: (p) => (p.cpa == null ? "—" : money(p.cpa))
+        },
+        cpc: {
+            icon: CircleDollarSign,
+            label: "Average CPC",
+            getValue: (p) => (p.cpc == null ? "—" : money(p.cpc))
+        },
+        roas: {
+            icon: TrendingUp,
+            label: "Return on spend (ROAS)",
+            getValue: (p) => `${(p.roas || 0).toFixed(2)}x`
+        },
+        ctr: {
+            icon: Percent,
+            label: "Click-through rate (CTR)",
+            getValue: (p) => `${(p.ctr || 0).toFixed(2)}%`
+        },
+        cpm: {
+            icon: Megaphone,
+            label: "Cost per mille (CPM)",
+            getValue: (p) => money(p.cpm)
+        }
+    }), []);
     async function syncMeta() {
         setSyncing(true);
         setMessage(null);
@@ -206,9 +319,24 @@ export function IncentivesDashboard({
       ) : null}
 
       {section === null ? <section className="panel mt-6 flex min-h-48 items-center justify-center text-sm text-muted-foreground">Loading creative performance…</section> : null}
-      {section === "overview" && !isSpendHidden ? <section className="mt-6 max-w-xs overflow-hidden rounded-xl border border-border bg-card">
-        <Kpi icon={CircleDollarSign} label="Total spend" value={money(overviewPeriod.totalSpend)} detail={periodLabel(overviewPeriod.from, overviewPeriod.to)}/>
-      </section> : null}
+      {section === "overview" && activeOverviewMetrics.length > 0 ? (
+        <section className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+          {activeOverviewMetrics.map((key) => {
+            const conf = overviewKpiConfigs[key];
+            if (!conf) return null;
+            return (
+              <div key={key} className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+                <Kpi
+                  icon={conf.icon}
+                  label={conf.label}
+                  value={conf.getValue(overviewPeriod)}
+                  detail={periodLabel(overviewPeriod.from, overviewPeriod.to)}
+                />
+              </div>
+            );
+          })}
+        </section>
+      ) : null}
 
       {section === "overview" || section === "winning" || section === "losing" || section === "active" || section === "paused" || section === "testing" ? <IncentivePerformance profile={profile} hiddenMetricsByRole={hiddenMetricsByRole} creatives={creatives} metaAds={metaAds} libraryAds={eligibleAds} products={products.map((product) => ({ id: product.id, name: product.name }))} reviewer={reviewer} mode={section === "overview" ? "all" : section === "winning" ? "winner" : section === "losing" ? "loser" : section} campaignDestinations={campaignDestinations} onPeriodChange={section === "overview" ? updateOverviewPeriod : undefined}/> : null}
       {section === "settings" ? (
@@ -217,6 +345,13 @@ export function IncentivesDashboard({
             <MetricVisibilitySettings
               initialHiddenMetrics={hiddenMetricsByRole}
               initialManagerCreativeScope={managerCreativeScope}
+              initialOverviewMetrics={overviewMetrics}
+              initialOverrideAllUsers={overrideAllUsers}
+              initialUsersWithAllAdsAccess={usersWithAllAdsAccess}
+              initialHiddenCampaignsByUser={hiddenCampaignsByUser}
+              allProfiles={allProfiles}
+              metaAds={metaAds}
+              campaigns={campaigns}
             />
             <CampaignSettingsView metaAds={metaAds} initialDestinations={campaignDestinations} />
           </div>
@@ -394,6 +529,7 @@ function EmptyCampaign({ reviewer, onCreate }: {
     onCreate: () => void;
 }) { return <section className="panel mt-5 flex min-h-56 flex-col items-center justify-center text-center"><Award className="size-8 text-border"/><p className="mt-3 font-medium text-foreground">No incentive campaigns yet</p><p className="mt-1 max-w-md text-sm text-muted-foreground">Create a product campaign to set CPA rules, testing windows, and payouts.</p>{reviewer ? <Button className="mt-4" onClick={onCreate}><Plus className="size-4"/>Create first campaign</Button> : null}</section>; }
 function money(value: number) { return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value); }
+function formatCompactNumber(value: number) { return new Intl.NumberFormat("en-IN").format(Math.round(value || 0)); }
 function monthLabel(month: string) { return new Date(`${month}-01T00:00:00Z`).toLocaleDateString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" }); }
 function dashboardToday() { return new Date().toLocaleDateString("en-CA"); }
 function periodLabel(from: string, to: string) { if (!from && !to) return "All-time reporting"; const start = from || to; const end = to || from; const days = Math.floor((new Date(`${end}T00:00:00Z`).getTime() - new Date(`${start}T00:00:00Z`).getTime()) / 86400000) + 1; const formatter = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }); return `${formatter.format(new Date(`${start}T00:00:00Z`))}${start === end ? "" : ` – ${formatter.format(new Date(`${end}T00:00:00Z`))}`} · ${days} day${days === 1 ? "" : "s"}`; }
@@ -438,10 +574,26 @@ function CampaignSettingsView({
     return campaigns.filter((c) => c.name.toLowerCase().includes(q) || c.id.includes(q));
   }, [campaigns, query]);
 
+  function destinationLabel(dest: string) {
+    if (dest === "hidden") return "Hidden completely";
+    if (dest === "overview") return "Overview only";
+    if (dest === "winner") return "Winning creatives (+ Overview)";
+    if (dest === "winner_only") return "Winning creatives only";
+    if (dest === "testing") return "Testing creatives (+ Overview)";
+    if (dest === "testing_only") return "Testing creatives only";
+    if (dest === "loser") return "Losing creatives (+ Overview)";
+    if (dest === "loser_only") return "Losing creatives only";
+    if (dest === "overview,winner") return "Overview + Winning";
+    if (dest === "overview,testing") return "Overview + Testing";
+    if (dest === "overview,loser") return "Overview + Losing";
+    if (dest === "overview,winner,testing") return "Overview + Winning + Testing";
+    return "Default / Auto";
+  }
+
   async function handleDestinationChange(
     campaignId: string,
     campaignName: string,
-    destination: "default" | "testing" | "winner" | "loser"
+    destination: string
   ) {
     setSavingId(campaignId);
     setMessage(null);
@@ -451,15 +603,7 @@ function CampaignSettingsView({
       );
       if (result.ok) {
         setDestinations((prev) => ({ ...prev, [campaignId]: destination }));
-        const label =
-          destination === "winner"
-            ? "Winning creatives"
-            : destination === "loser"
-            ? "Losing creatives"
-            : destination === "testing"
-            ? "Testing creatives"
-            : "Default / Auto";
-        setMessage(`Campaign “${campaignName}” set to ${label}.`);
+        setMessage(`Campaign “${campaignName}” visibility set to ${destinationLabel(destination)}.`);
         router.refresh();
       } else {
         setMessage(result.message ?? "Failed to update campaign destination.");
@@ -476,9 +620,9 @@ function CampaignSettingsView({
       <div className="border-b border-border p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="section-heading">Campaign routing & submenu settings</h2>
+            <h2 className="section-heading">Campaign visibility &amp; submenu routing</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Configure which submenu each Meta campaign&apos;s data appears in (Testing, Winning, or Losing). Admin only.
+              Choose whether each Meta campaign is completely hidden or configure which submenus (Overview, Winning, Testing, Losing) it appears in. Admin only.
             </p>
           </div>
           <div className="relative w-full sm:w-72">
@@ -499,48 +643,99 @@ function CampaignSettingsView({
       </div>
 
       <div className="max-h-[600px] overflow-auto">
-        <table className="min-w-[800px] w-full text-left text-sm">
+        <table className="min-w-[850px] w-full text-left text-sm">
           <thead className="sticky top-0 bg-muted text-xs text-muted-foreground">
             <tr>
               <th className="px-5 py-3 font-medium">Meta campaign</th>
               <th className="px-4 py-3 font-medium">Ads count</th>
               <th className="px-4 py-3 font-medium">Total spend</th>
-              <th className="px-4 py-3 font-medium">Submenu destination</th>
+              <th className="px-4 py-3 font-medium">Visibility &amp; Submenus</th>
+              <th className="px-4 py-3 font-medium text-right">Quick action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {filtered.map((campaign) => {
               const currentDest = destinations[campaign.id] || "default";
+              const isHidden = currentDest === "hidden";
               const saving = savingId === campaign.id;
               return (
-                <tr key={campaign.id} className="bg-card">
+                <tr key={campaign.id} className={cn("bg-card transition", isHidden && "bg-destructive/5 opacity-75")}>
                   <td className="px-5 py-3">
-                    <p className="font-medium text-foreground">{campaign.name}</p>
-                    <p className="font-mono text-[10px] text-muted-foreground">ID {campaign.id}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-foreground">{campaign.name}</p>
+                      {isHidden ? (
+                        <span className="inline-flex items-center gap-1 rounded bg-destructive/15 px-1.5 py-0.5 text-[10px] font-semibold text-destructive">
+                          <EyeOff className="size-3" aria-hidden />
+                          Hidden
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                      <span className="font-mono text-[10px] text-muted-foreground">ID {campaign.id}</span>
+                      {!isHidden && currentDest !== "default" ? (
+                        <span className="rounded bg-primary/10 px-1.5 py-0.2 text-[10px] font-medium text-primary">
+                          {destinationLabel(currentDest)}
+                        </span>
+                      ) : null}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{campaign.adsCount} ads</td>
                   <td className="px-4 py-3 tabular-nums text-foreground">{money(campaign.totalSpend)}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <Select
-                        className="h-8 min-w-44 text-xs"
+                        className="h-8 min-w-52 text-xs"
                         value={currentDest}
                         disabled={saving}
                         onChange={(e) =>
                           handleDestinationChange(
                             campaign.id,
                             campaign.name,
-                            e.target.value as "default" | "testing" | "winner" | "loser"
+                            e.target.value
                           )
                         }
                       >
-                        <option value="default">Default / Auto</option>
-                        <option value="testing">Testing creatives</option>
-                        <option value="winner">Winning creatives</option>
-                        <option value="loser">Losing creatives</option>
+                        <option value="default">Default / All views (Auto)</option>
+                        <option value="hidden">Hidden completely (Excluded everywhere)</option>
+                        <option value="overview">Overview tab only</option>
+                        <option value="winner">Winning creatives (+ Overview)</option>
+                        <option value="winner_only">Winning creatives only (Hidden from Overview)</option>
+                        <option value="testing">Testing creatives (+ Overview)</option>
+                        <option value="testing_only">Testing creatives only (Hidden from Overview)</option>
+                        <option value="loser">Losing creatives (+ Overview)</option>
+                        <option value="loser_only">Losing creatives only (Hidden from Overview)</option>
+                        <option value="overview,winner">Overview + Winning</option>
+                        <option value="overview,testing">Overview + Testing</option>
+                        <option value="overview,loser">Overview + Losing</option>
+                        <option value="overview,winner,testing">Overview + Winning + Testing</option>
                       </Select>
                       {saving ? <Loader2 className="size-3.5 animate-spin text-muted-foreground" /> : null}
                     </div>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {isHidden ? (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="h-7 text-xs"
+                        disabled={saving}
+                        onClick={() => handleDestinationChange(campaign.id, campaign.name, "default")}
+                      >
+                        <Eye className="size-3 mr-1" aria-hidden />
+                        Unhide
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                        disabled={saving}
+                        onClick={() => handleDestinationChange(campaign.id, campaign.name, "hidden")}
+                      >
+                        <EyeOff className="size-3 mr-1" aria-hidden />
+                        Hide
+                      </Button>
+                    )}
                   </td>
                 </tr>
               );

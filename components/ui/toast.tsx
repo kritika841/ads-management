@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, Info, X, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -45,11 +45,26 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   }, [remove]);
 
   const value = useMemo(() => ({ toast, dismiss: (id: string) => remove(id) }), [remove, toast]);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Standard behaviour: pressing anywhere outside a notification dismisses it. Toasts that carry
+  // an action (e.g. "Undo") stay until they expire or are handled, so a stray click can never
+  // commit or cancel something on the user's behalf.
+  useEffect(() => {
+    if (!items.some((item) => !item.action)) return;
+    function onPointerDown(event: PointerEvent) {
+      const container = containerRef.current;
+      if (container && event.target instanceof Node && container.contains(event.target)) return;
+      items.filter((item) => !item.action).forEach((item) => remove(item.id));
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [items, remove]);
 
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="pointer-events-none fixed bottom-4 right-4 z-[100] flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2" aria-live="polite" aria-atomic="false">
+      <div ref={containerRef} className="pointer-events-none fixed bottom-4 right-4 z-[100] flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2" aria-live="polite" aria-atomic="false">
         {items.map((item) => {
           const Icon = item.tone === "success" ? CheckCircle2 : item.tone === "error" ? XCircle : Info;
           return (

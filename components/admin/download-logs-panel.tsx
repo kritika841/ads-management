@@ -17,6 +17,11 @@ import {
   Sparkles,
   ExternalLink
 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { updateRetentionSettings } from "@/app/actions/recycle-bin";
+import { RetentionDaysEditor } from "@/components/admin/retention-days-editor";
+import { runServerAction } from "@/lib/client-action";
+import { DEFAULT_DOWNLOAD_RETENTION_DAYS, formatRetentionDays } from "@/lib/retention";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
 import { useToast } from "@/components/ui/toast";
@@ -76,8 +81,18 @@ function formatExpiry(expiresAtString: string): { label: string; isUrgent: boole
   }
 }
 
-export function DownloadLogsPanel({ initialLogs = [] }: { initialLogs?: DownloadLog[] }) {
+export function DownloadLogsPanel({
+  initialLogs = [],
+  retentionDays: initialRetentionDays = DEFAULT_DOWNLOAD_RETENTION_DAYS,
+  canEditRetention = false
+}: {
+  initialLogs?: DownloadLog[];
+  retentionDays?: number;
+  canEditRetention?: boolean;
+}) {
+  const router = useRouter();
   const { toast } = useToast();
+  const [retentionDays, setRetentionDays] = useState(initialRetentionDays);
   const [logs, setLogs] = useState<DownloadLog[]>(initialLogs);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "ready" | "building" | "failed">("all");
@@ -107,6 +122,26 @@ export function DownloadLogsPanel({ initialLogs = [] }: { initialLogs?: Download
       setLogs((current) => (current.length === 0 ? initialLogs : current));
     }
   }, [initialLogs]);
+
+  useEffect(() => setRetentionDays(initialRetentionDays), [initialRetentionDays]);
+
+  async function saveRetention(days: number) {
+    const response = await runServerAction(() => updateRetentionSettings({ downloadDays: days }));
+    if (!response.ok) {
+      toast({ title: "Retention not saved", description: response.message ?? "Unable to update retention.", tone: "error" });
+      return false;
+    }
+    setRetentionDays(days);
+    const expired = "expiredLogs" in response && typeof response.expiredLogs === "number" ? response.expiredLogs : 0;
+    toast({
+      title: "Download retention updated",
+      description: `Archives are now kept for ${formatRetentionDays(days)}.${expired ? ` ${expired} archive${expired === 1 ? "" : "s"} past the new limit ${expired === 1 ? "was" : "were"} removed.` : ""}`,
+      tone: "success"
+    });
+    void fetchLogs(true);
+    router.refresh();
+    return true;
+  }
 
   // Poll automatically if any job is currently in "preparing" or "building" state
   useEffect(() => {
@@ -270,8 +305,13 @@ export function DownloadLogsPanel({ initialLogs = [] }: { initialLogs?: Download
             <span className="text-xs font-medium uppercase tracking-wider">Retention Policy</span>
             <Clock className="size-4 text-warning" />
           </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-semibold text-foreground">3 Days</span>
+          <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <RetentionDaysEditor
+              value={retentionDays}
+              editable={canEditRetention}
+              onSave={saveRetention}
+              ariaLabel="download archive retention in days"
+            />
             <span className="text-xs text-muted-foreground">auto-purge stale ZIPs</span>
           </div>
         </div>
@@ -290,7 +330,7 @@ export function DownloadLogsPanel({ initialLogs = [] }: { initialLogs?: Download
               )}
             </h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Pre-built creative ZIP archives. Archived on server for 3 days so you can re-download anytime without re-zipping.
+              Pre-built creative ZIP archives. Archived on server for {formatRetentionDays(retentionDays)} so you can re-download anytime without re-zipping.
             </p>
           </div>
 
@@ -391,7 +431,7 @@ export function DownloadLogsPanel({ initialLogs = [] }: { initialLogs?: Download
                     <p className="mt-2 text-sm font-medium text-foreground">No download archives found</p>
                     <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">
                       Whenever you select and download creatives from the Creative Library or Campaigns,
-                      the zipping process runs in the background and preserves the ZIP file here for 3 days.
+                      the zipping process runs in the background and preserves the ZIP file here for {formatRetentionDays(retentionDays)}.
                     </p>
                   </td>
                 </tr>

@@ -61,6 +61,10 @@ export type MetaAdAsset = {
   asset_type: string | null;
   creative_id: string | null;
   thumbnail_url: string | null;
+  /** Meta video ID of this specific creative (null until synced). */
+  video_id?: string | null;
+  /** Meta image hash of this specific creative. */
+  image_hash?: string | null;
   source: string;
   daily_metrics: MetaDailyMetric[];
 };

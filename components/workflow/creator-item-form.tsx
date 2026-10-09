@@ -11,6 +11,7 @@ import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { platforms } from "@/lib/constants";
 import { parseGoogleDriveVideoFileUrl } from "@/lib/drive-urls";
 import { creatorControlledStages, creatorSelectableStages, creatorStatusOptionLabels, productionStageLabels, productionStages, type CreatorControlledStage } from "@/lib/production-workflow";
+import { eligibleCreatorsFor, isCreatorCapableRole } from "@/lib/creators";
 import type { AdWithRelations, Campaign, Product, Profile } from "@/lib/types";
 
 export function CreatorItemForm({
@@ -40,13 +41,16 @@ export function CreatorItemForm({
 }) {
   const router = useRouter();
   const isReviewer = profile.role === "admin" || profile.role === "manager";
-  const activeCreators = creators.filter((item) => item.active && item.role === "content_creator");
-  // Managers can assign themselves as the creator — prepend them to the dropdown
-  const creatorsForDropdown = profile.role === "manager"
-    ? [profile, ...activeCreators]
-    : activeCreators;
+  // Admins and managers inherit creator behaviour: the picker lists the viewer
+  // first, then (admin) managers and content creators / (manager) content creators.
+  const baseCreators = eligibleCreatorsFor(profile, creators);
+  const existingCreator = initialAd?.creator_id && !baseCreators.some((item) => item.id === initialAd.creator_id)
+    ? creators.find((item) => item.id === initialAd.creator_id)
+    : undefined;
+  const creatorsForDropdown = existingCreator ? [...baseCreators, existingCreator] : baseCreators;
+  const activeCreators = creatorsForDropdown;
   const activeEditors = editors.filter((item) => item.active && item.role === "editor");
-  const defaultCreatorId = initialAd?.creator_id ?? (profile.role === "content_creator" || profile.role === "manager" ? profile.id : activeCreators[0]?.id ?? "");
+  const defaultCreatorId = initialAd?.creator_id ?? (isCreatorCapableRole(profile.role) ? profile.id : activeCreators[0]?.id ?? "");
   // In override mode the stage can be any production stage
   const initialStageOverride = initialAd?.production_stage ?? productionStages[0];
   const initialStage = overrideMode
@@ -72,8 +76,8 @@ export function CreatorItemForm({
   const [notes, setNotes] = useState(initialAd?.notes ?? "");
 
   // Final submission fields — admin/manager only
-  const [finalMode, setFinalMode] = useState(false);
-  const [finalDriveUrl, setFinalDriveUrl] = useState("");
+  const [finalMode, setFinalMode] = useState(Boolean(initialAd?.drive_url));
+  const [finalDriveUrl, setFinalDriveUrl] = useState(initialAd?.drive_url ?? "");
   const [finalDriveUrlError, setFinalDriveUrlError] = useState<string | null>(null);
 
   const [message, setMessage] = useState<string | null>(null);
@@ -102,8 +106,10 @@ export function CreatorItemForm({
     setFinalDriveUrlError(validation.error);
   }
 
-  // When finalMode is on, we also need a valid final Drive URL; raw footage must be filled if not already set
-  const finalModeReady = finalMode
+  // When finalMode is on (or in overrideMode with a URL), we need a valid final Drive URL
+  const finalModeReady = (finalMode || overrideMode) && finalDriveUrl.trim()
+    ? !finalDriveUrlError
+    : finalMode
     ? Boolean(finalDriveUrl.trim() && !finalDriveUrlError)
     : true;
 
@@ -145,7 +151,8 @@ export function CreatorItemForm({
           platforms: selectedPlatforms,
           tags: selectedTags,
           deadline,
-          notes
+          notes,
+          driveUrl: finalDriveUrl.trim() || undefined
         }));
         if (!response.ok || !response.adId) {
           setMessage(response.message ?? "Unable to save creative.");
@@ -222,7 +229,7 @@ export function CreatorItemForm({
               {creators.find((c) => c.id === creatorId)?.name ?? "Unknown creator"}
             </div>
           </Field>
-        ) : canChooseCreator ? <Field label="Content creator"><Select value={creatorId} onChange={(event) => setCreatorId(event.target.value)}>{creatorsForDropdown.map((creator) => <option key={creator.id} value={creator.id}>{creator.name}{creator.id === profile.id && profile.role === "manager" ? " (you)" : ""}</option>)}</Select></Field> : null}
+        ) : canChooseCreator ? <Field label="Content creator"><Select value={creatorId} onChange={(event) => setCreatorId(event.target.value)}>{creatorsForDropdown.map((creator) => <option key={creator.id} value={creator.id}>{creator.name}{creator.id === profile.id ? " (you)" : creator.role === "manager" ? " (manager)" : ""}</option>)}</Select></Field> : null}
         {/* In override mode show all stages; otherwise show creator-selectable stages only */}
         {overrideMode ? (
           <Field label="Production stage"><Select value={stage} onChange={(event) => setStage(event.target.value)}>{productionStages.map((item) => <option key={item} value={item}>{productionStageLabels[item]}</option>)}</Select></Field>
@@ -254,47 +261,26 @@ export function CreatorItemForm({
       {/* ── Final submission section — admin / manager only ── */}
       {isReviewer ? (
         <section className="rounded-xl border-2 border-primary/40 bg-primary/5 p-4">
-          <label className="flex cursor-pointer items-start gap-3">
-            <input
-              id="final-mode-toggle"
-              type="checkbox"
-              className="mt-0.5 size-4 accent-primary"
-              checked={finalMode}
-              onChange={(event) => {
-                setFinalMode(event.target.checked);
-                if (!event.target.checked) {
-                  setFinalDriveUrl("");
-                  setFinalDriveUrlError(null);
-                }
-              }}
-            />
-            <span>
-              <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-                <UploadCloud className="size-4 text-primary" aria-hidden />
-                Submit final clip &amp; approve directly
-                <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary-foreground">
-                  {profile.role === "admin" ? "Admin" : "Manager"}
+          {overrideMode ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                  <UploadCloud className="size-4 text-primary" aria-hidden />
+                  Final edited video clip
+                  <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary-foreground">
+                    {profile.role === "admin" ? "Admin" : "Manager"}
+                  </span>
                 </span>
-              </span>
-              <span className="mt-0.5 block text-xs text-muted-foreground">
-                Check this to upload the finished video now and mark this ad as approved — bypassing the editor workflow entirely.
-              </span>
-            </span>
-          </label>
-
-          {finalMode ? (
-            <div className="mt-4 space-y-4 border-t border-primary/20 pt-4">
-              {/* Raw footage URL — remind user it's needed */}
-              {!rawFootageUrl.trim() ? (
-                <p className="rounded-md bg-yellow-500/10 px-3 py-2 text-xs text-yellow-600 dark:text-yellow-400">
-                  ⚠ Add the raw footage folder link above before submitting.
-                </p>
-              ) : null}
-
-              {/* Final video URL */}
+                {initialAd?.drive_url ? (
+                  <span className="text-xs text-muted-foreground">Clip currently attached</span>
+                ) : null}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Update or attach the final Google Drive video clip here. Saving updates the video file and its version history.
+              </p>
               <Field
                 label="Final edited video (Drive file link)"
-                hint="Required · Must be a direct Google Drive video file link — no folders, no other websites."
+                hint="Must be a direct Google Drive video file link (e.g. https://drive.google.com/file/d/…/view)."
               >
                 <div className="relative">
                   <Link2
@@ -316,11 +302,79 @@ export function CreatorItemForm({
                     {finalDriveUrlError}
                   </p>
                 ) : finalDriveUrl.trim() && !finalDriveUrlError ? (
-                  <p className="mt-1.5 text-xs text-green-600 dark:text-green-400">✓ Valid Google Drive video link</p>
+                  <p className="mt-1.5 text-xs text-success">✓ Valid Google Drive video link</p>
                 ) : null}
               </Field>
             </div>
-          ) : null}
+          ) : (
+            <>
+              <label className="flex cursor-pointer items-start gap-3">
+                <input
+                  id="final-mode-toggle"
+                  type="checkbox"
+                  className="mt-0.5 size-4 accent-primary"
+                  checked={finalMode}
+                  onChange={(event) => {
+                    setFinalMode(event.target.checked);
+                    if (!event.target.checked) {
+                      setFinalDriveUrl("");
+                      setFinalDriveUrlError(null);
+                    }
+                  }}
+                />
+                <span>
+                  <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                    <UploadCloud className="size-4 text-primary" aria-hidden />
+                    Submit final clip &amp; approve directly
+                    <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary-foreground">
+                      {profile.role === "admin" ? "Admin" : "Manager"}
+                    </span>
+                  </span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    Check this to upload the finished video now and mark this ad as approved — bypassing the editor workflow entirely.
+                  </span>
+                </span>
+              </label>
+
+              {finalMode ? (
+                <div className="mt-4 space-y-4 border-t border-primary/20 pt-4">
+                  {!rawFootageUrl.trim() ? (
+                    <p className="rounded-md bg-warning/10 px-3 py-2 text-xs text-warning">
+                      ⚠ Add the raw footage folder link above before submitting.
+                    </p>
+                  ) : null}
+
+                  <Field
+                    label="Final edited video (Drive file link)"
+                    hint="Required · Must be a direct Google Drive video file link — no folders, no other websites."
+                  >
+                    <div className="relative">
+                      <Link2
+                        className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                        aria-hidden
+                      />
+                      <Input
+                        id="final-drive-url"
+                        className="pl-9"
+                        value={finalDriveUrl}
+                        onChange={(event) => handleFinalDriveUrlChange(event.target.value)}
+                        placeholder="https://drive.google.com/file/d/…/view"
+                        aria-invalid={Boolean(finalDriveUrlError)}
+                        aria-describedby={finalDriveUrlError ? "final-drive-url-error" : undefined}
+                      />
+                    </div>
+                    {finalDriveUrlError ? (
+                      <p id="final-drive-url-error" className="mt-1.5 text-xs text-destructive" role="alert">
+                        {finalDriveUrlError}
+                      </p>
+                    ) : finalDriveUrl.trim() && !finalDriveUrlError ? (
+                      <p className="mt-1.5 text-xs text-success">✓ Valid Google Drive video link</p>
+                    ) : null}
+                  </Field>
+                </div>
+              ) : null}
+            </>
+          )}
         </section>
       ) : null}
 

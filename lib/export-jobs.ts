@@ -19,8 +19,10 @@ import {
   type DownloadLogSource
 } from "@/lib/download-logs";
 
+import { DAY_MS } from "@/lib/retention";
+import { getRetentionSettings } from "@/lib/retention-settings";
+
 const FOLDER_MIME = "application/vnd.google-apps.folder";
-export const JOB_LIFETIME_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
 const EXPORT_DIR = path.join(process.cwd(), "storage", "export-zips");
 
 type InternalFile = ExportJobFile & { driveFileId: string; tempPath?: string };
@@ -34,6 +36,13 @@ export type InternalJob = Omit<ExportJobSnapshot, "files"> & {
 type ExportJobStore = { jobs: Map<string, InternalJob> };
 const globalStore = globalThis as typeof globalThis & { __adflowExportJobs?: ExportJobStore };
 const store = globalStore.__adflowExportJobs ??= { jobs: new Map() };
+
+/** Re-date in-memory export jobs after an admin changes the download retention window. */
+export function syncExportJobExpiry(days: number) {
+  for (const job of store.jobs.values()) {
+    job.expiresAt = new Date(job.createdAt).getTime() + days * DAY_MS;
+  }
+}
 
 export async function createExportJob(
   profile: Profile,
@@ -53,7 +62,8 @@ export async function createExportJob(
   const id = randomUUID();
   const filename = `creatives-${new Date().toISOString().slice(0, 10)}.zip`;
   const outputPath = path.join(EXPORT_DIR, `${id}.zip`);
-  const expiresAt = Date.now() + JOB_LIFETIME_MS;
+  const { downloadDays } = await getRetentionSettings();
+  const expiresAt = Date.now() + downloadDays * DAY_MS;
 
   const job: InternalJob = {
     id,
@@ -188,6 +198,7 @@ function snapshot(job: InternalJob): ExportJobSnapshot {
     zipSizeBytes: job.zipSizeBytes,
     error: job.error,
     createdAt: job.createdAt,
+    retentionDays: Math.max(1, Math.round((job.expiresAt - new Date(job.createdAt).getTime()) / DAY_MS)),
   };
 }
 

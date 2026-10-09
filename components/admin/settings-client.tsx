@@ -3,6 +3,7 @@
 import { useState, useEffect, useTransition } from "react";
 import Link from "next/link";
 import {
+  ArchiveRestore,
   ArrowUpRight,
   FolderArchive,
   FolderKanban,
@@ -25,14 +26,18 @@ import { cn, formatDateTime } from "@/lib/utils";
 import { DownloadLogsPanel } from "@/components/admin/download-logs-panel";
 import { AnnouncementsDashboard } from "@/components/announcements/announcements-dashboard";
 import { SecuritySettingsPanel, type PasswordStatusItem } from "@/components/admin/security-settings-panel";
+import { RecycleBinPanel } from "@/components/admin/recycle-bin-panel";
+import type { RecycleBinSnapshot } from "@/lib/recycle-bin";
+import { DEFAULT_RECYCLE_BIN_RETENTION_DAYS, formatRetentionDays } from "@/lib/retention";
 
-type SettingsTab = "workflow" | "security" | "downloads" | "audit" | "announcements";
+type SettingsTab = "workflow" | "security" | "downloads" | "audit" | "announcements" | "recyclebin";
 
 function resolveSettingsTab(): SettingsTab {
   if (typeof window === "undefined") return "workflow";
   const rawHash = (window.location.hash || "").replace(/^#/, "").toLowerCase();
   if (rawHash === "security" || rawHash === "passwords" || rawHash === "password") return "security";
   if (rawHash === "downloads" || rawHash.startsWith("download")) return "downloads";
+  if (rawHash === "recyclebin" || rawHash === "recycle-bin" || rawHash === "recycle") return "recyclebin";
   if (rawHash === "audit") return "audit";
   if (rawHash === "announcements" || rawHash === "announcement") return "announcements";
   if (rawHash === "workflow") return "workflow";
@@ -42,6 +47,7 @@ function resolveSettingsTab(): SettingsTab {
     const tabParam = (params.get("tab") || params.get("section") || "").toLowerCase();
     if (tabParam === "security" || tabParam === "passwords" || tabParam === "password") return "security";
     if (tabParam === "downloads" || tabParam.startsWith("download")) return "downloads";
+    if (tabParam === "recyclebin" || tabParam === "recycle-bin" || tabParam === "recycle") return "recyclebin";
     if (tabParam === "audit") return "audit";
     if (tabParam === "announcements" || tabParam === "announcement") return "announcements";
     if (tabParam === "workflow") return "workflow";
@@ -60,6 +66,7 @@ export function SettingsClient({
   announcements = [],
   allProfiles = [],
   passwordStatuses = [],
+  recycleBin,
   profile
 }: {
   settings: AppSettings;
@@ -69,6 +76,7 @@ export function SettingsClient({
   announcements?: Announcement[];
   allProfiles?: Profile[];
   passwordStatuses?: PasswordStatusItem[];
+  recycleBin?: RecycleBinSnapshot;
   profile?: Profile;
 }) {
   const [activeTab, setActiveTab] = useState<SettingsTab>(resolveSettingsTab);
@@ -146,11 +154,16 @@ export function SettingsClient({
   }
 
   function removeCampaign(campaign: Campaign) {
-    if (!confirm(`Delete "${campaign.name}"? This cannot be undone.`)) return;
+    const days = recycleBin?.retentionDays ?? settings.recycle_bin_retention_days ?? DEFAULT_RECYCLE_BIN_RETENTION_DAYS;
+    const message = recycleBin?.ready
+      ? `Delete "${campaign.name}"? Its creatives are NOT deleted; they stay in the library without a campaign. The campaign moves to the Recycle Bin and can be restored for ${formatRetentionDays(days)}.`
+      : `Delete "${campaign.name}"? This cannot be undone.`;
+    if (!confirm(message)) return;
     setMessage(null);
     startTransition(async () => {
       const response = await runServerAction(() => deleteCampaign(campaign.id));
-      setMessage(response.ok ? `${campaign.name} deleted.` : response.message ?? "Unable to delete campaign.");
+      const moved = response.ok && "movedToRecycleBin" in response && response.movedToRecycleBin;
+      setMessage(response.ok ? (moved ? `${campaign.name} moved to the Recycle Bin.` : `${campaign.name} deleted.`) : response.message ?? "Unable to delete campaign.");
     });
   }
 
@@ -231,6 +244,25 @@ export function SettingsClient({
 
         <button
           type="button"
+          onClick={() => handleTabClick("recyclebin")}
+          className={cn(
+            "flex items-center gap-2 border-b-2 px-3.5 py-2.5 text-xs sm:text-sm font-medium transition -mb-px whitespace-nowrap",
+            activeTab === "recyclebin"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <ArchiveRestore className="size-4" />
+          Recycle Bin
+          {recycleBin && recycleBin.campaigns.length + recycleBin.creatives.length > 0 && (
+            <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary">
+              {recycleBin.campaigns.length + recycleBin.creatives.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
           onClick={() => handleTabClick("audit")}
           className={cn(
             "flex items-center gap-2 border-b-2 px-3.5 py-2.5 text-xs sm:text-sm font-medium transition -mb-px whitespace-nowrap",
@@ -250,7 +282,16 @@ export function SettingsClient({
       </div>
 
       {activeTab === "downloads" ? (
-        <DownloadLogsPanel initialLogs={downloadLogs} />
+        <DownloadLogsPanel
+          initialLogs={downloadLogs}
+          retentionDays={settings.download_retention_days ?? undefined}
+          canEditRetention
+        />
+      ) : activeTab === "recyclebin" ? (
+        <RecycleBinPanel
+          snapshot={recycleBin ?? { ready: false, retentionDays: settings.recycle_bin_retention_days ?? DEFAULT_RECYCLE_BIN_RETENTION_DAYS, campaigns: [], creatives: [] }}
+          role="admin"
+        />
       ) : activeTab === "announcements" ? (
         <AnnouncementsDashboard
           announcements={announcements}

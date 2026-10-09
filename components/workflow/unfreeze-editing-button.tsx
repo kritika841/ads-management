@@ -8,7 +8,7 @@ import { runServerAction } from "@/lib/client-action";
 import { Button } from "@/components/ui/button";
 import type { AdWithRelations } from "@/lib/types";
 
-export function UnfreezeEditingButton({ ad }: { ad: AdWithRelations }) {
+export function UnfreezeEditingButton({ ad, onDone }: { ad: AdWithRelations; onDone?: () => void }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -25,6 +25,7 @@ export function UnfreezeEditingButton({ ad }: { ad: AdWithRelations }) {
 
       setOpen(false);
       router.refresh();
+      onDone?.();
     });
   }
 

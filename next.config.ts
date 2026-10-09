@@ -1,8 +1,10 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 import { PHASE_DEVELOPMENT_SERVER } from "next/constants";
 
 export default function nextConfig(phase: string): NextConfig {
   return {
+    outputFileTracingRoot: path.join(__dirname),
     // Keep dev and production artifacts isolated so concurrent checks cannot
     // invalidate a running development server's module manifest.
     distDir: phase === PHASE_DEVELOPMENT_SERVER ? ".next-dev" : ".next",
@@ -47,7 +49,7 @@ export default function nextConfig(phase: string): NextConfig {
           ]
         },
         {
-          source: "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|woff|woff2)).*)",
+          source: "/((?!_next/static|_next/image|favicon.ico|api/ads/[^/]+/(?:media|thumbnail)|.*\\.(?:svg|png|jpg|jpeg|gif|webp|woff|woff2)).*)",
           headers: [
             {
               key: "Cache-Control",

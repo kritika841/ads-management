@@ -8,11 +8,13 @@ import {
   assetId,
   assetIdentifier,
   assetLabelScore,
+  assetMediaFromRow,
   creativeAssets,
   inferAssetType,
   isCaptionLikeLabel,
   normalizeAssetLabel,
   resolveAssetLabel,
+  type AssetMedia,
   type MetaAction,
   type MetaAssetBreakdown,
   type MetaInsightRow,
@@ -22,6 +24,13 @@ import {
 
 const GRAPH_VERSION = "v23.0";
 const PURCHASE_ACTIONS = ["purchase", "offsite_conversion.fb_pixel_purchase", "omni_purchase"];
+// Meta only lists a creative in the Creative → Media breakdown when it
+// delivered inside the requested window. A two-day window silently dropped
+// every creative that paused briefly, so look back further for media identity.
+const BREAKDOWN_LOOKBACK_DAYS = 14;
+// Smaller ad batches keep each paged breakdown response (ads × media × days)
+// under graphPages' 20-page ceiling.
+const BREAKDOWN_AD_BATCH = 10;
 type MetaPayload<T> = { data?: T[]; paging?: { next?: string }; error?: { message?: string } };
 type LinkedCreative = { id: string; meta_ad_id: string; launched_on: string; gate_evaluated_at: string | null; winner_evaluated_at: string | null; decision_source?: "automatic" | "manual"; decision_note?: string | null; backfill_classified_at?: string | null; campaign: IncentiveCampaign };
 type ExistingLink = { id: string; ad_id: string; meta_ad_id: string; creator_id: string | null; editor_id: string | null; evaluation_status: string };
@@ -89,10 +98,15 @@ async function syncMetaIncentives(actorId: string | null) {
   const { data: syncRun } = await admin.from("meta_sync_runs").insert({ actor_id: actorId }).select("id").maybeSingle();
   const syncRunId = syncRun?.id as string | undefined;
   const today = new Date().toISOString().slice(0, 10);
-  const catalogStart = addDays(today, -29);
+  const catalogStart = addDays(today, -1); // Narrowed to 2 days (yesterday & today); historical data is already preserved in DB
+  const breakdownStart = addDays(today, -(BREAKDOWN_LOOKBACK_DAYS - 1));
   const accountId = rawAccountId.replace(/^act_/, "");
   const accountBase = `https://graph.facebook.com/${GRAPH_VERSION}/act_${accountId}`;
-  const adsUrl = graphUrl(`${accountBase}/ads`, token, { limit: "25", fields: "id,name,status,effective_status,created_time,campaign{id,name},adset{id,name},creative{id,name,thumbnail_url,image_url,video_id,object_story_spec,asset_feed_spec}" });
+  const adsUrl = graphUrl(`${accountBase}/ads`, token, {
+    limit: "100",
+    filtering: JSON.stringify([{ field: "effective_status", operator: "IN", value: ["ACTIVE", "IN_PROCESS", "PENDING_REVIEW"] }]),
+    fields: "id,name,status,effective_status,created_time,campaign{id,name},adset{id,name},creative{id,name,thumbnail_url,image_url,video_id,object_story_spec,asset_feed_spec}"
+  });
 
   try {
     const [metaAds, adsResult, campaignsResult, linksResult, existingMetaAdsResult, highConfidenceMappingsResult] = await Promise.all([
@@ -164,15 +178,17 @@ async function syncMetaIncentives(actorId: string | null) {
     // retained concurrently and leaving the dashboard with stale labels.
     for (const batch of chunks(chunks(metaAds.map((ad) => ad.id), 20), 3)) {
       const results = await Promise.all(batch.map((adIds) => {
-        const insightsUrl = graphUrl(`${accountBase}/insights`, token, { level: "ad", limit: "100", time_increment: "1", time_range: JSON.stringify({ since: catalogStart, until: today }), filtering: JSON.stringify([{ field: "ad.id", operator: "IN", value: adIds }]), fields: "date_start,date_stop,ad_id,spend,impressions,reach,clicks,inline_link_clicks,actions,action_values" });
+        const insightsUrl = graphUrl(`${accountBase}/insights`, token, { level: "ad", limit: "100", time_increment: "1", time_range: JSON.stringify({ since: catalogStart, until: today }), filtering: JSON.stringify([{ field: "ad.id", operator: "IN", value: adIds }]), fields: "date_start,date_stop,ad_id,spend,impressions,reach,clicks,inline_link_clicks,cost_per_inline_link_click,actions,action_values" });
         return graphPages<MetaInsightRow>(insightsUrl);
       }));
       catalogInsights.push(...results.flat());
-      // Asset-breakdown availability differs by Meta API version and account.
-      // Never discard the authoritative ad/day response when this optional
-      // breakdown is unavailable.
-      const assetResults = await Promise.all(batch.map(async (adIds) => fetchAssetBreakdown(accountBase, token, adIds, catalogStart, today, (message) => { assetBreakdownError ??= message; })));
-      assetInsights.push(...assetResults.flat());
+    }
+    // Creative → Media breakdown for every synced ad (not only ads that spent
+    // in the catalog window) so creatives that delivered earlier in the
+    // lookback window still receive their media identity and metrics.
+    for (const batch of chunks(chunks(metaAds.map((ad) => ad.id), BREAKDOWN_AD_BATCH), 2)) {
+      const results = await Promise.all(batch.map((adIds) => fetchAssetBreakdown(accountBase, token, adIds, breakdownStart, catalogStart, today, (message) => { assetBreakdownError ??= message; })));
+      assetInsights.push(...results.flat());
     }
     const syncedAt = new Date().toISOString();
     const insightByAd = aggregateInsightsByAd(catalogInsights);
@@ -245,60 +261,110 @@ async function syncMetaIncentives(actorId: string | null) {
       const { error: dailyCatalogError } = await admin.from("meta_ad_daily_metrics").upsert(dailyCatalogRows, { onConflict: "meta_ad_id,metric_date" });
       if (dailyCatalogError) throw dailyCatalogError;
     }
-    const assetRows = uniqueAssetRows(assetInsights, metaAds, syncedAt);
-    // Once Meta has returned its Creative → Media breakdown, remove only the
-    // old generated catalog rows for those ads. Historical media insight rows
-    // are retained, while generic `Video <id>`/`Image <hash>` placeholders are
-    // replaced by the exact labels Meta reports (for example, `Video X.mp4
-    // (123...)`).
-    const reportedAdIds = [...new Set(assetInsights.filter((row) => Boolean(assetBreakdownValue(row))).map((row) => row.ad_id))];
-    if (reportedAdIds.length) {
-      const { error: cleanupError } = await admin.from("meta_ad_assets").delete().in("meta_ad_id", reportedAdIds).eq("source", "meta_creative");
-      if (cleanupError) throw cleanupError;
-      const reportedAdSet = new Set(reportedAdIds);
-      const staleGeneratedIds = metaAds
-        .filter((ad) => reportedAdSet.has(ad.id))
-        .flatMap((ad) => creativeAssets(ad.creative).map((asset) => assetId(ad.id, asset.label)));
-      for (const idBatch of chunks(staleGeneratedIds, 25)) {
-        if (!idBatch.length) continue;
-        const { error: staleCleanupError } = await admin.from("meta_ad_assets").delete().in("id", idBatch);
-        if (staleCleanupError) throw staleCleanupError;
+    // Snapshot the stored creatives for every synced ad first: it lets this
+    // run keep media IDs learned earlier, avoid re-adding feed-spec rows for
+    // media already reported by the breakdown, and prune only stale rows.
+    const syncedAdIds = metaAds.map((ad) => ad.id);
+    const existingAssetRows: ExistingAssetRow[] = [];
+    for (const adBatch of chunks(syncedAdIds, 25)) {
+      const { data: existingBatch, error: existingAssetError } = await admin.from("meta_ad_assets").select("id,meta_ad_id,asset_label,source,video_id,image_hash,thumbnail_url").in("meta_ad_id", adBatch);
+      if (existingAssetError) throw existingAssetError;
+      existingAssetRows.push(...((existingBatch ?? []) as ExistingAssetRow[]));
+    }
+    // One-time self-heal: rows stored before per-creative media identity
+    // existed have no video_id/image_hash. Without it they cannot be matched to
+    // the ad's creative spec (and would be listed twice), nor previewed
+    // exactly. Learn it from Meta's lifetime media breakdown, only for those ads.
+    const reportedNow = new Set(assetInsights.map((row) => `${row.ad_id}:${normalizeAssetLabel(assetBreakdownValue(row) ?? "")}`));
+    const adsNeedingIdentity = [...new Set(existingAssetRows.filter((row) => row.source !== "meta_creative" && !row.video_id && !row.image_hash).map((row) => row.meta_ad_id))];
+    if (adsNeedingIdentity.length) {
+      const adById = new Map(metaAds.map((ad) => [ad.id, ad]));
+      const storedById = new Map(existingAssetRows.map((row) => [row.id, row]));
+      for (const adIds of chunks(adsNeedingIdentity, BREAKDOWN_AD_BATCH)) {
+        const identityRows = await fetchLifetimeMedia(accountBase, token, adIds, (message) => { assetBreakdownError ??= message; });
+        for (const row of identityRows) {
+          const rawLabel = assetBreakdownValue(row);
+          if (!rawLabel || reportedNow.has(`${row.ad_id}:${normalizeAssetLabel(rawLabel)}`)) continue;
+          const stored = storedById.get(assetId(row.ad_id, resolveAssetLabel(adById.get(row.ad_id), rawLabel)));
+          const media = assetMediaFromRow(row);
+          if (!stored || stored.video_id || stored.image_hash || (!media.videoId && !media.imageHash)) continue;
+          stored.video_id = media.videoId;
+          stored.image_hash = media.imageHash;
+          const { error: identityError } = await admin.from("meta_ad_assets").update({ video_id: media.videoId, image_hash: media.imageHash, ...(media.thumbnailUrl ? { thumbnail_url: media.thumbnailUrl } : {}) }).eq("id", stored.id);
+          if (identityError) throw identityError;
+        }
       }
+    }
+    const assetRows = uniqueAssetRows(assetInsights, metaAds, syncedAt, existingAssetRows);
+
+    // Batch-resolve distinct thumbnails for any creatives missing one
+    const videoAssetsNeedingThumb = assetRows.filter((a) => a.video_id && !a.thumbnail_url);
+    if (videoAssetsNeedingThumb.length) {
+      const vids = [...new Set(videoAssetsNeedingThumb.map((a) => a.video_id).filter((id): id is string => Boolean(id)))];
+      for (const batch of chunks(vids, 50)) {
+        try {
+          const url = graphUrl(`https://graph.facebook.com/${GRAPH_VERSION}/`, token, { ids: batch.join(","), fields: "picture,thumbnails{uri,is_preferred}" });
+          const res = await fetch(url).then((r) => r.json() as Promise<Record<string, { picture?: string; thumbnails?: { data?: Array<{ uri: string; is_preferred?: boolean }> } }>>);
+          for (const asset of videoAssetsNeedingThumb) {
+            if (!asset.video_id) continue;
+            const data = res[asset.video_id];
+            const preferred = data?.thumbnails?.data?.find((t) => t.is_preferred)?.uri;
+            const pic = preferred || data?.picture;
+            if (pic) asset.thumbnail_url = pic;
+          }
+        } catch { /* non-fatal fallback */ }
+      }
+    }
+    const imageAssetsNeedingThumb = assetRows.filter((a) => a.image_hash && !a.thumbnail_url);
+    if (imageAssetsNeedingThumb.length) {
+      const hashes = [...new Set(imageAssetsNeedingThumb.map((a) => a.image_hash).filter((h): h is string => Boolean(h)))];
+      for (const batch of chunks(hashes, 50)) {
+        try {
+          const url = graphUrl(`${accountBase}/adimages`, token, { hashes: JSON.stringify(batch), fields: "hash,url,permalink_url" });
+          const res = await fetch(url).then((r) => r.json() as Promise<{ data?: Array<{ hash: string; url?: string; permalink_url?: string }> }>);
+          const urlByHash = new Map((res.data ?? []).map((img) => [img.hash, img.url || img.permalink_url]));
+          for (const asset of imageAssetsNeedingThumb) {
+            if (!asset.image_hash) continue;
+            const imgUrl = urlByHash.get(asset.image_hash);
+            if (imgUrl) asset.thumbnail_url = imgUrl;
+          }
+        } catch { /* non-fatal fallback */ }
+      }
+    }
+
+    const assetRowIds = new Set(assetRows.map((asset) => asset.id));
+    if (assetRows.length) {
+      const { error: assetError } = await admin.from("meta_ad_assets").upsert(assetRows, { onConflict: "id" });
+      if (assetError) throw assetError;
+    }
+    // Creatives that simply did not deliver in the window are kept. Only
+    // generated feed-spec rows that are no longer part of the ad's creative,
+    // or whose media is now represented by an exact breakdown row, are pruned.
+    const staleGeneratedIds = existingAssetRows.filter((asset) => asset.source === "meta_creative" && !assetRowIds.has(asset.id)).map((asset) => asset.id);
+    for (const idBatch of chunks(staleGeneratedIds, 25)) {
+      const { error: staleCleanupError } = await admin.from("meta_ad_assets").delete().in("id", idBatch);
+      if (staleCleanupError) throw staleCleanupError;
+    }
+    const reportedAdIds = new Set(assetInsights.filter((row) => Boolean(assetBreakdownValue(row))).map((row) => row.ad_id));
+    if (reportedAdIds.size) {
       // Different Meta breakdowns can spell the same media differently (for
       // example, one row is only the numeric video ID while another contains
       // the filename). Collapse those aliases onto the preferred canonical
       // label before they become duplicate dashboard rows.
-      if (assetRows.length) {
-        const { error: assetError } = await admin.from("meta_ad_assets").upsert(assetRows, { onConflict: "id" });
-        if (assetError) throw assetError;
-      }
       const canonicalByMediaKey = new Map(assetRows.map((asset) => [`${asset.meta_ad_id}:${assetIdentifier(asset.asset_label) ?? asset.asset_label}`, asset.id]));
-      const existingAssetRows: Array<{ id: string; meta_ad_id: string; asset_label: string }> = [];
-      for (const adBatch of chunks(reportedAdIds, 25)) {
-        const { data: existingBatch, error: existingAssetError } = await admin.from("meta_ad_assets").select("id,meta_ad_id,asset_label").in("meta_ad_id", adBatch);
-        if (existingAssetError) throw existingAssetError;
-        existingAssetRows.push(...(existingBatch ?? []));
-      }
-      for (const asset of existingAssetRows) {
+      const candidates = existingAssetRows.filter((asset) => reportedAdIds.has(asset.meta_ad_id) && !staleGeneratedIds.includes(asset.id));
+      const duplicateIds: string[] = [];
+      for (const asset of candidates) {
         const canonicalId = canonicalByMediaKey.get(`${asset.meta_ad_id}:${assetIdentifier(asset.asset_label) ?? asset.asset_label}`);
         if (canonicalId && canonicalId !== asset.id) {
           await admin.from("meta_ad_asset_daily_metrics").update({ meta_asset_id: canonicalId }).eq("meta_asset_id", asset.id);
+          duplicateIds.push(asset.id);
         }
       }
-      const duplicateIds = existingAssetRows
-        .filter((asset) => {
-          const canonicalId = canonicalByMediaKey.get(`${asset.meta_ad_id}:${assetIdentifier(asset.asset_label) ?? asset.asset_label}`);
-          return Boolean(canonicalId && canonicalId !== asset.id);
-        })
-        .map((asset) => asset.id);
       for (const idBatch of chunks(duplicateIds, 25)) {
-        if (!idBatch.length) continue;
         const { error: duplicateCleanupError } = await admin.from("meta_ad_assets").delete().in("id", idBatch);
         if (duplicateCleanupError) throw duplicateCleanupError;
       }
-    } else if (assetRows.length) {
-      const { error: assetError } = await admin.from("meta_ad_assets").upsert(assetRows, { onConflict: "id" });
-      if (assetError) throw assetError;
     }
 
     const uniqueAssetMetricsMap = new Map<string, ReturnType<typeof toDailyMetric>>();
@@ -322,7 +388,34 @@ async function syncMetaIncentives(actorId: string | null) {
         existing.revenue = (Number(existing.revenue) || 0) + (Number(metric.revenue) || 0);
       }
     }
-    const assetMetrics = [...uniqueAssetMetricsMap.values()];
+    type AdDailyRow = { meta_ad_id: string; metric_date: string; spend: number; purchases: number; revenue: number };
+    type AssetDailyRow = { meta_asset_id: string; metric_date: string; spend: number; purchases: number; revenue: number };
+    const assetMetrics = [...uniqueAssetMetricsMap.values()] as AssetDailyRow[];
+    // Reconcile asset daily metrics with authoritative parent ad daily metrics
+    // Meta's breakdown API frequently drops or underreports offsite pixel conversions (purchases & revenue).
+    const parentDailyMetricsByAdDate = new Map((dailyCatalogRows as AdDailyRow[]).map((r) => [`${r.meta_ad_id}:${r.metric_date}`, r]));
+    const assetsByAdDate = new Map<string, AssetDailyRow[]>();
+    for (const m of assetMetrics) {
+      const adId = m.meta_asset_id.split(":")[0];
+      const key = `${adId}:${m.metric_date}`;
+      const list = assetsByAdDate.get(key) ?? [];
+      list.push(m);
+      assetsByAdDate.set(key, list);
+    }
+
+    for (const [key, group] of assetsByAdDate.entries()) {
+      const parent = parentDailyMetricsByAdDate.get(key);
+      if (!parent || Number(parent.purchases) <= 0 || Number(parent.spend) <= 0) continue;
+      const totalGroupPurchases = group.reduce((s, g) => s + (Number(g.purchases) || 0), 0);
+      if (totalGroupPurchases < Number(parent.purchases)) {
+        for (const item of group) {
+          const ratio = (Number(item.spend) || 0) / Number(parent.spend);
+          item.purchases = group.length === 1 ? Number(parent.purchases) : Math.round(Number(parent.purchases) * ratio);
+          item.revenue = group.length === 1 ? Number(parent.revenue) : Number((Number(parent.revenue) * ratio).toFixed(2));
+        }
+      }
+    }
+
     if (assetMetrics.length) {
       const { error: assetMetricError } = await admin.from("meta_ad_asset_daily_metrics").upsert(assetMetrics, { onConflict: "meta_asset_id,metric_date" });
       if (assetMetricError) throw assetMetricError;
@@ -361,7 +454,7 @@ async function syncMetaIncentives(actorId: string | null) {
       const linkedCreatives = creatives as LinkedCreative[];
       const linkedStart = linkedCreatives.map((item) => item.launched_on).sort()[0];
       for (const batch of chunks(chunks(linkedCreatives.map((item) => item.meta_ad_id), 10), 5)) {
-        const results = await Promise.all(batch.map((metaAdIds) => graphPages<MetaInsightRow>(graphUrl(`${accountBase}/insights`, token, { level: "ad", limit: "100", time_increment: "1", time_range: JSON.stringify({ since: linkedStart, until: today }), filtering: JSON.stringify([{ field: "ad.id", operator: "IN", value: metaAdIds }]), fields: "date_start,ad_id,spend,impressions,reach,clicks,inline_link_clicks,actions,action_values" }))));
+        const results = await Promise.all(batch.map((metaAdIds) => graphPages<MetaInsightRow>(graphUrl(`${accountBase}/insights`, token, { level: "ad", limit: "100", time_increment: "1", time_range: JSON.stringify({ since: linkedStart, until: today }), filtering: JSON.stringify([{ field: "ad.id", operator: "IN", value: metaAdIds }]), fields: "date_start,ad_id,spend,impressions,reach,clicks,inline_link_clicks,cost_per_inline_link_click,actions,action_values" }))));
         dailyRows.push(...results.flat());
       }
       await updateLinkedCreatives(admin, linkedCreatives, dailyRows, today, syncedAt);
@@ -396,13 +489,14 @@ function aggregateInsightsByAd(rows: MetaInsightRow[]) {
   return totals;
 }
 
-async function fetchAssetBreakdown(accountBase: string, token: string, adIds: string[], since: string, until: string, onError: (message: string) => void) {
-  const fields = "date_start,date_stop,ad_id,ad_name,spend,impressions,reach,clicks,inline_link_clicks,actions,action_values";
+async function fetchAssetBreakdown(accountBase: string, token: string, adIds: string[], since: string, rangeSince: string, until: string, onError: (message: string) => void) {
+  const fields = "date_start,date_stop,ad_id,ad_name,spend,impressions,reach,clicks,inline_link_clicks,cost_per_inline_link_click,actions,action_values";
   // Ads Manager can expose the same creative-level report through different
   // breakdowns depending on whether the ad is dynamic creative. Try the same
   // Creative > Media breakdown used by Ads Manager first, then asset-specific
   // fallbacks.
   const collected = new Map<string, MetaInsightRow>();
+  const reportedAdIds = new Set<string>();
   const addRows = (rows: MetaInsightRow[], rangeOnly = false) => {
     for (const row of rows) {
       const rawLabel = assetBreakdownValue(row);
@@ -411,47 +505,63 @@ async function fetchAssetBreakdown(accountBase: string, token: string, adIds: st
       const identifier = assetIdentifier(label) ?? label;
       const key = `${row.ad_id}:${row.date_start}:${row.date_stop ?? ""}:${identifier}`;
       if (rangeOnly && [...collected.keys()].some((existingKey) => existingKey.startsWith(`${row.ad_id}:${row.date_start}:`) && existingKey.endsWith(`:${identifier}`))) continue;
+      reportedAdIds.add(row.ad_id);
       const candidate = { ...row, ad_format_asset: rawLabel };
       const existing = collected.get(key);
       if (!existing || assetLabelScore(label) > assetLabelScore(normalizeAssetLabel(assetBreakdownValue(existing) ?? ""))) collected.set(key, candidate);
     }
   };
-  const fetchBreakdown = async (breakdown: string) => {
+  const fetchBreakdown = async (breakdown: string, ids: string[], daily = true) => {
     try {
-      const rows = await graphPages<MetaInsightRow>(graphUrl(`${accountBase}/insights`, token, { level: "ad", limit: "100", time_increment: "1", time_range: JSON.stringify({ since, until }), filtering: JSON.stringify([{ field: "ad.id", operator: "IN", value: adIds }]), breakdowns: breakdown, fields }));
-      addRows(rows);
+      const rows = await graphPages<MetaInsightRow>(graphUrl(`${accountBase}/insights`, token, { level: "ad", limit: "100", ...(daily ? { time_increment: "1" } : {}), time_range: JSON.stringify({ since: daily ? since : rangeSince, until }), filtering: JSON.stringify([{ field: "ad.id", operator: "IN", value: ids }]), breakdowns: breakdown, fields }));
+      addRows(rows, !daily);
       return rows;
     } catch (cause) {
-      onError(cause instanceof Error ? `${breakdown}: ${cause.message}` : `${breakdown}: ${String(cause)}`);
+      onError(cause instanceof Error ? `${breakdown}${daily ? "" : " total"}: ${cause.message}` : `${breakdown}: ${String(cause)}`);
       return [] as MetaInsightRow[];
     }
   };
   // Query video_asset and image_asset first in parallel because in Meta Graph API they contain
   // the exact Creative → Media filenames (e.g. "video_name": "ISH0195.mp4")
-  // as displayed in Meta Ads Manager. Fall back to ad_format_asset only if empty.
+  // and the per-creative `video_id` / image `hash` used for exact previews.
   await Promise.all([
-    fetchBreakdown("video_asset"),
-    fetchBreakdown("image_asset")
+    fetchBreakdown("video_asset", adIds),
+    fetchBreakdown("image_asset", adIds)
   ]);
-  if (!collected.size) {
-    await Promise.all([
-      fetchBreakdown("ad_format_asset"),
-      fetchBreakdown("creative_media_type_breakdown")
-    ]);
+  // Fall back per ad: an ad missing from the asset breakdowns must not be
+  // skipped just because another ad in the same batch was reported.
+  const unreported = () => adIds.filter((id) => !reportedAdIds.has(id));
+  let missing = unreported();
+  if (missing.length) {
+    await fetchBreakdown("ad_format_asset", missing);
   }
   // Some accounts return the Ads Manager asset breakdown only as a range
   // total. Keep that total rather than dropping the creative metrics entirely;
   // it is anchored to date_start and remains visible when the user selects a
   // range that includes that date.
-  if (!collected.size) for (const breakdown of ["ad_format_asset", "creative_media_type_breakdown"]) {
-    try {
-      const rows = await graphPages<MetaInsightRow>(graphUrl(`${accountBase}/insights`, token, { level: "ad", limit: "100", time_range: JSON.stringify({ since, until }), filtering: JSON.stringify([{ field: "ad.id", operator: "IN", value: adIds }]), breakdowns: breakdown, fields }));
-      addRows(rows, true);
-    } catch (cause) {
-      onError(cause instanceof Error ? `${breakdown} total: ${cause.message}` : `${breakdown} total: ${String(cause)}`);
-    }
+  missing = unreported();
+  if (missing.length) {
+    await fetchBreakdown("ad_format_asset", missing, false);
   }
   return [...collected.values()];
+}
+
+/**
+ * Lifetime (date_preset=maximum) media breakdown, used only to learn the
+ * media identity of creatives stored before video_id/image_hash existed.
+ * No metrics are written from these rows.
+ */
+async function fetchLifetimeMedia(accountBase: string, token: string, adIds: string[], onError: (message: string) => void) {
+  const fields = "ad_id,impressions";
+  const results = await Promise.all(["video_asset", "image_asset"].map(async (breakdown) => {
+    try {
+      return await graphPages<MetaInsightRow>(graphUrl(`${accountBase}/insights`, token, { level: "ad", limit: "200", date_preset: "maximum", filtering: JSON.stringify([{ field: "ad.id", operator: "IN", value: adIds }]), breakdowns: breakdown, fields }));
+    } catch (cause) {
+      onError(`${breakdown} lifetime: ${cause instanceof Error ? cause.message : String(cause)}`);
+      return [] as MetaInsightRow[];
+    }
+  }));
+  return results.flat();
 }
 
 function mergeActions(left: MetaAction[] | undefined, right: MetaAction[] | undefined) {
@@ -461,12 +571,13 @@ function mergeActions(left: MetaAction[] | undefined, right: MetaAction[] | unde
 }
 
 
-function uniqueAssetRows(rows: MetaInsightRow[], ads: MetaAdRow[], syncedAt: string) {
-  const assets = new Map<string, { id: string; meta_ad_id: string; asset_label: string; asset_type: string | null; creative_id: string | null; thumbnail_url: string | null; source: string; last_seen_at: string }>();
-  const add = (ad: MetaAdRow, label: string, type: string | null, source: string) => {
-    const id = assetId(ad.id, label);
-    assets.set(id, { id, meta_ad_id: ad.id, asset_label: label, asset_type: type, creative_id: ad.creative?.id ?? null, thumbnail_url: ad.creative?.thumbnail_url ?? ad.creative?.image_url ?? null, source, last_seen_at: syncedAt });
-  };
+type ExistingAssetRow = { id: string; meta_ad_id: string; asset_label: string; source: string; video_id: string | null; image_hash: string | null; thumbnail_url: string | null };
+type AssetRow = { id: string; meta_ad_id: string; asset_label: string; asset_type: string | null; creative_id: string | null; thumbnail_url: string | null; video_id: string | null; image_hash: string | null; source: string; last_seen_at: string };
+
+function uniqueAssetRows(rows: MetaInsightRow[], ads: MetaAdRow[], syncedAt: string, existingRows: ExistingAssetRow[] = []) {
+  const existingById = new Map(existingRows.map((row) => [row.id, row]));
+  const existingByAd = new Map<string, ExistingAssetRow[]>();
+  for (const row of existingRows) existingByAd.set(row.meta_ad_id, [...(existingByAd.get(row.meta_ad_id) ?? []), row]);
 
   const reportedByAd = new Map<string, MetaInsightRow[]>();
   for (const row of rows) {
@@ -474,24 +585,81 @@ function uniqueAssetRows(rows: MetaInsightRow[], ads: MetaAdRow[], syncedAt: str
     reportedByAd.set(row.ad_id, [...(reportedByAd.get(row.ad_id) ?? []), row]);
   }
 
-  // Prefer the exact labels returned by Meta's Creative → Media report. Only
-  // fall back to the creative payload when that report has no row for an ad.
-  // This keeps the dashboard's names identical to Ads Manager instead of
-  // surfacing generated `Video <id>`/`Image <hash>` placeholders.
+  const result: AssetRow[] = [];
   for (const ad of ads) {
+    const assets = new Map<string, AssetRow>();
+    const adThumb = ad.creative?.thumbnail_url ?? ad.creative?.image_url ?? null;
+    const add = (label: string, type: string | null, source: string, media: AssetMedia) => {
+      const id = assetId(ad.id, label);
+      const previous = assets.get(id);
+      const stored = existingById.get(id);
+      const videoId = media.videoId ?? previous?.video_id ?? stored?.video_id ?? null;
+      const imageHash = videoId ? null : media.imageHash ?? previous?.image_hash ?? stored?.image_hash ?? null;
+      const validPreviousThumb = previous?.thumbnail_url && previous.thumbnail_url !== adThumb ? previous.thumbnail_url : null;
+      const validStoredThumb = stored?.thumbnail_url && stored.thumbnail_url !== adThumb ? stored.thumbnail_url : null;
+      const thumb = media.thumbnailUrl ?? validPreviousThumb ?? validStoredThumb ?? null;
+
+      assets.set(id, {
+        id,
+        meta_ad_id: ad.id,
+        asset_label: label,
+        asset_type: videoId ? "video" : imageHash ? "image" : type,
+        creative_id: ad.creative?.id ?? null,
+        thumbnail_url: thumb,
+        video_id: videoId,
+        image_hash: imageHash,
+        // Never downgrade a row Meta has reported in its breakdown.
+        source: previous?.source === "meta_insights" || stored?.source === "meta_insights" ? "meta_insights" : source,
+        last_seen_at: syncedAt
+      });
+    };
+
+    // 1. Exact Creative → Media rows reported by Meta (names match Ads Manager).
     const reported = reportedByAd.get(ad.id) ?? [];
-    if (reported.length) {
-      for (const row of reported) {
-        const rawLabel = assetBreakdownValue(row);
-        if (!rawLabel) continue;
-        const label = resolveAssetLabel(ad, rawLabel);
-        add(ad, label, inferAssetType(label), "meta_insights");
-      }
-    } else {
-      for (const asset of creativeAssets(ad.creative)) add(ad, asset.label, asset.type, "meta_creative");
+    for (const row of reported) {
+      const rawLabel = assetBreakdownValue(row);
+      if (!rawLabel) continue;
+      const label = resolveAssetLabel(ad, rawLabel);
+      add(label, inferAssetType(label), "meta_insights", assetMediaFromRow(row));
     }
+
+    // 2. Every other creative in the ad's spec, so creatives that did not
+    // deliver in the breakdown window are still listed. Matched on video ID /
+    // image hash against breakdown rows from this run and earlier runs.
+    const covered = new Set<string>();
+    const cover = (videoId: string | null, imageHash: string | null) => {
+      if (videoId) covered.add(`v:${videoId}`);
+      if (imageHash) covered.add(`i:${imageHash}`);
+    };
+    for (const asset of assets.values()) cover(asset.video_id, asset.image_hash);
+    const storedInsights = (existingByAd.get(ad.id) ?? []).filter((row) => row.source !== "meta_creative");
+    for (const row of storedInsights) cover(row.video_id, row.image_hash);
+    const hasBreakdownHistory = reported.length > 0 || storedInsights.length > 0;
+    for (const asset of creativeAssets(ad.creative)) {
+      const hasMedia = Boolean(asset.videoId || asset.imageHash);
+      // The `Creative <id>` placeholder only stands in when nothing better exists.
+      if (!hasMedia && hasBreakdownHistory) continue;
+      if (covered.has(`v:${asset.videoId}`) || covered.has(`i:${asset.imageHash}`)) continue;
+      add(asset.label, asset.type, "meta_creative", { videoId: asset.videoId, imageHash: asset.imageHash, thumbnailUrl: asset.thumbnailUrl });
+      cover(asset.videoId, asset.imageHash);
+    }
+
+    // The ad-level thumbnail is only accurate when the ad has one creative.
+    const adAssets = [...assets.values()];
+    const totalCreatives = new Set([...adAssets.map((asset) => asset.id), ...storedInsights.map((row) => row.id)]).size;
+    if (totalCreatives === 1) {
+      adAssets[0].thumbnail_url ??= adThumb;
+    } else {
+      // On multi-creative ads, clear any thumbnail that erroneously matches the parent ad's thumbnail
+      for (const asset of adAssets) {
+        if (asset.thumbnail_url && asset.thumbnail_url === adThumb) {
+          asset.thumbnail_url = null;
+        }
+      }
+    }
+    result.push(...adAssets);
   }
-  return [...assets.values()];
+  return result;
 }
 
 

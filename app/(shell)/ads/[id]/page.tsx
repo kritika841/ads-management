@@ -15,14 +15,15 @@ import { CreatorChangeRequestActions } from "@/components/workflow/creator-chang
 import { CreatorReviewActions } from "@/components/workflow/creator-review-actions";
 import { EditingTimeDisplay } from "@/components/workflow/editing-time-display";
 import { EditorWorkspace } from "@/components/workflow/editor-workspace";
-import { ManagerFinalUpload } from "@/components/workflow/manager-final-upload";
 import { ProductionStageBadge } from "@/components/workflow/production-stage";
 import { ReassignEditorButton } from "@/components/workflow/reassign-editor-button";
 import { UnfreezeEditingButton } from "@/components/workflow/unfreeze-editing-button";
+import { EditingFreezeBadge, FreezeEditingToggle } from "@/components/workflow/freeze-editing-toggle";
 import { hasAdAccess } from "@/lib/ad-access";
 import { requireProfile } from "@/lib/auth";
 import { getAdDetail, getAppSettings, getCampaigns, getEditorInProgressCount, getEditorTimeLogs, getEditorWorkloads, getProducts, getProfiles, getTags } from "@/lib/data";
 import { canDeleteAd } from "@/lib/permissions";
+import { creatorCapableProfiles, isCreatorCapableRole } from "@/lib/creators";
 import { creatorEditableStages, getProductionStageLabel, isFinalMediaVisible, productionStageLabels, workflowWaitingLabel } from "@/lib/production-workflow";
 import type { ResubmissionFeedbackItem } from "@/lib/resubmission";
 import type { AdWithRelations, Profile } from "@/lib/types";
@@ -50,21 +51,19 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
 
   const { ad, versions, comments, annotations, reviews, activity, collaboratorIds } = detail;
   const editors = profiles.filter((item) => item.role === "editor");
-  const creators = profiles.filter((item) => item.role === "content_creator");
+  const creators = creatorCapableProfiles(profiles);
   const mentionableUsers = profiles
     .filter((item) => item.active && item.id !== profile.id)
     .map((item) => ({ ...item, hasAccess: hasAdAccess(item, ad, collaboratorIds) }));
   const isCreator =
-    (profile.role === "content_creator" || profile.role === "manager") &&
-    (ad.creator_id === profile.id || activity.some((item) => item.actor_id === profile.id && item.action === "creator_item_created"));
+    isCreatorCapableRole(profile.role) &&
+    (ad.creator_id === profile.id || (profile.role !== "admin" && activity.some((item) => item.actor_id === profile.id && item.action === "creator_item_created")));
   const isAssignedEditor = profile.role === "editor" && ad.editor_id === profile.id;
   const creatorCanEdit = isCreator && creatorEditableStages.includes(ad.production_stage as (typeof creatorEditableStages)[number]);
   const editorHasTask = isAssignedEditor && ["ready_for_edit", "editing", "changes_requested"].includes(ad.production_stage);
   const creatorNeedsReview = isCreator && ad.production_stage === "creator_review";
   const creatorNeedsChanges = isCreator && ad.production_stage === "creator_changes_requested";
   const canReassign = isReviewer && ["ready_for_edit", "editing", "changes_requested"].includes(ad.production_stage);
-  // Admin/manager can always upload final clip unless the ad is already approved (managers) or under any stage (admins)
-  const canUploadFinalClip = isReviewer && ad.production_stage !== "approved";
   const mediaVisible = isFinalMediaVisible(ad.production_stage);
   const latestVersionAt = versions[0]?.created_at ?? null;
   const resubmissionFeedback: ResubmissionFeedbackItem[] = [
@@ -100,6 +99,7 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <h1 className="text-2xl font-semibold text-foreground">{ad.name}</h1>
               <ProductionStageBadge stage={ad.production_stage} role={profile.role} allowManagerFinalApproval={settings.allow_manager_final_approval ?? true} approvalStage={ad.approval_stage} />
+              {isReviewer || isAssignedEditor ? <EditingFreezeBadge state={ad.editing_freeze} /> : null}
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
               {ad.campaign?.name ?? "No campaign"} · <span suppressHydrationWarning>{workflowWaitingLabel(ad.workflow_status_changed_at)}</span>
@@ -134,6 +134,7 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-muted-foreground">Owner: <strong className="font-medium text-muted-foreground">{currentOwner(ad, settings.allow_manager_final_approval ?? true)}</strong></span>
+            {isReviewer ? <FreezeEditingToggle adId={ad.id} adName={ad.name} stage={ad.production_stage} state={ad.editing_freeze} /> : null}
             {canReassign ? <ReassignEditorButton ad={ad} editors={editors} workloads={editorWorkloads} /> : null}
           </div>
         </section>
@@ -142,10 +143,6 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
           <section className="min-w-0 space-y-5">
             {mediaVisible && ad.drive_file_id ? <AdVersionPreview ad={ad} versions={versions} /> : null}
-
-            {canUploadFinalClip ? (
-              <ManagerFinalUpload ad={ad} profile={profile} />
-            ) : null}
 
             {creatorCanEdit ? (
               <section className="panel overflow-hidden">

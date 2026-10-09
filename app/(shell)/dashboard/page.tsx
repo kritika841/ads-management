@@ -36,19 +36,10 @@ const defaultSettings: AppSettings = {
   updated_at: new Date().toISOString()
 };
 
-type CachedDashboardData = {
-  timestamp: number;
-  ads: DashboardAdSummaryItem[];
-  profiles: Profile[];
-  editorWorkloads: Record<string, number>;
-  settings: AppSettings;
-  timelineData?: EditorTimelinePoint[];
-  editorAverageEditTimes?: Record<string, number>;
-};
+import { dashboardCache, DASHBOARD_CACHE_TTL_MS } from "@/lib/dashboard-cache";
 
-// In-memory short-lived cache (15 seconds) to coalesce concurrent hits and provide instant response
-const cacheMap = new Map<string, CachedDashboardData>();
-const CACHE_TTL_MS = 15_000;
+const cacheMap = dashboardCache;
+const CACHE_TTL_MS = DASHBOARD_CACHE_TTL_MS;
 
 async function safeQuery<T>(promise: Promise<T>, fallback: T, name: string): Promise<T> {
   try {
@@ -133,6 +124,7 @@ export default async function DashboardPage() {
 
   const model = buildDashboardSummary({
     role: profile.role,
+    profileId: profile.id,
     ads,
     profiles,
     editorWorkloads,

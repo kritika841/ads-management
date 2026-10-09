@@ -21,8 +21,8 @@ export function AnalyticsDashboard({ model, profile, products, campaigns, profil
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [slaOpen, setSlaOpen] = useState(false);
   const [isNavigating, startNavigation] = useTransition();
-  const creators = profiles.filter((item) => item.role === "content_creator");
-  const editors = profiles.filter((item) => item.role === "editor");
+  const creators = profiles.filter((item) => item.role === "content_creator" && item.active);
+  const editors = profiles.filter((item) => item.role === "editor" && item.active);
 
   function updateQuery(updates: Record<string, string | null>) {
     const query = new URLSearchParams(window.location.search);

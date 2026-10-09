@@ -56,13 +56,12 @@ describe("Password Reset Authentication Flow", () => {
   it("handles standard non-admin email reset without rate-limit collision", async () => {
     const { sendPasswordResetEmail } = await import("@/lib/password-security");
 
-    await new Promise((r) => setTimeout(r, 2000));
-    const result = await sendPasswordResetEmail("sendmemanymail@gmail.com", "http://localhost:3001", {
+    const result = await sendPasswordResetEmail("manager@satmi.in", "http://localhost:3001", {
       generateDirectLink: false
     });
 
     expect(result.ok).toBe(true);
     expect(result.emailDelivered).toBe(true);
-    expect(result.message).toContain("sendmemanymail@gmail.com");
-  }, 10000);
+    expect(result.message).toContain("manager@satmi.in");
+  });
 });

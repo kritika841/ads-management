@@ -321,7 +321,7 @@ export async function updateMetaAdOutcomes(payload: z.input<typeof metaAdOutcome
 const campaignDestinationSchema = z.object({
   campaignId: z.string().trim().min(1, "Campaign ID is required."),
   campaignName: z.string().trim().optional().or(z.literal("")),
-  destination: z.enum(["default", "testing", "winner", "loser"])
+  destination: z.string().trim().min(1, "Destination is required.")
 });
 
 export async function updateCampaignDestination(payload: z.input<typeof campaignDestinationSchema>) {
@@ -343,9 +343,9 @@ export async function updateCampaignDestination(payload: z.input<typeof campaign
 
   const admin = createSupabaseAdminClient();
   let outcome: "winner" | "loser" | "keep_testing" | null = null;
-  if (destination === "winner") outcome = "winner";
-  else if (destination === "loser") outcome = "loser";
-  else if (destination === "testing") outcome = "keep_testing";
+  if (destination === "winner" || destination === "winner_only" || destination.includes("winner")) outcome = "winner";
+  else if (destination === "loser" || destination === "loser_only" || destination.includes("loser")) outcome = "loser";
+  else if (destination === "testing" || destination === "testing_only" || destination.includes("testing")) outcome = "keep_testing";
   else outcome = null;
 
   const now = new Date().toISOString();

@@ -13,9 +13,7 @@ import { runServerAction } from "@/lib/client-action";
 import { useRouter } from "next/navigation";
 import { CreativeDetailsModal } from "@/components/incentives/creative-details-modal";
 import { ReliableMetaVideo, type LiveMetaVideo } from "@/components/incentives/reliable-meta-video";
-import { mediaImages } from "@/app/live-media-images";
-import { mediaVideos } from "@/app/live-media-videos";
-import { metaCampaignTier } from "@/lib/meta-campaigns";
+import { isCampaignVisibleInMode, metaCampaignTier } from "@/lib/meta-campaigns";
 import {
     assetIdentifier as mediaIdentifier,
     mediaLabelRank,
@@ -28,7 +26,7 @@ type Product = {
 };
 type View = "creative" | "campaign" | "adset";
 export type CreativeMode = "all" | "testing" | "scaling" | "winner" | "loser" | "active" | "paused";
-type SortColumn = "creative" | "campaign" | "delivery" | "spend" | "impressions" | "reach" | "clicks" | "purchases" | "revenue" | "cpa" | "roas" | "ctr" | "cpm" | "newest" | "oldest";
+type SortColumn = "creative" | "campaign" | "delivery" | "spend" | "impressions" | "reach" | "clicks" | "purchases" | "revenue" | "cpa" | "cpc" | "roas" | "ctr" | "cpm" | "newest" | "oldest";
 type SortDirection = "asc" | "desc";
 type MediaMetrics = {
     spend?: number;
@@ -51,6 +49,7 @@ type MediaAsset = {
     creativeId?: string;
     id: string;
     videoId?: string;
+    imageHash?: string;
     name?: string;
     url?: string;
     thumbnail?: string;
@@ -60,7 +59,10 @@ type AssetPreview = {
     ad: MetaAd;
     asset: MediaAsset;
     creative?: IncentiveCreative;
+    /** Creative Library video matched to this specific creative (never the whole ad). */
     libraryAd?: LibraryVideo;
+    /** The ad has exactly one creative, so its primary video is this creative's video. */
+    isOnlyCreative?: boolean;
 };
 type MetaPreview = {
     ad: MetaAd;
@@ -78,8 +80,17 @@ export type IncentivesPeriodSummary = {
     from: string;
     to: string;
     totalSpend: number;
+    totalImpressions: number;
+    totalReach: number;
+    totalClicks: number;
+    totalPurchases: number;
+    totalRevenue: number;
+    cpa: number | null;
+    cpc: number | null;
+    roas: number;
+    ctr: number;
+    cpm: number;
 };
-const mediaAssets: readonly MediaAsset[] = [...(mediaImages as unknown as readonly MediaAsset[]), ...(mediaVideos as unknown as readonly MediaAsset[])];
 function dashboardDate(date = new Date()) {
     const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
     const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
@@ -89,9 +100,18 @@ const dashboardToday = () => dashboardDate();
 function libraryMediaUrl(ad?: Pick<LibraryVideo, "id" | "drive_file_id" | "resolved_video_url"> | IncentiveCreative["ad"]) {
     return ad?.drive_file_id ? `/api/ads/${ad.id}/media?fileId=${encodeURIComponent(ad.drive_file_id)}` : ad?.resolved_video_url ?? null;
 }
-function assetsForAd(ad: MetaAd) {
-    const exact = mediaAssets.filter((asset) => asset.adId === ad.id && (!ad.creative_id || asset.creativeId === ad.creative_id));
-    return exact.length ? exact : mediaAssets.filter((asset) => asset.adId === ad.id);
+const CREATIVE_TAG = /\b(?:HIM|TAM|ISH)\d{2,}\b/i;
+/**
+ * Finds the Creative Library video for one specific Meta creative by its media
+ * filename (e.g. `TAM0141.mp4` → library `TAM0141`). Returns undefined when the
+ * creative's own name does not identify a library video.
+ */
+function libraryForCreative(label: string | null | undefined, libraryByName: Map<string, LibraryVideo>) {
+    if (!label) return undefined;
+    const clean = cleanMediaTitle(label).replace(/\s*\([^)]*\)\s*$/, "").trim();
+    const base = clean.replace(/\.(mp4|mov|m4v|webm|png|jpe?g|webp)$/i, "").trim().toUpperCase();
+    const tag = clean.match(CREATIVE_TAG)?.[0]?.toUpperCase();
+    return (base ? libraryByName.get(base) : undefined) ?? (tag ? libraryByName.get(tag) : undefined);
 }
 function periodMetrics(rows: MetaDailyMetric[] | undefined, from: string, to: string) {
     return (rows ?? []).filter((row) => (!from || row.metric_date >= from) && (!to || row.metric_date <= to)).reduce((total, row) => ({ spend: total.spend + row.spend, impressions: total.impressions + row.impressions, reach: total.reach + row.reach, clicks: total.clicks + row.clicks, linkClicks: total.linkClicks + row.link_clicks, purchases: total.purchases + row.purchases, revenue: total.revenue + row.revenue }), { spend: 0, impressions: 0, reach: 0, clicks: 0, linkClicks: 0, purchases: 0, revenue: 0 });
@@ -174,7 +194,7 @@ export function IncentivePerformance({
     const refreshRetryUsed = useRef(false);
     const destinationMap = useMemo(() => Object.fromEntries(Object.entries(campaignDestinations ?? {}).map(([id, rec]) => [id, rec.destination])), [campaignDestinations]);
     const adById = useMemo(() => new Map(metaAds.map((ad) => [ad.id, ad])), [metaAds]);
-    const campaignNames = useMemo(() => [...new Set(metaAds.map((ad) => ad.campaign_name).filter(Boolean) as string[])].sort(), [metaAds]);
+    const campaignNames = useMemo(() => [...new Set(metaAds.filter((ad) => isCampaignVisibleInMode(ad.campaign_id, mode, destinationMap)).map((ad) => ad.campaign_name).filter(Boolean) as string[])].sort(), [destinationMap, metaAds, mode]);
     const adsetNames = useMemo(() => [...new Set(metaAds.map((ad) => ad.adset_name).filter(Boolean) as string[])].sort(), [metaAds]);
     const creativesByMetaAd = useMemo(() => {
         const grouped = new Map<string, IncentiveCreative[]>();
@@ -193,6 +213,10 @@ export function IncentivePerformance({
     };
     const filtered = useMemo(() => creatives.filter((item) => {
         const meta = adById.get(item.meta_ad_id);
+        const campaignId = meta?.campaign_id ?? item.campaign.id;
+        if (!isCampaignVisibleInMode(campaignId, mode, destinationMap)) {
+            return false;
+        }
         const haystack = `${item.ad.name} ${item.meta_ad_id} ${meta?.creative_id ?? ""} ${meta?.campaign_name ?? ""} ${meta?.adset_name ?? ""} ${item.creator?.name ?? item.ad.creator?.name ?? ""} ${item.editor?.name ?? item.ad.editor?.name ?? ""} ${item.campaign.product?.name ?? ""}`.toLowerCase();
         const decision = item.decision_status ?? (item.evaluation_status === "winner" ? "winner" : "unreviewed");
         const passedWinnerCriteria = meetsWinnerCriteria(item);
@@ -208,6 +232,9 @@ export function IncentivePerformance({
     }).sort((a, b) => compareCreatives(a, b, adById, sort, sortDirection, dateFrom, dateTo)), [adById, adsetFilter, campaignFilter, creatives, dateFrom, dateTo, decisionFilter, destinationMap, incentiveFilter, mode, payoutFilter, productFilter, query, sort, sortDirection, statusFilter]);
     const rows = filtered.slice(0, visibleCount);
     const aggregateAds = metaAds.filter((ad) => {
+        if (!isCampaignVisibleInMode(ad.campaign_id, mode, destinationMap)) {
+            return false;
+        }
         const linked = relatedCreatives(ad);
         const outcome = metaAdOutcome(ad, linked, destinationMap);
         const listingMode = mode === "winner" || mode === "loser" ? "all" : mode;
@@ -228,11 +255,43 @@ export function IncentivePerformance({
     }, [aggregateAds, filtered, mode]);
     const sortedAggregateAds = useMemo(() => [...aggregateAds].sort((a, b) => compareMetaAds(a, b, sort, sortDirection, dateFrom, dateTo)), [aggregateAds, dateFrom, dateTo, sort, sortDirection]);
     const aggregates = view === "creative" ? [] : aggregate(aggregateAds, view, filtered);
-    const periodSummary = useMemo(() => ({
-        from: dateFrom,
-        to: dateTo,
-        totalSpend: aggregateAds.reduce((total, ad) => total + (dateFrom || dateTo ? periodMetrics(ad.daily_metrics, dateFrom, dateTo).spend : ad.spend), 0)
-    }), [aggregateAds, dateFrom, dateTo]);
+    const periodSummary = useMemo(() => {
+        const totals = aggregateAds.reduce((acc, ad) => {
+            const m = dateFrom || dateTo ? periodMetrics(ad.daily_metrics, dateFrom, dateTo) : {
+                spend: ad.spend,
+                impressions: ad.impressions,
+                reach: ad.reach,
+                clicks: ad.clicks,
+                linkClicks: ad.link_clicks,
+                purchases: ad.purchases,
+                revenue: ad.revenue
+            };
+            acc.spend += m.spend;
+            acc.impressions += m.impressions;
+            acc.reach += m.reach;
+            acc.clicks += m.clicks;
+            acc.linkClicks += m.linkClicks;
+            acc.purchases += m.purchases;
+            acc.revenue += m.revenue;
+            return acc;
+        }, { spend: 0, impressions: 0, reach: 0, clicks: 0, linkClicks: 0, purchases: 0, revenue: 0 });
+
+        return {
+            from: dateFrom,
+            to: dateTo,
+            totalSpend: totals.spend,
+            totalImpressions: totals.impressions,
+            totalReach: totals.reach,
+            totalClicks: totals.clicks,
+            totalPurchases: totals.purchases,
+            totalRevenue: totals.revenue,
+            cpa: totals.purchases > 0 ? totals.spend / totals.purchases : null,
+            cpc: totals.linkClicks > 0 ? totals.spend / totals.linkClicks : null,
+            roas: totals.spend > 0 ? totals.revenue / totals.spend : 0,
+            ctr: totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0,
+            cpm: totals.impressions > 0 ? (totals.spend / totals.impressions) * 1000 : 0
+        };
+    }, [aggregateAds, dateFrom, dateTo]);
     useEffect(() => { setVisibleCount(25); setSelected(new Set()); }, [query, campaignFilter, adsetFilter, productFilter, statusFilter, decisionFilter, incentiveFilter, payoutFilter, dateFrom, dateTo, sort, sortDirection, mode]);
     useEffect(() => { setCampaignFilter(""); setAdsetFilter(""); setProductFilter(""); setStatusFilter(""); setDecisionFilter(""); setIncentiveFilter(""); setPayoutFilter(""); setQuery(""); setDateFrom(mode === "winner" || mode === "loser" || mode === "paused" ? "" : dashboardToday()); setDateTo(mode === "winner" || mode === "loser" || mode === "paused" ? "" : dashboardToday()); }, [mode]);
     useEffect(() => { const node = loadMoreRef.current; if (!node || view !== "creative")
@@ -251,40 +310,19 @@ export function IncentivePerformance({
         return maxTime;
     }, [metaAds]);
 
-    const STALE_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
-    const isDataStale = (dateFrom === today && dateTo === today) && (metaAds.length === 0 || (Date.now() - latestSyncTime > STALE_THRESHOLD_MS));
-    const needsAssetRefresh = dateFrom === today && dateTo === today && metaAds.some((ad) => (ad.assets?.length ?? 0) > 0 && ad.assets?.some((asset) => asset.source === "meta_creative" || /save(?:%20|\s)more|satmi(?:%20|\s)bundles/i.test(asset.asset_label) || /^(video|image) \d+$/i.test(asset.asset_label) || /^\d{8,}$/.test(asset.asset_label) || isCaptionLike(asset.asset_label) || (/\.(mp4|mov|m4v|webm).*\(\d{8,}\)$/i.test(asset.asset_label) && !/^(video|image)\b/i.test(asset.asset_label)) || !asset.daily_metrics?.some((metric) => metric.metric_date === today)));
-    const needsTodayRefresh = isDataStale || needsAssetRefresh;
-    useEffect(() => {
-        if (!needsTodayRefresh || autoRefreshAttempted.current) return;
-        autoRefreshAttempted.current = true;
-        setRefreshingToday(true);
-        fetch("/api/incentives/sync", { method: "POST" }).then((response) => {
-            if (response.ok) router.refresh();
-            else if (!refreshRetryUsed.current) {
-                refreshRetryUsed.current = true;
-                autoRefreshAttempted.current = false;
-                window.setTimeout(() => router.refresh(), 2000);
-            }
-        }).catch(() => undefined).finally(() => setRefreshingToday(false));
-    }, [metaAds, needsTodayRefresh, router]);
-
-    useEffect(() => {
-        const interval = setInterval(() => {
-            if (!refreshingToday && Date.now() - latestSyncTime > STALE_THRESHOLD_MS && dateFrom === today && dateTo === today) {
-                fetch("/api/incentives/sync", { method: "POST" })
-                    .then((res) => { if (res.ok) router.refresh(); })
-                    .catch(() => undefined);
-            }
-        }, 10 * 60 * 1000);
-        return () => clearInterval(interval);
-    }, [dateFrom, dateTo, latestSyncTime, refreshingToday, router, today]);
     const setColumnSort = (column: SortColumn) => {
         if (sort === column) setSortDirection((direction) => direction === "asc" ? "desc" : "asc");
         else { setSort(column); setSortDirection(["creative", "campaign", "delivery", "newest", "oldest"].includes(column) ? "asc" : "desc"); }
     };
     const clear = () => { setCampaignFilter(""); setAdsetFilter(""); setProductFilter(""); setQuery(""); setStatusFilter(""); setDecisionFilter(""); setIncentiveFilter(""); setPayoutFilter(""); setDateFrom(mode === "paused" ? "" : dashboardToday()); setDateTo(mode === "paused" ? "" : dashboardToday()); setSort("spend"); setSortDirection("desc"); setSelected(new Set()); };
     const setQuickRange = (range: "today" | "yesterday" | "week" | "month" | "thisMonth") => {
+        if (range === "today") {
+            const todayStr = dashboardToday();
+            setDateFrom(todayStr);
+            setDateTo(todayStr);
+            setPage(1);
+            return;
+        }
         const now = new Date();
         const format = (date: Date) => dashboardDate(date);
         const end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -367,6 +405,9 @@ function matchesMetaAd(ad: MetaAd, filters: {
     dateTo: string;
     mode: CreativeMode;
 }, destinationOverrides?: Record<string, string>) {
+    if (!isCampaignVisibleInMode(ad.campaign_id, filters.mode, destinationOverrides)) {
+        return false;
+    }
     const delivery = deliveryStatus(ad, filters.dateFrom, filters.dateTo);
     const haystack = `${ad.name} ${ad.id} ${ad.creative_id ?? ""} ${ad.campaign_name ?? ""} ${ad.adset_name ?? ""} ${ad.detected_tag ?? ""}`.toLowerCase();
     const tier = metaCampaignTier(ad.campaign_id, destinationOverrides);
@@ -422,6 +463,7 @@ function metaSortValue(ad: MetaAd, column: SortColumn, from: string, to: string)
     if (column === "campaign") return `${ad.campaign_name ?? ""} ${ad.adset_name ?? ""}`;
     if (column === "delivery") return deliveryStatus(ad, from, to);
     if (column === "cpa") return metrics.purchases ? metrics.spend / metrics.purchases : Infinity;
+    if (column === "cpc") return metrics.linkClicks ? metrics.spend / metrics.linkClicks : Infinity;
     if (column === "roas") return metrics.spend ? metrics.revenue / metrics.spend : 0;
     if (column === "ctr") return metrics.impressions ? metrics.clicks / metrics.impressions : 0;
     if (column === "cpm") return metrics.impressions ? metrics.spend / metrics.impressions * 1000 : 0;
@@ -442,12 +484,12 @@ function compareCreatives(left: IncentiveCreative, right: IncentiveCreative, ads
     const fallback = (creative: IncentiveCreative): MetaAd => ({ ...ads.get(creative.meta_ad_id), id: creative.meta_ad_id, name: creative.ad.name, spend: creative.latest_spend, purchases: creative.latest_purchases, revenue: 0, impressions: 0, reach: 0, clicks: 0, link_clicks: 0, cpa: null, campaign_id: null, campaign_name: creative.campaign.name, adset_id: null, adset_name: null, creative_id: null, creative_name: null, thumbnail_url: null, status: null, effective_status: null, created_time: creative.launched_on, insights_from: null, insights_to: null, last_synced_at: creative.last_synced_at ?? "", matched_ad_id: null, matched_creator_id: null, matched_editor_id: null, detected_tag: null, auto_matched_at: null });
     return compareMetaAds(fallback(left), fallback(right), column, direction, from, to);
 }
-function SortHeader({ column, label, sort, sortDirection, onSort, className = "" }: { column: SortColumn; label: string; sort: SortColumn; sortDirection: SortDirection; onSort: (column: SortColumn) => void; className?: string }) {
+function SortHeader({ column, label, sort, sortDirection, onSort, className = "", title }: { column: SortColumn; label: string; sort: SortColumn; sortDirection: SortDirection; onSort: (column: SortColumn) => void; className?: string; title?: string }) {
     const active = sort === column;
     const Icon = active ? sortDirection === "asc" ? ArrowUp : ArrowDown : ArrowDownUp;
     const defaultDirection: SortDirection = ["creative", "campaign", "delivery", "newest", "oldest"].includes(column) ? "asc" : "desc";
     const nextDirection = active ? (sortDirection === "asc" ? "desc" : "asc") : defaultDirection;
-    return <th className={cn("px-4 py-3", className)}><button type="button" onClick={() => onSort(column)} className="inline-flex items-center gap-1 font-medium hover:text-foreground" aria-label={`Sort by ${label}, ${nextDirection === "asc" ? "ascending" : "descending"}`}><span>{label}</span><Icon className={cn("size-3.5", active && "text-foreground")}/></button></th>;
+    return <th className={cn("px-4 py-3", className)} title={title}><button type="button" onClick={() => onSort(column)} className="inline-flex items-center gap-1 font-medium hover:text-foreground" aria-label={`Sort by ${label}, ${nextDirection === "asc" ? "ascending" : "descending"}`}><span>{label}</span><Icon className={cn("size-3.5", active && "text-foreground")}/></button></th>;
 }
 function CreativeThumbnail({ sources, className = "size-full object-cover" }: { sources: Array<string | null | undefined>; className?: string }) {
     const usableSources = sources.filter((source): source is string => Boolean(source));
@@ -482,45 +524,50 @@ function CreativeAssetsTable({ ads, creatives, libraryAds, reviewer, selected, a
         ad: MetaAd;
         asset?: ReportedAsset;
         mapped?: IncentiveCreative;
+        /** Ad-level library match, used for attribution only. */
         libraryAd?: LibraryVideo;
+        /** Library video for this exact creative; the only one ever previewed. */
+        previewLibrary?: LibraryVideo;
     };
     const libraryAdById = new Map(libraryAds.map((item) => [item.id, item]));
+    const libraryByName = new Map(libraryAds.filter((item) => item.name).map((item) => [item.name.trim().toUpperCase(), item]));
     const assetsByAd = new Map<string, ReportedAsset[]>();
     const rows: AssetRow[] = ads.flatMap((ad): AssetRow[] => {
         const mapped = creatives.find((creative) => creative.meta_ad_id === ad.id || creative.ad_id === ad.matched_ad_id);
         const libraryAd = (ad.matched_ad_id ? libraryAdById.get(ad.matched_ad_id) : undefined) ?? (mapped ? mapped.ad : undefined);
-        const knownAssets = assetsForAd(ad);
         const assetsByMediaId = new Map<string, ReportedAsset>();
+        const rowScore = (row: ReportedAsset) => (row.source === "meta_insights" ? 100 : 0) + (row.daily_metrics?.length ? 50 : 0) + mediaLabelRank(row.asset_label);
         for (const asset of ad.assets ?? []) {
             let normalized = asset.asset_label.replaceAll("%20", " ");
             const mid = mediaIdentifier(normalized);
-            const matchingKnown = mid
-                ? (knownAssets.find((k) => k.id === mid || k.videoId === mid || k.key?.includes(mid))
-                   ?? mediaAssets.find((k) => k.id === mid || k.videoId === mid || k.key?.includes(mid)))
-                : knownAssets.length === 1 ? knownAssets[0] : undefined;
-
             if (isCaptionLike(normalized) || /^\d{8,}$|^(video|image)\s+\d{8,}$/i.test(normalized)) {
-                if (matchingKnown?.name && !isCaptionLike(matchingKnown.name)) {
-                    normalized = /\.(mp4|mov|m4v|webm)$/i.test(matchingKnown.name) ? `Video ${matchingKnown.name} (${mid ?? asset.id})` : `${matchingKnown.name} (${mid ?? asset.id})`;
-                } else if (libraryAd?.name && (ad.assets?.length ?? 1) <= 1) {
+                if (libraryAd?.name && (ad.assets?.length ?? 1) <= 1) {
                     normalized = `Video ${libraryAd.name}.mp4 (${mid ?? asset.id})`;
                 } else if (ad.detected_tag && (ad.assets?.length ?? 1) <= 1) {
                     normalized = `Video ${ad.detected_tag}.mp4 (${mid ?? asset.id})`;
                 } else if (/^(?:HIM|TAM|ISH)\d{2,}/i.test(ad.name) && (ad.assets?.length ?? 1) <= 1) {
-                    const tagMatch = ad.name.match(/\b(?:HIM|TAM|ISH)\d{2,}\b/i)?.[0];
+                    const tagMatch = ad.name.match(CREATIVE_TAG)?.[0];
                     normalized = tagMatch ? `Video ${tagMatch.toUpperCase()}.mp4 (${mid ?? asset.id})` : (mid ? `Video ${mid}` : normalized);
                 } else if (mid) {
                     normalized = `Video ${mid}`;
                 }
             }
-            const row = { ...asset, asset_label: normalized, key: asset.id, type: asset.asset_type === "image" ? "image" : "video", adId: ad.id, thumbnail: asset.thumbnail_url ?? undefined, name: normalized, campaign: ad.campaign_name ?? undefined, adSet: ad.adset_name ?? undefined } as ReportedAsset;
-            const key = mediaIdentifier(normalized) ? `${ad.id}:${mediaIdentifier(normalized)}` : asset.id;
+            const type = asset.video_id ? "video" : asset.image_hash || asset.asset_type === "image" ? "image" : "video";
+            const row = { ...asset, asset_label: normalized, key: asset.id, type, adId: ad.id, creativeId: asset.creative_id ?? ad.creative_id ?? undefined, videoId: asset.video_id ?? undefined, imageHash: asset.image_hash ?? undefined, thumbnail: asset.thumbnail_url ?? undefined, name: normalized, campaign: ad.campaign_name ?? undefined, adSet: ad.adset_name ?? undefined } as ReportedAsset;
+            // The same media can arrive under several labels (breakdown name vs
+            // creative-spec ID); its Meta video ID / image hash is the identity.
+            const key = asset.video_id ? `${ad.id}:v:${asset.video_id}` : asset.image_hash ? `${ad.id}:i:${asset.image_hash}` : mid ? `${ad.id}:${mid}` : asset.id;
             const existing = assetsByMediaId.get(key);
-            if (!existing || mediaLabelRank(normalized) > mediaLabelRank(existing.asset_label)) assetsByMediaId.set(key, row);
+            if (!existing || rowScore(row) > rowScore(existing)) assetsByMediaId.set(key, row);
         }
         const assets = [...assetsByMediaId.values()];
         assetsByAd.set(ad.id, assets);
-        return assets.length ? assets.map((asset) => ({ ad, asset, mapped, libraryAd })) : [{ ad, asset: undefined, mapped, libraryAd }];
+        if (!assets.length) return [{ ad, asset: undefined, mapped, libraryAd, previewLibrary: libraryAd }];
+        return assets.map((asset) => ({
+            ad, asset, mapped, libraryAd,
+            // An ad-level library match only describes the creative when the ad has one creative.
+            previewLibrary: libraryForCreative(asset.asset_label, libraryByName) ?? (assets.length === 1 ? libraryAd : undefined)
+        }));
     });
     const metricsForRow = (row: AssetRow) => {
         const assetRows = row.asset?.daily_metrics;
@@ -534,7 +581,28 @@ function CreativeAssetsTable({ ads, creatives, libraryAds, reviewer, selected, a
         const adAssets = assetsByAd.get(row.ad.id) ?? [];
         const anyAssetHasMetrics = adAssets.some((a) => a.daily_metrics?.some((m) => (!dateFrom || m.metric_date >= dateFrom) && (!dateTo || m.metric_date <= dateTo)));
         const useParentFallback = !hasReportedAssetMetrics && (isOnlyCreative || !row.asset || !anyAssetHasMetrics);
-        return periodMetrics(hasReportedAssetMetrics ? assetRows : useParentFallback ? row.ad.daily_metrics : [], dateFrom, dateTo);
+        const metrics = periodMetrics(hasReportedAssetMetrics ? assetRows : useParentFallback ? row.ad.daily_metrics : [], dateFrom, dateTo);
+        const parentMetrics = periodMetrics(row.ad.daily_metrics, dateFrom, dateTo);
+
+        // Meta Graph API omits offsite pixel conversions (purchases & revenue) from video_asset breakdowns.
+        // 1. If this is the only creative for this ad, 100% of parent purchases/revenue belong to it.
+        // 2. If it's a multi-asset ad and asset breakdown underreports purchases (or drops them),
+        //    attribute purchases/revenue proportionally based on asset spend share.
+        if (parentMetrics.purchases > 0 && parentMetrics.spend > 0) {
+            const allAssetPurchases = adAssets.reduce((sum, a) => sum + periodMetrics(a.daily_metrics, dateFrom, dateTo).purchases, 0);
+            if (isOnlyCreative || allAssetPurchases < parentMetrics.purchases) {
+                const spendRatio = metrics.spend > 0 ? metrics.spend / parentMetrics.spend : (isOnlyCreative ? 1 : 0);
+                const scaledPurchases = isOnlyCreative ? parentMetrics.purchases : Math.round(parentMetrics.purchases * spendRatio);
+                const scaledRevenue = isOnlyCreative ? parentMetrics.revenue : parentMetrics.revenue * spendRatio;
+                return {
+                    ...metrics,
+                    purchases: scaledPurchases,
+                    revenue: scaledRevenue
+                };
+            }
+        }
+
+        return metrics;
     };
     const assetSortValue = (row: AssetRow, column: SortColumn): string | number => {
         const metrics = metricsForRow(row);
@@ -542,6 +610,7 @@ function CreativeAssetsTable({ ads, creatives, libraryAds, reviewer, selected, a
         if (column === "campaign") return `${row.ad.campaign_name ?? ""} ${row.ad.adset_name ?? ""}`;
         if (column === "delivery") return deliveryStatus(row.ad, dateFrom, dateTo);
         if (column === "cpa") return metrics.purchases ? metrics.spend / metrics.purchases : Infinity;
+        if (column === "cpc") return metrics.linkClicks ? metrics.spend / metrics.linkClicks : Infinity;
         if (column === "roas") return metrics.spend ? metrics.revenue / metrics.spend : 0;
         if (column === "ctr") return metrics.impressions ? metrics.clicks / metrics.impressions : 0;
         if (column === "cpm") return metrics.impressions ? metrics.spend / metrics.impressions * 1000 : 0;
@@ -558,7 +627,7 @@ function CreativeAssetsTable({ ads, creatives, libraryAds, reviewer, selected, a
             || availability(right) - availability(left)
             || compareValues(assetSortValue(left, "creative"), assetSortValue(right, "creative"), "asc");
     });
-    return <div className="overflow-x-auto"><table className="min-w-[1650px] w-full text-left text-sm"><thead className="bg-muted/70 text-xs text-muted-foreground"><tr>{reviewer ? <th className="w-10 px-4 py-3"><input type="checkbox" checked={allSelected} onChange={onToggleAll} aria-label="Select all matching creatives"/></th> : null}<SortHeader column="creative" label="Creative" sort={sort} sortDirection={sortDirection} onSort={onSort}/><SortHeader column="campaign" label="Campaign / ad set" sort={sort} sortDirection={sortDirection} onSort={onSort}/><SortHeader column="delivery" label="Delivery" sort={sort} sortDirection={sortDirection} onSort={onSort}/>{!isEffectiveHidden("spend") ? <SortHeader column="spend" label="Spend" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("impressions") ? <SortHeader column="impressions" label="Impr." sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("reach") ? <SortHeader column="reach" label="Reach" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("clicks") ? <SortHeader column="clicks" label="Clicks" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("purchases") ? <SortHeader column="purchases" label="Purchases" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("revenue") ? <SortHeader column="revenue" label="Revenue" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("cpa") ? <SortHeader column="cpa" label="CPA" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("roas") ? <SortHeader column="roas" label="ROAS" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("ctr") ? <SortHeader column="ctr" label="CTR" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("cpm") ? <SortHeader column="cpm" label="CPM" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}<th className="px-4 py-3">Result</th><th className="px-4 py-3">Attribution</th><th className="px-4 py-3"/></tr></thead><tbody className="divide-y divide-border">{orderedRows.map(({ ad, asset, mapped, libraryAd }) => {
+    return <div className="overflow-x-auto"><table className="min-w-[1650px] w-full text-left text-sm"><thead className="bg-muted/70 text-xs text-muted-foreground"><tr>{reviewer ? <th className="w-10 px-4 py-3"><input type="checkbox" checked={allSelected} onChange={onToggleAll} aria-label="Select all matching creatives"/></th> : null}<SortHeader column="creative" label="Creative" sort={sort} sortDirection={sortDirection} onSort={onSort}/><SortHeader column="campaign" label="Campaign / ad set" sort={sort} sortDirection={sortDirection} onSort={onSort}/><SortHeader column="delivery" label="Delivery" sort={sort} sortDirection={sortDirection} onSort={onSort}/>{!isEffectiveHidden("spend") ? <SortHeader column="spend" label="Spend" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("impressions") ? <SortHeader column="impressions" label="Impr." sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("reach") ? <SortHeader column="reach" label="Reach" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("clicks") ? <SortHeader column="clicks" label="Clicks" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("purchases") ? <SortHeader column="purchases" label="Purchases" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("revenue") ? <SortHeader column="revenue" label="Revenue" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("cpa") ? <SortHeader column="cpa" label="CPA" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("cpc") ? <SortHeader column="cpc" label="CPC" title="Cost per landing page click (link click)" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("roas") ? <SortHeader column="roas" label="ROAS" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("ctr") ? <SortHeader column="ctr" label="CTR" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("cpm") ? <SortHeader column="cpm" label="CPM" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}<th className="px-4 py-3">Result</th><th className="px-4 py-3">Attribution</th><th className="px-4 py-3"/></tr></thead><tbody className="divide-y divide-border">{orderedRows.map(({ ad, asset, mapped, libraryAd, previewLibrary }) => {
             // An ad can contain multiple assets. Reusing parent-ad totals here would
             // duplicate spend and conversions, so asset rows only use Meta asset data.
             const assetRows = asset?.daily_metrics;
@@ -580,27 +649,32 @@ function CreativeAssetsTable({ ads, creatives, libraryAds, reviewer, selected, a
             // asset), annotate with the data source
             const usingParentFallback = Boolean(asset) && !hasReportedAssetMetrics && !isOnlyCreative && !anyReportedAssetMetrics && adHasActivity;
             const cpa = metrics.purchases ? metrics.spend / metrics.purchases : null;
+            const cpc = metrics.linkClicks ? metrics.spend / metrics.linkClicks : null;
             const roas = metrics.spend ? metrics.revenue / metrics.spend : 0;
             const ctr = metrics.impressions ? metrics.clicks / metrics.impressions * 100 : 0;
             const cpm = metrics.impressions ? metrics.spend / metrics.impressions * 1000 : 0;
             const delivery = deliveryStatus(ad, dateFrom, dateTo);
-            const knownAssets = assetsForAd(ad);
-            const playableAsset = asset ? knownAssets.find((candidate) => candidate.id === asset.id || candidate.key === asset.id || candidate.name === asset.asset_label) : knownAssets.length === 1 ? knownAssets[0] : undefined;
-            const imageSources = [libraryAd?.drive_file_id ? `/api/ads/${libraryAd.id}/thumbnail` : null, libraryAd?.thumbnail_url, playableAsset?.thumbnail, asset?.thumbnail_url, ad.thumbnail_url];
+            const isSingleCreativeAd = creativeCount <= 1;
+            // Thumbnails belong to this creative; the ad thumbnail is only
+            // representative when the ad has a single creative.
+            const creativeThumbnail = (!isSingleCreativeAd && asset?.thumbnail_url === ad.thumbnail_url)
+                ? null
+                : asset?.thumbnail_url;
+            const liveVideoThumb = asset?.videoId ? `/api/incentives/meta-preview?videoId=${asset.videoId}&thumbnail=1` : null;
+            const imageSources = [
+                previewLibrary?.drive_file_id ? `/api/ads/${previewLibrary.id}/thumbnail` : null,
+                previewLibrary?.thumbnail_url,
+                creativeThumbnail,
+                liveVideoThumb,
+                isSingleCreativeAd ? ad.thumbnail_url : null
+            ];
             const resolveDisplayName = () => {
                 const clean = asset?.asset_label ? cleanMediaTitle(asset.asset_label) : "";
                 if (clean && !isCaptionLike(clean) && !/^\d{8,}$|^(video|image)\s+\d{8,}$/i.test(clean)) {
                     return clean;
                 }
                 const mid = asset ? (mediaIdentifier(asset.asset_label) ?? mediaIdentifier(asset.id) ?? asset.id) : null;
-                const foundAsset = mid ? mediaAssets.find((candidate) => candidate.id === mid || candidate.videoId === mid || candidate.key?.includes(mid)) : undefined;
-                if (foundAsset?.name && !isCaptionLike(foundAsset.name)) {
-                    return cleanMediaTitle(foundAsset.name);
-                }
-                if (playableAsset?.name && !isCaptionLike(playableAsset.name)) {
-                    return cleanMediaTitle(playableAsset.name);
-                }
-                const creativeLibName = libraryAd?.name ?? ad.matched_creative_name;
+                const creativeLibName = previewLibrary?.name ?? (isSingleCreativeAd ? ad.matched_creative_name : null);
                 if (creativeLibName && !isCaptionLike(creativeLibName)) {
                     return cleanMediaTitle(`${creativeLibName}.mp4`);
                 }
@@ -622,9 +696,12 @@ function CreativeAssetsTable({ ads, creatives, libraryAds, reviewer, selected, a
             const displayName = resolveDisplayName();
             const assetMediaId = asset ? (mediaIdentifier(asset.asset_label) ?? mediaIdentifier(asset.id)) : null;
             const metricValue = (value: string) => unavailable ? "Not reported" : value;
-            const openPreview = () => playableAsset ? onView({ ad, asset: playableAsset, creative: mapped, libraryAd }) : onViewAd(ad, mapped, libraryAd);
+            // Each creative row previews its own media: the stored per-creative
+            // video ID, or a Creative Library video matched to this creative.
+            const openPreview = () => asset ? onView({ ad, asset, creative: mapped, libraryAd: previewLibrary, isOnlyCreative }) : onViewAd(ad, mapped, previewLibrary);
+            const mediaCaption = asset?.videoId ? `Video ${asset.videoId}` : asset?.imageHash ? `Image ${asset.imageHash.slice(0, 10)}…` : assetMediaId ? `Asset ${assetMediaId}` : "Ad-level metrics only";
             return <tr key={asset?.key ?? ad.id} className="bg-card align-top">
-      {reviewer ? <td className="px-4 py-3"><input type="checkbox" checked={selected.has(mapped?.id ?? `meta:${ad.id}`)} onChange={() => onToggle(mapped?.id ?? `meta:${ad.id}`)} aria-label={`Select ${displayName}`}/></td> : null}<td className="px-4 py-3"><div className="flex items-center gap-3"><button type="button" className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-muted transition-opacity hover:opacity-75 focus:outline-none focus:ring-2 focus:ring-primary" onClick={openPreview} aria-label={`Play ${displayName}`}><CreativeThumbnail sources={imageSources}/></button><div className="min-w-0"><p className="max-w-64 truncate font-medium">{displayName}</p><p className="max-w-64 truncate text-[10px] text-muted-foreground">Meta ad: {ad.name || "Unnamed ad"}</p><p className="font-mono text-[10px] text-muted-foreground">{assetMediaId ? `Asset ${assetMediaId}` : playableAsset?.videoId ? `Video ${playableAsset.videoId}` : "Ad-level metrics only"} · Meta ad {ad.id}</p></div></div></td>
+      {reviewer ? <td className="px-4 py-3"><input type="checkbox" checked={selected.has(mapped?.id ?? `meta:${ad.id}`)} onChange={() => onToggle(mapped?.id ?? `meta:${ad.id}`)} aria-label={`Select ${displayName}`}/></td> : null}<td className="px-4 py-3"><div className="flex items-center gap-3"><button type="button" className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-muted transition-opacity hover:opacity-75 focus:outline-none focus:ring-2 focus:ring-primary" onClick={openPreview} aria-label={`Play ${displayName}`}><CreativeThumbnail sources={imageSources}/></button><div className="min-w-0"><p className="max-w-64 truncate font-medium">{displayName}</p><p className="max-w-64 truncate text-[10px] text-muted-foreground">Meta ad: {ad.name || "Unnamed ad"}</p><p className="font-mono text-[10px] text-muted-foreground">{mediaCaption} · Meta ad {ad.id}</p></div></div></td>
       <td className="px-4 py-3"><p className="max-w-56 truncate">{ad.campaign_name ?? asset?.campaign ?? "—"}</p><p className="max-w-56 truncate text-xs text-muted-foreground">{ad.adset_name ?? asset?.adSet ?? "—"}</p></td>
       <td className="px-4 py-3"><span className={cn("rounded-full px-2 py-1 text-xs font-medium", delivery === "Active" ? "bg-success/15 text-success" : delivery === "Learning" ? "bg-warning/15 text-warning" : "bg-muted text-muted-foreground")}>{delivery}</span></td>
       {!isEffectiveHidden("spend") ? <td className="px-4 py-3 tabular-nums">{metricValue(money(metrics.spend))}</td> : null}
@@ -634,12 +711,13 @@ function CreativeAssetsTable({ ads, creatives, libraryAds, reviewer, selected, a
       {!isEffectiveHidden("purchases") ? <td className="px-4 py-3 tabular-nums">{metricValue(number(metrics.purchases))}</td> : null}
       {!isEffectiveHidden("revenue") ? <td className="px-4 py-3 tabular-nums">{metricValue(money(metrics.revenue))}</td> : null}
       {!isEffectiveHidden("cpa") ? <td className="px-4 py-3 tabular-nums">{unavailable || cpa == null ? "—" : money(cpa)}</td> : null}
+      {!isEffectiveHidden("cpc") ? <td className="px-4 py-3 tabular-nums">{unavailable || cpc == null ? "—" : money(cpc)}</td> : null}
       {!isEffectiveHidden("roas") ? <td className="px-4 py-3 tabular-nums">{unavailable ? "—" : roas.toFixed(2)}</td> : null}
       {!isEffectiveHidden("ctr") ? <td className="px-4 py-3 tabular-nums">{unavailable ? "—" : `${ctr.toFixed(2)}%`}</td> : null}
       {!isEffectiveHidden("cpm") ? <td className="px-4 py-3 tabular-nums">{unavailable ? "—" : money(cpm)}</td> : null}
       <td className="px-4 py-3">{ad.manual_outcome ? <><OutcomeBadge outcome={ad.manual_outcome}/><p className="mt-1 text-[10px] text-muted-foreground">Manual ad override</p></> : mapped ? <><OutcomeBadge outcome={mapped.decision_status ?? "unreviewed"}/><p className="mt-1 text-[10px] text-muted-foreground">Tracking result</p>{reviewer ? <DecisionSelect creative={mapped}/> : null}</> : <span className="text-xs text-muted-foreground">Not set</span>}</td>
       <td className="px-4 py-3 text-xs text-muted-foreground">{(() => {
-          const creativeLibName = libraryAd?.name ?? ad.matched_creative_name;
+          const creativeLibName = previewLibrary?.name ?? libraryAd?.name ?? ad.matched_creative_name;
           if (creativeLibName) {
             return (
               <>
@@ -688,24 +766,30 @@ function AssetPreviewModal({ preview, onClose }: {
     preview: AssetPreview;
     onClose: () => void;
 }) {
-    const { ad, asset, creative, libraryAd } = preview;
+    const { ad, asset, libraryAd, isOnlyCreative } = preview;
     const [resolved, setResolved] = useState<LiveMetaVideo | null>(null);
-    const storedCreative = libraryAd ?? creative?.ad;
+    // Only a library video matched to this exact creative is ever shown here;
+    // the ad-level match / incentive link would show the wrong creative.
+    const storedCreative = libraryAd;
     const storedMediaUrl = libraryMediaUrl(storedCreative);
-    return <Modal open labelledBy="asset-preview-title" onClose={onClose}><section className="mx-auto max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl bg-card shadow-float"><div className="flex items-start justify-between border-b border-border p-5"><div><h2 id="asset-preview-title" className="text-lg font-semibold">{storedCreative?.name ?? asset.name ?? ad.name}</h2><p className="mt-1 text-xs text-muted-foreground">{storedMediaUrl ? "Creative Library video" : `Meta ad: ${ad.name} · Video ${asset.videoId ?? "primary"}`}</p></div><Button size="icon" variant="ghost" onClick={onClose} title="Close"><X className="size-5"/></Button></div><div className="space-y-4 p-5"><div className="flex min-h-64 items-center justify-center overflow-hidden rounded-lg border border-border bg-neutral-950">{storedMediaUrl ? <video src={storedMediaUrl} controls autoPlay muted preload="auto" playsInline className="max-h-[32rem] w-full object-contain"/> : asset.type === "video" ? <ReliableMetaVideo adId={ad.id} creativeId={asset.creativeId ?? ad.creative_id} videoId={asset.videoId} onResolved={setResolved}/> : <p className="text-sm text-destructive">This row is not a video asset.</p>}</div>{storedMediaUrl ? <a className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm hover:bg-muted" href={`/api/ads/${storedCreative!.id}/download`} target="_blank" rel="noreferrer"><Download className="size-4"/>Download Creative Library video</a> : resolved ? <a className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm hover:bg-muted" href={resolved.downloadUrl} target="_blank" rel="noreferrer"><Download className="size-4"/>Download exact Meta video</a> : null}</div></section></Modal>;
+    // Without a stored video ID, the ad's primary video is only correct when
+    // the ad has a single creative.
+    const canResolveLive = Boolean(asset.videoId) || Boolean(isOnlyCreative);
+    const mediaLabel = asset.videoId ? `Video ${asset.videoId}` : asset.imageHash ? `Image ${asset.imageHash}` : isOnlyCreative ? "Primary video" : "Media ID pending sync";
+    const player = storedMediaUrl
+        ? <video src={storedMediaUrl} controls autoPlay muted preload="auto" playsInline className="max-h-[32rem] w-full object-contain"/>
+        : asset.type === "image"
+            ? asset.thumbnail ? <img src={asset.thumbnail} alt={asset.name ?? ""} className="max-h-[32rem] w-full object-contain"/> : <p className="px-6 text-center text-sm text-muted-foreground">Meta has not returned an image for this creative yet. Run a Meta sync to load it.</p>
+            : canResolveLive
+                ? <ReliableMetaVideo adId={ad.id} creativeId={asset.creativeId ?? ad.creative_id} videoId={asset.videoId} onResolved={setResolved}/>
+                : <p className="px-6 text-center text-sm text-muted-foreground">This creative&apos;s Meta video ID has not been synced yet, so its exact video can&apos;t be loaded (playing the ad&apos;s main video would show a different creative). Run a Meta sync and try again.</p>;
+    return <Modal open labelledBy="asset-preview-title" onClose={onClose}><section className="mx-auto max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl bg-card shadow-float"><div className="flex items-start justify-between border-b border-border p-5"><div><h2 id="asset-preview-title" className="text-lg font-semibold">{storedCreative?.name || cleanMediaTitle(asset.name ?? "") || ad.name}</h2><p className="mt-1 text-xs text-muted-foreground">{storedMediaUrl ? "Creative Library video" : `Meta ad: ${ad.name} · ${mediaLabel}`}</p></div><Button size="icon" variant="ghost" onClick={onClose} title="Close"><X className="size-5"/></Button></div><div className="space-y-4 p-5"><div className="flex min-h-64 items-center justify-center overflow-hidden rounded-lg border border-border bg-neutral-950">{player}</div>{storedMediaUrl ? <a className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm hover:bg-muted" href={`/api/ads/${storedCreative!.id}/download`} target="_blank" rel="noreferrer"><Download className="size-4"/>Download Creative Library video</a> : resolved ? <a className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm hover:bg-muted" href={resolved.downloadUrl} target="_blank" rel="noreferrer"><Download className="size-4"/>Download exact Meta video</a> : null}</div></section></Modal>;
 }
 function MetaAdsTable({ ads, onView }: {
     ads: MetaAd[];
     onView: (ad: MetaAd) => void;
 }) {
-    return <div className="overflow-x-auto"><div className="border-b border-border bg-muted/20 px-4 py-3 text-xs text-muted-foreground">All synced Meta ads, including ads that have not yet been attributed to an incentive campaign.</div><table className="min-w-[1650px] w-full text-left text-sm"><thead className="bg-muted/70 text-xs text-muted-foreground"><tr><th className="px-4 py-3">Creative / ad</th><th className="px-4 py-3">Campaign / ad set</th><th className="px-4 py-3">Delivery</th><th className="px-4 py-3">Spend</th><th className="px-4 py-3">Impr.</th><th className="px-4 py-3">Reach</th><th className="px-4 py-3">Clicks</th><th className="px-4 py-3">Purchases</th><th className="px-4 py-3">Revenue</th><th className="px-4 py-3">CPA</th><th className="px-4 py-3">ROAS</th><th className="px-4 py-3">CTR</th><th className="px-4 py-3">CPM</th><th className="px-4 py-3">Attribution</th><th className="px-4 py-3"/></tr></thead><tbody className="divide-y divide-border">{ads.map((ad) => { const videoRows = mediaVideos as Array<{
-        adId: string;
-        adName?: string;
-        creativeId?: string;
-        id?: string;
-        videoId?: string;
-        url: string;
-    }>; const stored = videoRows.find((item) => item.adId === ad.id && (!ad.creative_id || item.creativeId === ad.creative_id || item.id === ad.creative_id || item.videoId === ad.creative_id)) ?? (() => { const candidates = videoRows.filter((item) => item.adName === ad.name); return candidates.length === 1 ? candidates[0] : undefined; })(); const cpa = ad.purchases ? ad.spend / ad.purchases : null; const roas = ad.spend ? ad.revenue / ad.spend : 0; const ctr = ad.impressions ? ad.clicks / ad.impressions * 100 : 0; const cpm = ad.impressions ? ad.spend / ad.impressions * 1000 : 0; const delivery = normalizedStatus(ad.effective_status ?? ad.status); return <tr key={ad.id} className="bg-card align-top"><td className="px-4 py-3"><div className="flex items-center gap-3"><div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-muted">{ad.thumbnail_url ? <img src={ad.thumbnail_url} alt="" className="size-full object-cover"/> : <span className="text-xs text-muted-foreground">—</span>}</div><div className="min-w-0"><p className="max-w-64 truncate font-medium">{ad.name || "Unnamed ad"}</p><p className="font-mono text-[10px] text-muted-foreground">Meta ad {ad.id}</p><p className="font-mono text-[10px] text-muted-foreground">Creative {ad.creative_id ?? "—"}</p></div></div></td><td className="px-4 py-3"><p className="max-w-56 truncate">{ad.campaign_name ?? "—"}</p><p className="max-w-56 truncate text-xs text-muted-foreground">{ad.adset_name ?? "—"}</p></td><td className="px-4 py-3"><span className={cn("rounded-full px-2 py-1 text-xs font-medium", delivery === "Active" ? "bg-success/15 text-success" : delivery === "Learning" ? "bg-warning/15 text-warning" : "bg-muted text-muted-foreground")}>{delivery}</span></td><td className="px-4 py-3 tabular-nums">{money(ad.spend)}</td><td className="px-4 py-3 tabular-nums">{number(ad.impressions)}</td><td className="px-4 py-3 tabular-nums">{number(ad.reach)}</td><td className="px-4 py-3 tabular-nums">{number(ad.clicks)}</td><td className="px-4 py-3 tabular-nums">{number(ad.purchases)}</td><td className="px-4 py-3 tabular-nums">{money(ad.revenue)}</td><td className="px-4 py-3 tabular-nums">{cpa == null ? "—" : money(cpa)}</td><td className="px-4 py-3 tabular-nums">{roas.toFixed(2)}</td><td className="px-4 py-3 tabular-nums">{ctr.toFixed(2)}%</td><td className="px-4 py-3 tabular-nums">{money(cpm)}</td><td className="px-4 py-3 text-xs text-muted-foreground">{ad.matched_creative_name ? <><span className="font-medium text-success">{ad.matched_creative_name}</span><br /><span className="text-[11px] text-muted-foreground">{ad.match_confidence === "high" ? "High confidence match" : "Creative Library match"}</span>{ad.detected_tag && ad.detected_tag !== ad.matched_creative_name ? <><br /><span className="font-mono text-[10px] text-muted-foreground">Tag {ad.detected_tag}</span></> : null}</> : ad.detected_tag ? <><span className="font-mono">{ad.detected_tag}</span><br />{ad.matched_ad_id ? "Mapped to incentive creative" : "Awaiting campaign match"}</> : "No AdFlow tag detected"}</td><td className="px-4 py-3"><div className="flex gap-1"><Button size="sm" variant="secondary" onClick={() => onView(ad)}><ExternalLink className="size-3.5"/>View ad</Button>{stored?.url || ad.matched_ad_id ? <a className="inline-flex h-9 items-center gap-1 rounded-md border border-border px-2 text-xs hover:bg-muted" href={stored?.url ? `/api/incentives/media-proxy?url=${encodeURIComponent(stored.url)}&download=1` : `/api/ads/${ad.matched_ad_id}/download`} target="_blank" rel="noreferrer"><Download className="size-3.5"/>Download</a> : null}</div></td></tr>; })}</tbody></table></div>;
+    return <div className="overflow-x-auto"><div className="border-b border-border bg-muted/20 px-4 py-3 text-xs text-muted-foreground">All synced Meta ads, including ads that have not yet been attributed to an incentive campaign.</div><table className="min-w-[1650px] w-full text-left text-sm"><thead className="bg-muted/70 text-xs text-muted-foreground"><tr><th className="px-4 py-3">Creative / ad</th><th className="px-4 py-3">Campaign / ad set</th><th className="px-4 py-3">Delivery</th><th className="px-4 py-3">Spend</th><th className="px-4 py-3">Impr.</th><th className="px-4 py-3">Reach</th><th className="px-4 py-3">Clicks</th><th className="px-4 py-3">Purchases</th><th className="px-4 py-3">Revenue</th><th className="px-4 py-3">CPA</th><th className="px-4 py-3">CPC</th><th className="px-4 py-3">ROAS</th><th className="px-4 py-3">CTR</th><th className="px-4 py-3">CPM</th><th className="px-4 py-3">Attribution</th><th className="px-4 py-3"/></tr></thead><tbody className="divide-y divide-border">{ads.map((ad) => { const cpa = ad.purchases ? ad.spend / ad.purchases : null; const cpc = ad.link_clicks ? ad.spend / ad.link_clicks : null; const roas = ad.spend ? ad.revenue / ad.spend : 0; const ctr = ad.impressions ? ad.clicks / ad.impressions * 100 : 0; const cpm = ad.impressions ? ad.spend / ad.impressions * 1000 : 0; const delivery = normalizedStatus(ad.effective_status ?? ad.status); return <tr key={ad.id} className="bg-card align-top"><td className="px-4 py-3"><div className="flex items-center gap-3"><div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-muted">{ad.thumbnail_url ? <img src={ad.thumbnail_url} alt="" className="size-full object-cover"/> : <span className="text-xs text-muted-foreground">—</span>}</div><div className="min-w-0"><p className="max-w-64 truncate font-medium">{ad.name || "Unnamed ad"}</p><p className="font-mono text-[10px] text-muted-foreground">Meta ad {ad.id}</p><p className="font-mono text-[10px] text-muted-foreground">Creative {ad.creative_id ?? "—"}</p></div></div></td><td className="px-4 py-3"><p className="max-w-56 truncate">{ad.campaign_name ?? "—"}</p><p className="max-w-56 truncate text-xs text-muted-foreground">{ad.adset_name ?? "—"}</p></td><td className="px-4 py-3"><span className={cn("rounded-full px-2 py-1 text-xs font-medium", delivery === "Active" ? "bg-success/15 text-success" : delivery === "Learning" ? "bg-warning/15 text-warning" : "bg-muted text-muted-foreground")}>{delivery}</span></td><td className="px-4 py-3 tabular-nums">{money(ad.spend)}</td><td className="px-4 py-3 tabular-nums">{number(ad.impressions)}</td><td className="px-4 py-3 tabular-nums">{number(ad.reach)}</td><td className="px-4 py-3 tabular-nums">{number(ad.clicks)}</td><td className="px-4 py-3 tabular-nums">{number(ad.purchases)}</td><td className="px-4 py-3 tabular-nums">{money(ad.revenue)}</td><td className="px-4 py-3 tabular-nums">{cpa == null ? "—" : money(cpa)}</td><td className="px-4 py-3 tabular-nums">{cpc == null ? "—" : money(cpc)}</td><td className="px-4 py-3 tabular-nums">{roas.toFixed(2)}</td><td className="px-4 py-3 tabular-nums">{ctr.toFixed(2)}%</td><td className="px-4 py-3 tabular-nums">{money(cpm)}</td><td className="px-4 py-3 text-xs text-muted-foreground">{ad.matched_creative_name ? <><span className="font-medium text-success">{ad.matched_creative_name}</span><br /><span className="text-[11px] text-muted-foreground">{ad.match_confidence === "high" ? "High confidence match" : "Creative Library match"}</span>{ad.detected_tag && ad.detected_tag !== ad.matched_creative_name ? <><br /><span className="font-mono text-[10px] text-muted-foreground">Tag {ad.detected_tag}</span></> : null}</> : ad.detected_tag ? <><span className="font-mono">{ad.detected_tag}</span><br />{ad.matched_ad_id ? "Mapped to incentive creative" : "Awaiting campaign match"}</> : "No AdFlow tag detected"}</td><td className="px-4 py-3"><div className="flex gap-1"><Button size="sm" variant="secondary" onClick={() => onView(ad)}><ExternalLink className="size-3.5"/>View ad</Button>{ad.matched_ad_id ? <a className="inline-flex h-9 items-center gap-1 rounded-md border border-border px-2 text-xs hover:bg-muted" href={`/api/ads/${ad.matched_ad_id}/download`} target="_blank" rel="noreferrer"><Download className="size-3.5"/>Download</a> : null}</div></td></tr>; })}</tbody></table></div>;
 }
 function MetaAdPreviewModal({ ad, creative, libraryAd, onClose }: {
     ad: MetaAd;
@@ -732,7 +816,7 @@ function CreativeTable({ rows, adById, reviewer, sort, sortDirection, onSort, se
     onDetails: (creative: IncentiveCreative) => void;
     isEffectiveHidden: (metric: PerformanceMetricKey) => boolean;
 }) {
-    return <div className="overflow-x-auto"><table className="min-w-[1650px] w-full text-left text-sm"><thead className="bg-muted/70 text-xs text-muted-foreground"><tr>{reviewer ? <th className="w-10 px-4 py-3"><input type="checkbox" checked={allSelected} onChange={onToggleAll} aria-label="Select all matching creatives"/></th> : null}<SortHeader column="creative" label="Creative / ad" sort={sort} sortDirection={sortDirection} onSort={onSort}/><SortHeader column="campaign" label="Campaign / ad set" sort={sort} sortDirection={sortDirection} onSort={onSort}/><th className="px-4 py-3">Product</th><th className="px-4 py-3">Creator / editor</th><SortHeader column="delivery" label="Delivery" sort={sort} sortDirection={sortDirection} onSort={onSort}/>{!isEffectiveHidden("spend") ? <SortHeader column="spend" label="Spend" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("impressions") ? <SortHeader column="impressions" label="Impr." sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("reach") ? <SortHeader column="reach" label="Reach" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("clicks") ? <SortHeader column="clicks" label="Clicks" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("purchases") ? <SortHeader column="purchases" label="Purchases" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("revenue") ? <SortHeader column="revenue" label="Revenue" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("cpa") ? <SortHeader column="cpa" label="Cost / purchase" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("roas") ? <SortHeader column="roas" label="ROAS" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("ctr") ? <SortHeader column="ctr" label="CTR" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("cpm") ? <SortHeader column="cpm" label="CPM" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}<th className="px-4 py-3">Result</th><th className="px-4 py-3"/></tr></thead><tbody className="divide-y divide-border">{rows.map((creative) => <CreativeTableRow key={creative.id} creative={creative} meta={adById.get(creative.meta_ad_id)} reviewer={reviewer} selected={selected.has(creative.id)} onToggle={() => onToggle(creative.id)} onDetails={() => onDetails(creative)} isEffectiveHidden={isEffectiveHidden}/>)}</tbody></table></div>;
+    return <div className="overflow-x-auto"><table className="min-w-[1650px] w-full text-left text-sm"><thead className="bg-muted/70 text-xs text-muted-foreground"><tr>{reviewer ? <th className="w-10 px-4 py-3"><input type="checkbox" checked={allSelected} onChange={onToggleAll} aria-label="Select all matching creatives"/></th> : null}<SortHeader column="creative" label="Creative / ad" sort={sort} sortDirection={sortDirection} onSort={onSort}/><SortHeader column="campaign" label="Campaign / ad set" sort={sort} sortDirection={sortDirection} onSort={onSort}/><th className="px-4 py-3">Product</th><th className="px-4 py-3">Creator / editor</th><SortHeader column="delivery" label="Delivery" sort={sort} sortDirection={sortDirection} onSort={onSort}/>{!isEffectiveHidden("spend") ? <SortHeader column="spend" label="Spend" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("impressions") ? <SortHeader column="impressions" label="Impr." sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("reach") ? <SortHeader column="reach" label="Reach" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("clicks") ? <SortHeader column="clicks" label="Clicks" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("purchases") ? <SortHeader column="purchases" label="Purchases" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("revenue") ? <SortHeader column="revenue" label="Revenue" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("cpa") ? <SortHeader column="cpa" label="Cost / purchase" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("cpc") ? <SortHeader column="cpc" label="CPC" title="Cost per landing page click (link click)" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("roas") ? <SortHeader column="roas" label="ROAS" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("ctr") ? <SortHeader column="ctr" label="CTR" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}{!isEffectiveHidden("cpm") ? <SortHeader column="cpm" label="CPM" sort={sort} sortDirection={sortDirection} onSort={onSort}/> : null}<th className="px-4 py-3">Result</th><th className="px-4 py-3"/></tr></thead><tbody className="divide-y divide-border">{rows.map((creative) => <CreativeTableRow key={creative.id} creative={creative} meta={adById.get(creative.meta_ad_id)} reviewer={reviewer} selected={selected.has(creative.id)} onToggle={() => onToggle(creative.id)} onDetails={() => onDetails(creative)} isEffectiveHidden={isEffectiveHidden}/>)}</tbody></table></div>;
 }
 function CreativeTableRow({ creative, meta, reviewer, selected, onToggle, onDetails, isEffectiveHidden }: {
     creative: IncentiveCreative;
@@ -751,6 +835,7 @@ function CreativeTableRow({ creative, meta, reviewer, selected, onToggle, onDeta
     const clicks = meta?.clicks ?? 0;
     const linkClicks = meta?.link_clicks ?? 0;
     const cpa = purchases > 0 ? spend / purchases : null;
+    const cpc = linkClicks > 0 ? spend / linkClicks : null;
     const roas = spend > 0 ? revenue / spend : 0;
     const ctr = impressions > 0 ? clicks / impressions * 100 : 0;
     const cpm = impressions > 0 ? spend / impressions * 1000 : 0;
@@ -758,7 +843,7 @@ function CreativeTableRow({ creative, meta, reviewer, selected, onToggle, onDeta
     const decision = creative.decision_status ?? (creative.evaluation_status === "winner" ? "winner" : "unreviewed");
     const qualifiedWinner = isQualifiedWinner(creative, meta);
     const displayedDecision = qualifiedWinner ? "winner" : decision;
-    return <tr className="bg-card align-top"><>{reviewer ? <td className="px-4 py-3"><input type="checkbox" checked={selected} onChange={onToggle} aria-label={`Select ${creative.ad.name}`}/></td> : null}<td className="px-4 py-3"><div className="flex items-center gap-3"><div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-muted">{meta?.thumbnail_url || creative.ad.thumbnail_url ? <img src={meta?.thumbnail_url ?? creative.ad.thumbnail_url ?? ""} alt="" className="size-full object-cover"/> : <span className="text-xs text-muted-foreground">—</span>}</div><div className="min-w-0"><p className="max-w-56 truncate font-medium text-foreground">{creative.ad.name}</p><p className="font-mono text-[10px] text-muted-foreground">Meta ad {creative.meta_ad_id}</p><p className="font-mono text-[10px] text-muted-foreground">Meta creative {meta?.creative_id ?? "—"}</p></div></div></td><td className="px-4 py-3"><p className="max-w-48 truncate text-foreground">{meta?.campaign_name ?? "—"}</p><p className="max-w-48 truncate text-xs text-muted-foreground">{meta?.adset_name ?? "—"}</p></td><td className="px-4 py-3 text-muted-foreground">{creative.campaign.product?.name ?? "—"}</td><td className="px-4 py-3 text-xs text-muted-foreground">{creative.creator?.name ?? creative.ad.creator?.name ?? "—"}<br />{creative.editor?.name ?? creative.ad.editor?.name ?? "—"}</td><td className="px-4 py-3"><span className={cn("rounded-full px-2 py-1 text-xs font-medium", delivery === "Active" ? "bg-success/15 text-success" : delivery === "Learning" ? "bg-warning/15 text-warning" : "bg-muted text-muted-foreground")}>{delivery}</span></td>{!isEffectiveHidden("spend") ? <td className="px-4 py-3 tabular-nums">{money(spend)}</td> : null}{!isEffectiveHidden("impressions") ? <td className="px-4 py-3 tabular-nums">{number(impressions)}</td> : null}{!isEffectiveHidden("reach") ? <td className="px-4 py-3 tabular-nums">{number(reach)}<br /><span className="text-xs text-muted-foreground">F {reach ? (impressions / reach).toFixed(2) : "—"}</span></td> : null}{!isEffectiveHidden("clicks") ? <td className="px-4 py-3 tabular-nums">{number(clicks)}<br /><span className="text-xs text-muted-foreground">Link {number(linkClicks)}</span></td> : null}{!isEffectiveHidden("purchases") ? <td className="px-4 py-3 tabular-nums">{number(purchases)}</td> : null}{!isEffectiveHidden("revenue") ? <td className="px-4 py-3 tabular-nums">{money(revenue)}</td> : null}{!isEffectiveHidden("cpa") ? <td className="px-4 py-3 tabular-nums">{cpa == null ? "—" : money(cpa)}</td> : null}{!isEffectiveHidden("roas") ? <td className="px-4 py-3 tabular-nums">{roas.toFixed(2)}</td> : null}{!isEffectiveHidden("ctr") ? <td className="px-4 py-3 tabular-nums">{ctr.toFixed(2)}%</td> : null}{!isEffectiveHidden("cpm") ? <td className="px-4 py-3 tabular-nums">{money(cpm)}</td> : null}<td className="px-4 py-3"><span className={cn("rounded-full px-2 py-1 text-xs font-medium", decision === "winner" ? "bg-success/15 text-success" : decision === "loser" ? "bg-destructive/15 text-destructive" : "bg-muted text-muted-foreground")}>{decision.replaceAll("_", " ")}</span><p className="mt-1 text-[10px] text-muted-foreground">{creative.decision_source === "manual" ? "Manual" : "Automatic"} · {creative.incentive_status?.replaceAll("_", " ") ?? "pending testing"}</p>{reviewer ? <DecisionSelect creative={creative}/> : null}</td><td className="px-4 py-3"><div className="flex gap-1"><Button size="sm" variant="secondary" onClick={onDetails}>View details</Button><a className="inline-flex h-9 items-center gap-1 rounded-md border border-border px-2 text-xs hover:bg-muted" href={`/api/ads/${creative.ad_id}/download`} target="_blank" rel="noreferrer" title="Download creative"><Download className="size-3.5"/>Download</a></div></td></> </tr>;
+    return <tr className="bg-card align-top"><>{reviewer ? <td className="px-4 py-3"><input type="checkbox" checked={selected} onChange={onToggle} aria-label={`Select ${creative.ad.name}`}/></td> : null}<td className="px-4 py-3"><div className="flex items-center gap-3"><div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-muted">{meta?.thumbnail_url || creative.ad.thumbnail_url ? <img src={meta?.thumbnail_url ?? creative.ad.thumbnail_url ?? ""} alt="" className="size-full object-cover"/> : <span className="text-xs text-muted-foreground">—</span>}</div><div className="min-w-0"><p className="max-w-56 truncate font-medium text-foreground">{creative.ad.name}</p><p className="font-mono text-[10px] text-muted-foreground">Meta ad {creative.meta_ad_id}</p><p className="font-mono text-[10px] text-muted-foreground">Meta creative {meta?.creative_id ?? "—"}</p></div></div></td><td className="px-4 py-3"><p className="max-w-48 truncate text-foreground">{meta?.campaign_name ?? "—"}</p><p className="max-w-48 truncate text-xs text-muted-foreground">{meta?.adset_name ?? "—"}</p></td><td className="px-4 py-3 text-muted-foreground">{creative.campaign.product?.name ?? "—"}</td><td className="px-4 py-3 text-xs text-muted-foreground">{creative.creator?.name ?? creative.ad.creator?.name ?? "—"}<br />{creative.editor?.name ?? creative.ad.editor?.name ?? "—"}</td><td className="px-4 py-3"><span className={cn("rounded-full px-2 py-1 text-xs font-medium", delivery === "Active" ? "bg-success/15 text-success" : delivery === "Learning" ? "bg-warning/15 text-warning" : "bg-muted text-muted-foreground")}>{delivery}</span></td>{!isEffectiveHidden("spend") ? <td className="px-4 py-3 tabular-nums">{money(spend)}</td> : null}{!isEffectiveHidden("impressions") ? <td className="px-4 py-3 tabular-nums">{number(impressions)}</td> : null}{!isEffectiveHidden("reach") ? <td className="px-4 py-3 tabular-nums">{number(reach)}<br /><span className="text-xs text-muted-foreground">F {reach ? (impressions / reach).toFixed(2) : "—"}</span></td> : null}{!isEffectiveHidden("clicks") ? <td className="px-4 py-3 tabular-nums">{number(clicks)}<br /><span className="text-xs text-muted-foreground">Link {number(linkClicks)}</span></td> : null}{!isEffectiveHidden("purchases") ? <td className="px-4 py-3 tabular-nums">{number(purchases)}</td> : null}{!isEffectiveHidden("revenue") ? <td className="px-4 py-3 tabular-nums">{money(revenue)}</td> : null}{!isEffectiveHidden("cpa") ? <td className="px-4 py-3 tabular-nums">{cpa == null ? "—" : money(cpa)}</td> : null}{!isEffectiveHidden("cpc") ? <td className="px-4 py-3 tabular-nums">{cpc == null ? "—" : money(cpc)}</td> : null}{!isEffectiveHidden("roas") ? <td className="px-4 py-3 tabular-nums">{roas.toFixed(2)}</td> : null}{!isEffectiveHidden("ctr") ? <td className="px-4 py-3 tabular-nums">{ctr.toFixed(2)}%</td> : null}{!isEffectiveHidden("cpm") ? <td className="px-4 py-3 tabular-nums">{money(cpm)}</td> : null}<td className="px-4 py-3"><span className={cn("rounded-full px-2 py-1 text-xs font-medium", decision === "winner" ? "bg-success/15 text-success" : decision === "loser" ? "bg-destructive/15 text-destructive" : "bg-muted text-muted-foreground")}>{decision.replaceAll("_", " ")}</span><p className="mt-1 text-[10px] text-muted-foreground">{creative.decision_source === "manual" ? "Manual" : "Automatic"} · {creative.incentive_status?.replaceAll("_", " ") ?? "pending testing"}</p>{reviewer ? <DecisionSelect creative={creative}/> : null}</td><td className="px-4 py-3"><div className="flex gap-1"><Button size="sm" variant="secondary" onClick={onDetails}>View details</Button><a className="inline-flex h-9 items-center gap-1 rounded-md border border-border px-2 text-xs hover:bg-muted" href={`/api/ads/${creative.ad_id}/download`} target="_blank" rel="noreferrer" title="Download creative"><Download className="size-3.5"/>Download</a></div></td></> </tr>;
 }
 function DecisionSelect({ creative }: {
     creative: IncentiveCreative;
@@ -773,6 +858,8 @@ type Aggregate = {
     ads: number;
     creatives: number;
     spend: number;
+    clicks: number;
+    linkClicks: number;
     purchases: number;
     revenue: number;
     winners: number;
@@ -780,9 +867,11 @@ type Aggregate = {
 function aggregate(ads: MetaAd[], view: View, tracked: IncentiveCreative[]): Aggregate[] { const winners = new Set(tracked.filter((item) => isQualifiedWinner(item, ads.find((ad) => ad.id === item.meta_ad_id))).map((item) => item.meta_ad_id)); const map = new Map<string, Aggregate>(); for (const meta of ads) {
     const key = view === "campaign" ? meta.campaign_id ?? meta.campaign_name ?? "unknown" : meta.adset_id ?? meta.adset_name ?? "unknown";
     const name = view === "campaign" ? meta.campaign_name ?? "Unknown campaign" : meta.adset_name ?? "Unknown ad set";
-    const current = map.get(key) ?? { key, name, id: key, campaign: meta.campaign_name ?? undefined, adSets: 0, ads: 0, creatives: 0, spend: 0, purchases: 0, revenue: 0, winners: 0 };
+    const current = map.get(key) ?? { key, name, id: key, campaign: meta.campaign_name ?? undefined, adSets: 0, ads: 0, creatives: 0, spend: 0, clicks: 0, linkClicks: 0, purchases: 0, revenue: 0, winners: 0 };
     current.ads += 1;
     current.spend += meta.spend;
+    current.clicks += (meta.clicks ?? 0);
+    current.linkClicks += (meta.link_clicks ?? 0);
     current.purchases += meta.purchases;
     current.revenue += meta.revenue;
     if (winners.has(meta.id))
@@ -801,16 +890,16 @@ function AggregateTable({ rows, view, onCampaign, onAdset, isEffectiveHidden }: 
     onCampaign: (name: string) => void;
     onAdset: (name: string) => void;
     isEffectiveHidden?: (metric: PerformanceMetricKey) => boolean;
-}) { return <div className="overflow-x-auto"><table className="min-w-[1200px] w-full text-left text-sm"><thead className="bg-muted/70 text-xs text-muted-foreground"><tr><th className="px-4 py-3">{view === "campaign" ? "Campaign" : "Ad set"}</th><th className="px-4 py-3">ID</th>{view === "adset" ? <th className="px-4 py-3">Campaign</th> : null}<th className="px-4 py-3">Ads</th>{!isEffectiveHidden?.("spend") ? <th className="px-4 py-3">Spend</th> : null}{!isEffectiveHidden?.("purchases") ? <th className="px-4 py-3">Purchases</th> : null}{!isEffectiveHidden?.("revenue") ? <th className="px-4 py-3">Revenue</th> : null}{!isEffectiveHidden?.("cpa") ? <th className="px-4 py-3">Cost / purchase</th> : null}{!isEffectiveHidden?.("roas") ? <th className="px-4 py-3">ROAS</th> : null}<th className="px-4 py-3">Winner creatives</th><th className="px-4 py-3"/></tr></thead><tbody className="divide-y divide-border">{rows.map((row) => <tr key={row.key}><td className="px-4 py-3 font-medium">{row.name}</td><td className="px-4 py-3 font-mono text-xs text-muted-foreground">{row.id}</td>{view === "adset" ? <td className="px-4 py-3 text-muted-foreground">{row.campaign ?? "—"}</td> : null}<td className="px-4 py-3">{row.ads}</td>{!isEffectiveHidden?.("spend") ? <td className="px-4 py-3">{money(row.spend)}</td> : null}{!isEffectiveHidden?.("purchases") ? <td className="px-4 py-3">{number(row.purchases)}</td> : null}{!isEffectiveHidden?.("revenue") ? <td className="px-4 py-3">{money(row.revenue)}</td> : null}{!isEffectiveHidden?.("cpa") ? <td className="px-4 py-3">{row.purchases ? money(row.spend / row.purchases) : "—"}</td> : null}{!isEffectiveHidden?.("roas") ? <td className="px-4 py-3">{row.spend ? (row.revenue / row.spend).toFixed(2) : "0.00"}</td> : null}<td className="px-4 py-3 text-success">{row.winners}</td><td className="px-4 py-3 text-right"><Button size="icon" variant="secondary" className="size-8 shrink-0" title={`View ads in ${row.name}`} aria-label={`View ads in ${row.name}`} onClick={() => view === "campaign" ? onCampaign(row.name) : onAdset(row.name)}><Eye className="size-4"/></Button></td></tr>)}</tbody></table></div>; }
+}) { return <div className="overflow-x-auto"><table className="min-w-[1200px] w-full text-left text-sm"><thead className="bg-muted/70 text-xs text-muted-foreground"><tr><th className="px-4 py-3">{view === "campaign" ? "Campaign" : "Ad set"}</th><th className="px-4 py-3">ID</th>{view === "adset" ? <th className="px-4 py-3">Campaign</th> : null}<th className="px-4 py-3">Ads</th>{!isEffectiveHidden?.("spend") ? <th className="px-4 py-3">Spend</th> : null}{!isEffectiveHidden?.("purchases") ? <th className="px-4 py-3">Purchases</th> : null}{!isEffectiveHidden?.("revenue") ? <th className="px-4 py-3">Revenue</th> : null}{!isEffectiveHidden?.("cpa") ? <th className="px-4 py-3">Cost / purchase</th> : null}{!isEffectiveHidden?.("cpc") ? <th className="px-4 py-3" title="Cost per landing page click (link click)">CPC</th> : null}{!isEffectiveHidden?.("roas") ? <th className="px-4 py-3">ROAS</th> : null}<th className="px-4 py-3">Winner creatives</th><th className="px-4 py-3"/></tr></thead><tbody className="divide-y divide-border">{rows.map((row) => <tr key={row.key}><td className="px-4 py-3 font-medium">{row.name}</td><td className="px-4 py-3 font-mono text-xs text-muted-foreground">{row.id}</td>{view === "adset" ? <td className="px-4 py-3 text-muted-foreground">{row.campaign ?? "—"}</td> : null}<td className="px-4 py-3">{row.ads}</td>{!isEffectiveHidden?.("spend") ? <td className="px-4 py-3">{money(row.spend)}</td> : null}{!isEffectiveHidden?.("purchases") ? <td className="px-4 py-3">{number(row.purchases)}</td> : null}{!isEffectiveHidden?.("revenue") ? <td className="px-4 py-3">{money(row.revenue)}</td> : null}{!isEffectiveHidden?.("cpa") ? <td className="px-4 py-3">{row.purchases ? money(row.spend / row.purchases) : "—"}</td> : null}{!isEffectiveHidden?.("cpc") ? <td className="px-4 py-3">{row.linkClicks ? money(row.spend / row.linkClicks) : "—"}</td> : null}{!isEffectiveHidden?.("roas") ? <td className="px-4 py-3">{row.spend ? (row.revenue / row.spend).toFixed(2) : "0.00"}</td> : null}<td className="px-4 py-3 text-success">{row.winners}</td><td className="px-4 py-3 text-right"><Button size="icon" variant="secondary" className="size-8 shrink-0" title={`View ads in ${row.name}`} aria-label={`View ads in ${row.name}`} onClick={() => view === "campaign" ? onCampaign(row.name) : onAdset(row.name)}><Eye className="size-4"/></Button></td></tr>)}</tbody></table></div>; }
 function CreativeDetails({ creative, meta, onClose }: {
     creative: IncentiveCreative;
     meta?: MetaAd;
     onClose: () => void;
-}) { const [tab, setTab] = useState<"performance" | "creative" | "incentive" | "mapping">("performance"); const spend = meta?.spend ?? creative.latest_spend; const purchases = meta?.purchases ?? creative.latest_purchases; const revenue = meta?.revenue ?? 0; const impressions = meta?.impressions ?? 0; const reach = meta?.reach ?? 0; const cpa = purchases ? spend / purchases : null; const copy = (value: string) => void navigator.clipboard?.writeText(value); return <Modal open labelledBy="creative-details-title" onClose={onClose}><section className="mx-auto max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl bg-card shadow-float"><div className="flex items-start justify-between border-b border-border p-5"><div><h2 id="creative-details-title" className="text-lg font-semibold">{creative.ad.name}</h2><p className="mt-1 text-xs text-muted-foreground">Meta ad {creative.meta_ad_id} · {meta?.campaign_name ?? "—"}</p></div><Button size="icon" variant="ghost" onClick={onClose} title="Close"><X className="size-5"/></Button></div><div className="flex gap-1 overflow-x-auto border-b border-border px-5 pt-3">{([['performance', 'Performance'], ['creative', 'Creative'], ['incentive', 'Incentive'], ['mapping', 'Mapping']] as const).map(([key, label]) => <button key={key} type="button" className={cn("border-b-2 px-3 pb-3 text-sm", tab === key ? "border-primary text-foreground" : "border-transparent text-muted-foreground")} onClick={() => setTab(key)}>{label}</button>)}</div><div className="grid gap-4 p-5 sm:grid-cols-2">{tab === "performance" ? <><Detail label="Spend" value={money(spend)}/><Detail label="Impressions" value={number(impressions)}/><Detail label="Reach" value={number(reach)}/><Detail label="Frequency" value={reach ? (impressions / reach).toFixed(2) : "—"}/><Detail label="Clicks" value={number(meta?.clicks ?? 0)}/><Detail label="Link clicks" value={number(meta?.link_clicks ?? 0)}/><Detail label="Purchases" value={number(purchases)}/><Detail label="Revenue" value={money(revenue)}/><Detail label="Cost per purchase (CPA)" value={cpa == null ? "—" : money(cpa)}/><Detail label="ROAS" value={spend ? (revenue / spend).toFixed(2) : "0.00"}/><Detail label="CTR" value={impressions ? `${((meta?.clicks ?? 0) / impressions * 100).toFixed(2)}%` : "—"}/><Detail label="CPM" value={impressions ? money(spend / impressions * 1000) : "—"}/></> : tab === "creative" ? <><div className="sm:col-span-2 flex min-h-40 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted">{meta?.thumbnail_url || creative.ad.thumbnail_url ? <img src={meta?.thumbnail_url ?? creative.ad.thumbnail_url ?? ""} alt="Creative preview" className="max-h-72 object-contain"/> : <span className="text-sm text-muted-foreground">No creative preview available</span>}</div><Detail label="Creative/ad name" value={creative.ad.name}/><Detail label="Meta creative ID" value={meta?.creative_id ?? "—"}/><Detail label="Meta ad ID" value={creative.meta_ad_id}/><div className="flex gap-2 sm:col-span-2"><Button size="sm" variant="secondary" onClick={() => copy(creative.meta_ad_id)}>Copy ad ID</Button>{meta?.creative_id ? <Button size="sm" variant="secondary" onClick={() => copy(meta.creative_id!)}>Copy creative ID</Button> : null}<a className="inline-flex h-9 items-center gap-1 rounded-md border border-border px-3 text-sm hover:bg-muted" href={`/api/ads/${creative.ad_id}/download`} target="_blank" rel="noreferrer"><Download className="size-4"/>Download creative</a></div></> : tab === "incentive" ? <><Detail label="Incentive campaign" value={creative.campaign.name}/><Detail label="Product" value={creative.campaign.product?.name ?? "—"}/><Detail label="Target CPA" value={money(creative.campaign.target_cpa)}/><Detail label="Actual CPA" value={cpa == null ? "—" : money(cpa)}/><Detail label="Testing window" value={`${creative.campaign.gate_days} → ${creative.campaign.winner_window_days} days`}/><Detail label="Winner status" value={(creative.decision_status ?? creative.evaluation_status).replaceAll("_", " ")}/><Detail label="Creator incentive" value={money(creative.campaign.creator_incentive_amount)}/><Detail label="Editor incentive" value={money(creative.campaign.editor_incentive_amount)}/><Detail label="Payout month" value={creative.payout_month ?? "—"}/><Detail label="Payout status" value={creative.payout_status?.replaceAll("_", " ") ?? "Not ready"}/></> : <><Detail label="Product" value={creative.campaign.product?.name ?? "—"}/><Detail label="Creator" value={creative.creator?.name ?? creative.ad.creator?.name ?? "—"}/><Detail label="Editor" value={creative.editor?.name ?? creative.ad.editor?.name ?? "—"}/><Detail label="Internal creative ID" value={creative.ad_id}/><Detail label="Meta creative ID" value={meta?.creative_id ?? "—"}/><Detail label="Meta ad ID" value={creative.meta_ad_id}/></>}</div></section></Modal>; }
+}) { const [tab, setTab] = useState<"performance" | "creative" | "incentive" | "mapping">("performance"); const spend = meta?.spend ?? creative.latest_spend; const purchases = meta?.purchases ?? creative.latest_purchases; const revenue = meta?.revenue ?? 0; const impressions = meta?.impressions ?? 0; const reach = meta?.reach ?? 0; const clicks = meta?.clicks ?? 0; const linkClicks = meta?.link_clicks ?? 0; const cpa = purchases ? spend / purchases : null; const cpc = linkClicks > 0 ? spend / linkClicks : null; const copy = (value: string) => void navigator.clipboard?.writeText(value); return <Modal open labelledBy="creative-details-title" onClose={onClose}><section className="mx-auto max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl bg-card shadow-float"><div className="flex items-start justify-between border-b border-border p-5"><div><h2 id="creative-details-title" className="text-lg font-semibold">{creative.ad.name}</h2><p className="mt-1 text-xs text-muted-foreground">Meta ad {creative.meta_ad_id} · {meta?.campaign_name ?? "—"}</p></div><Button size="icon" variant="ghost" onClick={onClose} title="Close"><X className="size-5"/></Button></div><div className="flex gap-1 overflow-x-auto border-b border-border px-5 pt-3">{([['performance', 'Performance'], ['creative', 'Creative'], ['incentive', 'Incentive'], ['mapping', 'Mapping']] as const).map(([key, label]) => <button key={key} type="button" className={cn("border-b-2 px-3 pb-3 text-sm", tab === key ? "border-primary text-foreground" : "border-transparent text-muted-foreground")} onClick={() => setTab(key)}>{label}</button>)}</div><div className="grid gap-4 p-5 sm:grid-cols-2">{tab === "performance" ? <><Detail label="Spend" value={money(spend)}/><Detail label="Impressions" value={number(impressions)}/><Detail label="Reach" value={number(reach)}/><Detail label="Frequency" value={reach ? (impressions / reach).toFixed(2) : "—"}/><Detail label="Clicks" value={number(meta?.clicks ?? 0)}/><Detail label="Link clicks" value={number(meta?.link_clicks ?? 0)}/><Detail label="Purchases" value={number(purchases)}/><Detail label="Revenue" value={money(revenue)}/><Detail label="Cost per purchase (CPA)" value={cpa == null ? "—" : money(cpa)}/><Detail label="Cost per landing page click (CPC)" value={cpc == null ? "—" : money(cpc)}/><Detail label="ROAS" value={spend ? (revenue / spend).toFixed(2) : "0.00"}/><Detail label="CTR" value={impressions ? `${((meta?.clicks ?? 0) / impressions * 100).toFixed(2)}%` : "—"}/><Detail label="CPM" value={impressions ? money(spend / impressions * 1000) : "—"}/></> : tab === "creative" ? <><div className="sm:col-span-2 flex min-h-40 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted">{meta?.thumbnail_url || creative.ad.thumbnail_url ? <img src={meta?.thumbnail_url ?? creative.ad.thumbnail_url ?? ""} alt="Creative preview" className="max-h-72 object-contain"/> : <span className="text-sm text-muted-foreground">No creative preview available</span>}</div><Detail label="Creative/ad name" value={creative.ad.name}/><Detail label="Meta creative ID" value={meta?.creative_id ?? "—"}/><Detail label="Meta ad ID" value={creative.meta_ad_id}/><div className="flex gap-2 sm:col-span-2"><Button size="sm" variant="secondary" onClick={() => copy(creative.meta_ad_id)}>Copy ad ID</Button>{meta?.creative_id ? <Button size="sm" variant="secondary" onClick={() => copy(meta.creative_id!)}>Copy creative ID</Button> : null}<a className="inline-flex h-9 items-center gap-1 rounded-md border border-border px-3 text-sm hover:bg-muted" href={`/api/ads/${creative.ad_id}/download`} target="_blank" rel="noreferrer"><Download className="size-4"/>Download creative</a></div></> : tab === "incentive" ? <><Detail label="Incentive campaign" value={creative.campaign.name}/><Detail label="Product" value={creative.campaign.product?.name ?? "—"}/><Detail label="Target CPA" value={money(creative.campaign.target_cpa)}/><Detail label="Actual CPA" value={cpa == null ? "—" : money(cpa)}/><Detail label="Testing window" value={`${creative.campaign.gate_days} → ${creative.campaign.winner_window_days} days`}/><Detail label="Winner status" value={(creative.decision_status ?? creative.evaluation_status).replaceAll("_", " ")}/><Detail label="Creator incentive" value={money(creative.campaign.creator_incentive_amount)}/><Detail label="Editor incentive" value={money(creative.campaign.editor_incentive_amount)}/><Detail label="Payout month" value={creative.payout_month ?? "—"}/><Detail label="Payout status" value={creative.payout_status?.replaceAll("_", " ") ?? "Not ready"}/></> : <><Detail label="Product" value={creative.campaign.product?.name ?? "—"}/><Detail label="Creator" value={creative.creator?.name ?? creative.ad.creator?.name ?? "—"}/><Detail label="Editor" value={creative.editor?.name ?? creative.ad.editor?.name ?? "—"}/><Detail label="Internal creative ID" value={creative.ad_id}/><Detail label="Meta creative ID" value={meta?.creative_id ?? "—"}/><Detail label="Meta ad ID" value={creative.meta_ad_id}/></>}</div></section></Modal>; }
 function Detail({ label, value }: {
     label: string;
     value: string;
 }) { return <div className="rounded-lg border border-border bg-muted/30 p-3"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 break-words text-sm font-medium text-foreground">{value}</p></div>; }
-function metric(creative: IncentiveCreative, meta: MetaAd | undefined, sort: string) { const spend = meta?.spend ?? creative.latest_spend; const purchases = meta?.purchases ?? creative.latest_purchases; const revenue = meta?.revenue ?? 0; return sort === "purchases" ? purchases : sort === "cpa" ? (purchases ? -spend / purchases : -Infinity) : sort === "roas" ? (spend ? revenue / spend : 0) : sort === "revenue" ? revenue : spend; }
+function metric(creative: IncentiveCreative, meta: MetaAd | undefined, sort: string) { const spend = meta?.spend ?? creative.latest_spend; const purchases = meta?.purchases ?? creative.latest_purchases; const revenue = meta?.revenue ?? 0; const linkClicks = meta?.link_clicks ?? 0; return sort === "purchases" ? purchases : sort === "cpa" ? (purchases ? -spend / purchases : -Infinity) : sort === "cpc" ? (linkClicks ? -spend / linkClicks : -Infinity) : sort === "roas" ? (spend ? revenue / spend : 0) : sort === "revenue" ? revenue : spend; }
 function money(value: number) { return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value || 0); }
 function number(value: number) { return new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(value || 0); }

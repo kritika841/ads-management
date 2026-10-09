@@ -27,10 +27,17 @@ jobs:
           command_timeout: 58m
           script: |
             set +e
-            /bin/bash /home/deployer/apps/satmi-ads/scripts/run-ingest-cron.sh >> /home/deployer/logs/ingest-clip-segments.log 2>&1
+            LOG=/home/deployer/logs/ingest-clip-segments.log
+            START_LINE=$(( $(wc -l < "$LOG" 2>/dev/null || echo 0) + 1 ))
+            /bin/bash /home/deployer/apps/satmi-ads/scripts/run-ingest-cron.sh >> "$LOG" 2>&1
             status=$?
             if [ "$status" -eq 73 ]; then
               echo "Another scheduler already owns the ingest lock; nothing to do."
               exit 0
+            fi
+            if [ "$status" -ne 0 ]; then
+              # Surface this run's worker output in the Actions log (it otherwise only lives on the VPS).
+              echo "Raw clip pipeline exited with status $status. Output of this run:"
+              tail -n +"$START_LINE" "$LOG" | tail -n 80
             fi
             exit "$status"

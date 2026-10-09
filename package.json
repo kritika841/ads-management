@@ -11,7 +11,7 @@
     "build": "NODE_OPTIONS='--max_old_space_size=4096' next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "NODE_OPTIONS='--max_old_space_size=4096' tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",

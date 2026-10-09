@@ -1,10 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { invalidateLibraryCache } from "@/lib/library-cache";
 import { z } from "zod";
 import { requireProfile } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { deleteCampaignGoal, writeCampaignGoal } from "@/lib/campaign-goals";
+import { isRecycleBinReady, softDeleteCampaign } from "@/lib/recycle-bin";
 
 const campaignPayloadSchema = z.object({
   id: z.string().uuid().optional(),
@@ -19,6 +21,9 @@ const campaignPayloadSchema = z.object({
 
 export async function saveInternalCampaign(payload: z.input<typeof campaignPayloadSchema>) {
   const profile = await requireProfile();
+  if (profile.role !== "admin" && profile.role !== "manager") {
+    return { ok: false, message: "Only managers and admins can create or edit campaigns." };
+  }
   const parsed = campaignPayloadSchema.safeParse(payload);
   if (!parsed.success) {
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid campaign data." };
@@ -74,7 +79,7 @@ export async function saveInternalCampaign(payload: z.input<typeof campaignPaylo
     revalidatePath(`/campaigns/${campaignId}`);
   }
   revalidatePath("/dashboard");
-  revalidatePath("/library");
+  revalidatePath("/library"); invalidateLibraryCache();
 
   return { ok: true, campaign: savedCampaign };
 }
@@ -90,6 +95,19 @@ export async function deleteInternalCampaign(id: string) {
     return { ok: false, message: "Invalid campaign ID." };
   }
 
+  // Recycle Bin: the campaign stays restorable for the retention window. Its creatives are not deleted;
+  // they only lose the campaign association.
+  if (await isRecycleBinReady()) {
+    const moved = await softDeleteCampaign(parsedId.data, profile.id);
+    if (!moved.ok) return { ok: false, message: moved.message };
+    revalidatePath("/campaigns");
+    revalidatePath("/dashboard");
+    revalidatePath("/library"); invalidateLibraryCache();
+    revalidatePath("/analytics");
+    revalidatePath("/admin/settings");
+    return { ok: true, movedToRecycleBin: true, creativeCount: moved.creativeCount ?? 0 };
+  }
+
   const admin = createSupabaseAdminClient();
   const { error } = await admin.from("campaigns").delete().eq("id", parsedId.data);
   if (error) {
@@ -100,6 +118,6 @@ export async function deleteInternalCampaign(id: string) {
 
   revalidatePath("/campaigns");
   revalidatePath("/dashboard");
-  revalidatePath("/library");
+  revalidatePath("/library"); invalidateLibraryCache();
   return { ok: true };
 }

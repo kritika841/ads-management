@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ExternalLink, Loader2, Play, Send, X } from "lucide-react";
+import { Check, ExternalLink, Loader2, LockOpen, Play, Send, Snowflake, X } from "lucide-react";
 import { startEditing, submitEditedVideo } from "@/app/actions/ads";
 import { runServerAction } from "@/lib/client-action";
 import { RequestedChanges } from "@/components/review/requested-changes";
@@ -15,7 +15,10 @@ import type { AdWithRelations, EditorTimeLog } from "@/lib/types";
 import { formatDateOnly } from "@/lib/utils";
 
 export function EditorWorkspace({ ad, feedback, inProgressCount, maxConcurrentEdits, timeLogs }: { ad: AdWithRelations; feedback: ResubmissionFeedbackItem[]; inProgressCount: number; maxConcurrentEdits: number; timeLogs: EditorTimeLog[] }) {
-  const atCapacity = inProgressCount >= maxConcurrentEdits;
+  const frozen = ad.editing_freeze === "frozen";
+  const unfrozen = ad.editing_freeze === "unfrozen";
+  // A manager/admin "unfrozen" override beats the per-editor concurrent-edit limit.
+  const atCapacity = !unfrozen && inProgressCount >= maxConcurrentEdits;
   const router = useRouter();
   const resubmitting = ad.production_stage === "changes_requested";
   const [driveUrl, setDriveUrl] = useState(resubmitting ? ad.drive_url ?? "" : "");
@@ -60,6 +63,17 @@ export function EditorWorkspace({ ad, feedback, inProgressCount, maxConcurrentEd
 
   return (
     <section id="editor-task" className="panel scroll-mt-24 overflow-hidden">
+      {frozen ? (
+        <div className="flex items-start gap-3 border-b border-primary/30 bg-primary/10 px-5 py-3 text-sm text-foreground" role="status">
+          <Snowflake className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <p><span className="font-semibold">Editing is frozen by a manager.</span> You can&apos;t start, resume or submit this creative until it is unfrozen. You&apos;ll be notified when that happens.</p>
+        </div>
+      ) : unfrozen ? (
+        <div className="flex items-start gap-3 border-b border-success/30 bg-success/10 px-5 py-3 text-sm text-success" role="status">
+          <LockOpen className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <p><span className="font-semibold">Unfrozen by a manager.</span> This creative doesn&apos;t count toward your active editing limit.</p>
+        </div>
+      ) : null}
       <div className="border-b border-border p-5"><h2 className="section-heading">Editing task</h2><p className="mt-1 text-sm text-muted-foreground">The script and raw footage are read-only. Submit only when the final video is ready.</p></div>
       <div className="grid gap-5 p-5 lg:grid-cols-2">
         <div>
@@ -74,8 +88,8 @@ export function EditorWorkspace({ ad, feedback, inProgressCount, maxConcurrentEd
 
       {ad.production_stage === "ready_for_edit" ? (
         <div className="border-t border-border bg-muted px-5 py-4">
-          <p className="mb-3 text-sm text-muted-foreground">You have {inProgressCount} of {maxConcurrentEdits} videos in progress. {atCapacity ? "Submit one before starting another." : ""}</p>
-          <Button disabled={isPending || !ad.raw_footage_url || atCapacity} onClick={begin}>{isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Play className="size-4" aria-hidden />}Start editing</Button>
+          <p className="mb-3 text-sm text-muted-foreground">{unfrozen ? "This creative was unfrozen by a manager, so your active editing limit doesn't apply." : `You have ${inProgressCount} of ${maxConcurrentEdits} videos in progress. ${atCapacity ? "Submit one before starting another." : ""}`}</p>
+          <Button disabled={isPending || !ad.raw_footage_url || atCapacity || frozen} onClick={begin}>{isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Play className="size-4" aria-hidden />}Start editing</Button>
         </div>
       ) : null}
 
@@ -89,7 +103,7 @@ export function EditorWorkspace({ ad, feedback, inProgressCount, maxConcurrentEd
           {driveUrlError ? (
             <p className="mt-1.5 text-xs text-destructive" role="alert">{driveUrlError}</p>
           ) : null}
-        </Field><Field label="Editing note" hint="Optional"><Textarea className="min-h-20" value={editorNotes} onChange={(event) => setEditorNotes(event.target.value)} placeholder="What changed or what should reviewers know?" /></Field></div><div className="mt-5 flex justify-end"><Button disabled={isPending || !driveUrl.trim() || Boolean(driveUrlError)} onClick={() => resubmitting ? setConfirmationOpen(true) : submit()}>{isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Send className="size-4" aria-hidden />}{resubmitting ? "Resubmit edited video" : "Submit edited video"}</Button></div></div> : null}
+        </Field><Field label="Editing note" hint="Optional"><Textarea className="min-h-20" value={editorNotes} onChange={(event) => setEditorNotes(event.target.value)} placeholder="What changed or what should reviewers know?" /></Field></div><div className="mt-5 flex justify-end"><Button disabled={isPending || frozen || !driveUrl.trim() || Boolean(driveUrlError)} onClick={() => resubmitting ? setConfirmationOpen(true) : submit()}>{isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Send className="size-4" aria-hidden />}{resubmitting ? "Resubmit edited video" : "Submit edited video"}</Button></div></div> : null}
 
       {/* Live editing timer — shown whenever the editor is actively in editing or changes_requested */}
       {(ad.production_stage === "editing" || resubmitting) ? (

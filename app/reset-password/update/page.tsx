@@ -187,14 +187,10 @@ export default function UpdatePasswordPage() {
     startTransition(async () => {
       try {
         const supabase = createSupabaseBrowserClient();
-        const {
-          data: { user }
-        } = await supabase.auth.getUser();
 
         const result = await resetPasswordWithPolicyAction({
           newPassword: password,
-          confirmPassword,
-          userId: user?.id
+          confirmPassword
         });
 
         if (!result.ok) {
