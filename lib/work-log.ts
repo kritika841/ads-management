@@ -52,6 +52,11 @@ export type WorkLogTimeSession = {
   pauseReason: string | null;
 };
 
+export type WorkLogAttendance = {
+  checkInAt: string | null;
+  checkOutAt: string | null;
+};
+
 export type WorkLogDay = {
   date: string;
   newSubmissions: number;
@@ -63,6 +68,7 @@ export type WorkLogDay = {
   creativesTouched: number;
   editingSeconds: number;
   timeSessions: WorkLogTimeSession[];
+  attendance?: WorkLogAttendance | null;
 };
 
 export type WorkLogCreative = {
@@ -249,6 +255,7 @@ export function buildWorkLogReport({
   ads,
   logs,
   timeLogs,
+  attendanceLogs = [],
   actorNames = {},
   nowMs = Date.now()
 }: {
@@ -258,6 +265,7 @@ export function buildWorkLogReport({
   ads: WorkLogAd[];
   logs: ActivityLog[];
   timeLogs: EditorTimeLog[];
+  attendanceLogs?: Array<{ user_id: string; date: string; check_in_at: string; check_out_at: string | null }>;
   actorNames?: Record<string, string>;
   nowMs?: number;
 }): WorkLogReport {
@@ -277,10 +285,28 @@ export function buildWorkLogReport({
         totalEvents: 0,
         creativesTouched: 0,
         editingSeconds: 0,
-        timeSessions: []
+        timeSessions: [],
+        attendance: null
       }
     ])
   );
+
+  const dayLatestActivity = new Map<string, number>();
+
+  if (person.role !== "admin" && attendanceLogs && attendanceLogs.length > 0) {
+    for (const att of attendanceLogs) {
+      if (att.user_id === person.id) {
+        const targetDay = days.get(att.date);
+        if (targetDay) {
+          targetDay.attendance = {
+            checkInAt: att.check_in_at,
+            checkOutAt: att.check_out_at
+          };
+        }
+      }
+    }
+  }
+
   const dayCreatives = new Map<string, Set<string>>(dayList.map((date) => [date, new Set<string>()]));
   const summary: WorkLogSummary = {
     newSubmissions: 0,
@@ -338,9 +364,14 @@ export function buildWorkLogReport({
     const day = days.get(dayKey);
     dayCreatives.get(dayKey)?.add(ad.id);
 
+    if (byPerson || onBehalfSubmission) {
+      dayLatestActivity.set(dayKey, Math.max(dayLatestActivity.get(dayKey) ?? 0, at));
+    }
+
     // Track exact count of recorded events for this person on this day
     summary.totalEvents += 1;
     if (day) day.totalEvents += 1;
+
 
     const isSubmission = submissionActions.has(log.action) && (byPerson || onBehalfSubmission);
     if (isSubmission) {
@@ -377,6 +408,13 @@ export function buildWorkLogReport({
     if (!total) continue;
     summary.editingSeconds += total;
     editingByAd.set(log.ad_id, (editingByAd.get(log.ad_id) ?? 0) + total);
+
+    const sessionEnd = log.session_ended_at ? Date.parse(log.session_ended_at) : (log.is_active ? nowMs : Date.parse(log.session_started_at));
+    if (!Number.isNaN(sessionEnd)) {
+      const sessionDayKey = workLogDayKey(sessionEnd);
+      dayLatestActivity.set(sessionDayKey, Math.max(dayLatestActivity.get(sessionDayKey) ?? 0, sessionEnd));
+    }
+
     for (const date of dayList) {
       const bounds = dayBoundsMs(date);
       const seconds = overlapSeconds(log, bounds.start, bounds.end, nowMs);
@@ -428,8 +466,36 @@ export function buildWorkLogReport({
     if (day) day.creativesTouched = ids.size;
   }
 
+  // Reconcile checkout for non-admin users:
+  // The last activity stored in AdFlow before 12 AM becomes the checkout
+  if (person.role !== "admin") {
+    for (const day of days.values()) {
+      if (day.attendance?.checkInAt) {
+        const checkInMs = Date.parse(day.attendance.checkInAt);
+        const bounds = dayBoundsMs(day.date);
+        const lastActMs = dayLatestActivity.get(day.date) ?? 0;
+        const recordedCheckoutMs = day.attendance.checkOutAt ? Date.parse(day.attendance.checkOutAt) : 0;
+
+        const candidateCheckout = Math.max(
+          lastActMs >= checkInMs && lastActMs < bounds.end ? lastActMs : 0,
+          recordedCheckoutMs >= checkInMs && recordedCheckoutMs < bounds.end ? recordedCheckoutMs : 0
+        );
+
+        if (candidateCheckout > 0) {
+          if (candidateCheckout === recordedCheckoutMs && day.attendance.checkOutAt) {
+            // Preserved
+          } else {
+            day.attendance.checkOutAt = new Date(candidateCheckout).toISOString();
+          }
+        }
+
+      }
+    }
+  }
+
   return { personId: person.id, from, to, summary, days: [...days.values()], creatives };
 }
+
 
 export function formatWorkLogDuration(seconds: number) {
   if (!seconds) return "—";

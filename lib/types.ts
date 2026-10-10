@@ -121,6 +121,8 @@ export type Ad = {
   editor_notes: string | null;
   updated_at: string;
   created_at: string;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
 };
 
 export type ReviewSubmissionType = "new" | "editor_resubmission" | "creator_resubmission";

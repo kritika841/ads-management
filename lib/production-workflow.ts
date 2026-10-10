@@ -241,6 +241,7 @@ export function isCreativeCreationBlocked({
     creator_id?: string | null;
     production_stage: ProductionStage;
     activity_logs?: Array<{ actor_id?: string | null; action: string }> | null;
+    deleted_at?: string | null;
   }>;
 }): boolean {
   if (role !== "content_creator" && role !== "manager" && role !== "admin") {
@@ -248,6 +249,11 @@ export function isCreativeCreationBlocked({
   }
 
   return ads.some((ad) => {
+    // If ad is soft-deleted, it must not block creative creation
+    if ("deleted_at" in ad && Boolean((ad as { deleted_at?: string | null }).deleted_at)) {
+      return false;
+    }
+
     // Only creator_changes_requested blocks creative creation.
     // Editor changes ("changes_requested") are for the editor and do not block the creator.
     if (ad.production_stage !== "creator_changes_requested") {
@@ -256,9 +262,10 @@ export function isCreativeCreationBlocked({
 
     if (ad.creator_id === userId) return true;
 
-    // Admins routinely create on behalf of others, so only creatives where the
-    // admin is the actual creator can block them.
-    if (role !== "admin" && ad.activity_logs?.some((log) => log.actor_id === userId && log.action === "creator_item_created")) {
+    // Only managers authoring on behalf of another creator get blocked if their authored ad has changes requested.
+    // Content creators only ever own ads where ad.creator_id === userId.
+    // Admins are exempt from authored-on-behalf blocks.
+    if (role === "manager" && ad.activity_logs?.some((log) => log.actor_id === userId && log.action === "creator_item_created")) {
       return true;
     }
 

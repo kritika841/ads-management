@@ -293,6 +293,7 @@ export type DashboardAdSummaryItem = {
   workflow_status_changed_at: string;
   creator_id: string | null;
   editor_id: string | null;
+  deleted_at?: string | null;
   campaign?: { id: string; name: string } | null;
 };
 
@@ -301,7 +302,7 @@ export async function getDashboardAds(): Promise<DashboardAdSummaryItem[]> {
   const binReady = await isRecycleBinReady();
   const { data, error } = await liveOnly(supabase
     .from("ads")
-    .select("id, name, production_stage, deadline, workflow_status_changed_at, creator_id, editor_id, campaign:campaigns(id, name)")
+    .select("id, name, production_stage, deadline, workflow_status_changed_at, creator_id, editor_id, deleted_at, campaign:campaigns(id, name)")
     .order("updated_at", { ascending: false }), binReady);
 
   if (error) {
@@ -323,7 +324,7 @@ export async function getAds() {
         id, name, campaign_id, editor_id, creator_id, status, approval_stage, production_stage,
         drive_url, drive_file_id, preview_url, thumbnail_url, script_html, script_text,
         ad_type, platforms, deadline, notes, live_url, submitted_at, approved_at, published_at,
-        created_at, updated_at, raw_footage_url, script_ready_at, shoot_completed_at,
+        created_at, updated_at, deleted_at, raw_footage_url, script_ready_at, shoot_completed_at,
         raw_footage_shared_at, editing_started_at, creator_reviewed_at, final_approved_at,
         workflow_status_changed_at, editor_notes, product_id, assigned_at,
         creator:profiles!ads_creator_id_fkey(id,name,email,avatar_url,role),

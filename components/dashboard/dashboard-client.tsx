@@ -740,12 +740,31 @@ export function DashboardClient({
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><h1 className="text-2xl font-semibold text-foreground">Creative library</h1><p className="mt-1 text-sm text-muted-foreground">Your work, organized by what needs attention next.</p></div>{canCreate ? <Button onClick={handleCreateClick} disabled={createBlocked} title={createBlocked ? "Resolve requested changes before creating another creative." : undefined}><Plus className="size-4" aria-hidden />Add creative</Button> : null}</div>
 
     {createBlocked ? (
-      <div className="mt-4 flex items-center gap-3 rounded-lg border border-warning/30 bg-warning/10 p-3.5 text-sm text-foreground">
-        <AlertTriangle className="size-5 shrink-0 text-warning" aria-hidden />
-        <div className="flex-1">
-          <span className="font-semibold text-warning">Action required: </span>
-          You have creatives with requested changes that must be resolved before you can add new creatives.
+      <div className="mt-4 flex flex-col gap-3 rounded-lg border border-warning/30 bg-warning/10 p-3.5 text-sm text-foreground sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <AlertTriangle className="size-5 shrink-0 text-warning" aria-hidden />
+          <div className="flex-1">
+            <span className="font-semibold text-warning">Action required: </span>
+            You have creatives with requested changes that must be resolved before you can add new creatives.
+            {(queueCounts["creator_changes"] ?? 0) === 0 ? (
+              <span className="block text-xs text-muted-foreground mt-0.5 sm:inline sm:mt-0 sm:ml-1">
+                (Hidden by active filters)
+              </span>
+            ) : null}
+          </div>
         </div>
+        <Button
+          size="sm"
+          variant="secondary"
+          className="shrink-0 gap-1.5 self-start sm:self-auto"
+          onClick={() => {
+            clearFilters(true);
+            selectQueue("creator_changes");
+          }}
+        >
+          View requested changes
+          <ArrowRight className="size-3.5" aria-hidden />
+        </Button>
       </div>
     ) : null}
 
@@ -878,7 +897,7 @@ export function DashboardClient({
         }}
       />
     ) : null}
-    {filteredAds.length ? view === "grid" ? <><section className="mt-3 grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">{visibleGridAds.map((ad) => <WorkflowCard key={ad.id} ad={ad} mediaToken={mediaTokens[ad.id]} profile={profile} canApprove={canApprove} allowManagerFinalApproval={allowManagerFinalApproval} editors={editors} editorWorkloads={editorWorkloads} pending={actingAdId === ad.id} playing={playingAdIds.has(ad.id)} selected={selectedIds.has(ad.id)} downloading={downloadingIds.has(ad.id)} downloadProgress={downloadProgress[ad.id]} onToggleSelect={() => toggleSelect(ad.id)} onPlay={() => playVideo(ad)} onFreezeChange={handleFreezeChange} onPlaybackError={() => { stopVideo(ad.id); toast({ title: "Video unavailable", description: `${ad.name} could not be played.`, tone: "error" }); }} onQuickPreview={() => setPreviewAd(ad)} onOpenDrive={() => { if (ad.drive_url) window.open(ad.drive_url, "_blank", "noopener,noreferrer"); }} onDownload={() => downloadOne(ad)} onEdit={() => openCreatorForm(ad)} onApprove={() => decide(ad, "approve")} onRequestChanges={() => setCancelAd(ad)} onReopen={(target) => { setCancelTarget(target); setCancelAd(ad); }} onAssignEditor={(editorId, deadline) => assign(ad, editorId, deadline)} onDeleted={handleDeleted} />)}</section>{hasMoreGridAds ? <div ref={loadMoreRef} className="flex h-20 items-center justify-center" role="status" aria-label="Loading more creatives"><Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden /><span className="sr-only">Loading more creatives</span></div> : null}</> : <WorkflowTable ads={filteredAds} profile={profile} canApprove={canApprove} allowManagerFinalApproval={allowManagerFinalApproval} pendingId={actingAdId} selectedIds={selectedIds} downloadingIds={downloadingIds} downloadProgress={downloadProgress} onToggleSelect={toggleSelect} onApprove={(ad) => decide(ad, "approve")} onRequestChanges={setCancelAd} onDownload={downloadOne} onFreezeChange={handleFreezeChange} onQuickPreview={setPreviewAd} onDeleted={handleDeleted} /> : <EmptyQueue canCreate={canCreate} createBlocked={createBlocked} onCreate={handleCreateClick} />}
+    {filteredAds.length ? view === "grid" ? <><section className="mt-3 grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">{visibleGridAds.map((ad) => <WorkflowCard key={ad.id} ad={ad} mediaToken={mediaTokens[ad.id]} profile={profile} canApprove={canApprove} allowManagerFinalApproval={allowManagerFinalApproval} editors={editors} editorWorkloads={editorWorkloads} pending={actingAdId === ad.id} playing={playingAdIds.has(ad.id)} selected={selectedIds.has(ad.id)} downloading={downloadingIds.has(ad.id)} downloadProgress={downloadProgress[ad.id]} onToggleSelect={() => toggleSelect(ad.id)} onPlay={() => playVideo(ad)} onFreezeChange={handleFreezeChange} onPlaybackError={() => { stopVideo(ad.id); toast({ title: "Video unavailable", description: `${ad.name} could not be played.`, tone: "error" }); }} onQuickPreview={() => setPreviewAd(ad)} onOpenDrive={() => { if (ad.drive_url) window.open(ad.drive_url, "_blank", "noopener,noreferrer"); }} onDownload={() => downloadOne(ad)} onEdit={() => openCreatorForm(ad)} onApprove={() => decide(ad, "approve")} onRequestChanges={() => setCancelAd(ad)} onReopen={(target) => { setCancelTarget(target); setCancelAd(ad); }} onAssignEditor={(editorId, deadline) => assign(ad, editorId, deadline)} onDeleted={handleDeleted} />)}</section>{hasMoreGridAds ? <div ref={loadMoreRef} className="flex h-20 items-center justify-center" role="status" aria-label="Loading more creatives"><Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden /><span className="sr-only">Loading more creatives</span></div> : null}</> : <WorkflowTable ads={filteredAds} profile={profile} canApprove={canApprove} allowManagerFinalApproval={allowManagerFinalApproval} pendingId={actingAdId} selectedIds={selectedIds} downloadingIds={downloadingIds} downloadProgress={downloadProgress} onToggleSelect={toggleSelect} onApprove={(ad) => decide(ad, "approve")} onRequestChanges={setCancelAd} onDownload={downloadOne} onFreezeChange={handleFreezeChange} onQuickPreview={setPreviewAd} onDeleted={handleDeleted} /> : <EmptyQueue canCreate={canCreate} createBlocked={createBlocked} onCreate={handleCreateClick} queue={queue} onClearFilters={() => clearFilters(true)} />}
 
     {formOpen ? <Modal open labelledBy="creator-form-title" onClose={() => { setFormOpen(false); setEditingAd(null); }} className="p-0 sm:p-6"><section className="mx-auto min-h-full w-full bg-card shadow-float sm:min-h-0 sm:max-w-5xl sm:rounded-xl"><div className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-border bg-card px-5 sm:rounded-t-lg"><div><h2 id="creator-form-title" className="text-lg font-semibold text-foreground">{editingAd ? (editingAd && !creatorEditableStages.includes(editingAd.production_stage as (typeof creatorEditableStages)[number]) && (profile.role === "admin" || profile.role === "manager") ? "Override edit creative" : "Update creative") : "Add creative"}</h2><p className="text-xs text-muted-foreground">{editingAd && !creatorEditableStages.includes(editingAd.production_stage as (typeof creatorEditableStages)[number]) && (profile.role === "admin" || profile.role === "manager") ? "Admin/manager override — all fields editable." : "Set the current preparation status and save."}</p></div><Button size="icon" variant="ghost" title="Close" onClick={() => { setFormOpen(false); setEditingAd(null); }}><X className="size-5" aria-hidden /></Button></div><div className="p-5"><CreatorItemForm profile={profile} creators={creators} editors={editors} campaigns={campaigns.filter((item) => item.active)} products={products.filter((item) => item.active)} initialAd={editingAd} availableTags={availableTags} editorWorkloads={editorWorkloads} overrideMode={Boolean(editingAd && !creatorEditableStages.includes(editingAd.production_stage as (typeof creatorEditableStages)[number]) && (profile.role === "admin" || profile.role === "manager"))} onSaved={() => { setFormOpen(false); setEditingAd(null); router.refresh(); }} /></div></section></Modal> : null}
 
@@ -1594,4 +1613,23 @@ function Person({ label, person }: { label: string; person: AdWithRelations["cre
 function Deadline({ deadline, status }: { deadline: string | null; status: AdStatus }) { if (!deadline) return <span className="text-muted-foreground">No deadline</span>; const days = dateOnlyDaysFromToday(deadline); const active = status !== "approved" && status !== "published"; return <span className={cn("inline-flex items-center gap-1", active && days < 0 ? "text-destructive" : "text-muted-foreground")}><CalendarClock className="size-3.5" aria-hidden />{active && days < 0 ? `${Math.abs(days)}d overdue` : formatDateOnly(deadline)}</span>; }
 function FilterSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: { value: string; label: string }[] }) { return <label className="space-y-1"><span className="text-xs font-medium text-muted-foreground">{label}</span><Select value={value} onChange={(event) => onChange(event.target.value)}><option value="all">{label === "Sort" ? "Recently updated" : `All ${label.toLowerCase()}`}</option>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select></label>; }
 function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) { return <span className="inline-flex h-7 items-center gap-1 rounded-full border border-border bg-muted pl-2.5 pr-1 text-xs font-medium text-foreground">{label}<button type="button" className="inline-flex size-5 items-center justify-center rounded-full text-muted-foreground hover:bg-card hover:text-foreground" aria-label={`Remove ${label} filter`} onClick={onRemove}><X className="size-3" aria-hidden /></button></span>; }
-function EmptyQueue({ canCreate, createBlocked, onCreate }: { canCreate: boolean; createBlocked?: boolean; onCreate: () => void }) { return <div className="mt-6 flex min-h-64 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card px-6 text-center"><span className="flex size-12 items-center justify-center rounded-full bg-muted"><ListFilter className="size-5 text-muted-foreground" aria-hidden /></span><h2 className="mt-3 text-base font-semibold text-foreground">Nothing in this queue</h2><p className="mt-1 text-sm text-muted-foreground">Items will appear here when they reach this status.</p>{canCreate ? <Button className="mt-4" onClick={onCreate} disabled={createBlocked} title={createBlocked ? "Resolve requested changes before creating another creative." : undefined}><Plus className="size-4" aria-hidden />Add creative</Button> : null}</div>; }
+function EmptyQueue({ canCreate, createBlocked, onCreate, queue, onClearFilters }: { canCreate: boolean; createBlocked?: boolean; onCreate: () => void; queue?: QueueKey; onClearFilters?: () => void }) {
+  if (queue === "creator_changes" && createBlocked) {
+    return (
+      <div className="mt-6 flex min-h-64 flex-col items-center justify-center rounded-xl border border-dashed border-warning/40 bg-warning/5 px-6 text-center">
+        <span className="flex size-12 items-center justify-center rounded-full bg-warning/10 text-warning">
+          <AlertTriangle className="size-5" aria-hidden />
+        </span>
+        <h2 className="mt-3 text-base font-semibold text-foreground">Requested changes hidden by filters</h2>
+        <p className="mt-1 max-w-md text-sm text-muted-foreground">You have creatives with requested changes that must be resolved before creating new creatives, but they are hidden by your current search or filters.</p>
+        {onClearFilters ? (
+          <Button variant="secondary" className="mt-4 gap-1.5" onClick={onClearFilters}>
+            Clear filters to view
+            <ArrowRight className="size-3.5" aria-hidden />
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
+  return <div className="mt-6 flex min-h-64 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card px-6 text-center"><span className="flex size-12 items-center justify-center rounded-full bg-muted"><ListFilter className="size-5 text-muted-foreground" aria-hidden /></span><h2 className="mt-3 text-base font-semibold text-foreground">Nothing in this queue</h2><p className="mt-1 text-sm text-muted-foreground">Items will appear here when they reach this status.</p>{canCreate ? <Button className="mt-4" onClick={onCreate} disabled={createBlocked} title={createBlocked ? "Resolve requested changes before creating another creative." : undefined}><Plus className="size-4" aria-hidden />Add creative</Button> : null}</div>;
+}

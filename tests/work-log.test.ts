@@ -170,5 +170,97 @@ describe("categorizeWorkLogAction", () => {
     expect(categorizeWorkLogAction("editing_started")).toBe("other");
     expect(categorizeWorkLogAction("editor_assigned")).toBe("other");
   });
+
+  it("attaches attendance records to daily work log entries", () => {
+    const attendanceLogs = [
+      {
+        id: "att-1",
+        user_id: "c1",
+        date: "2026-10-06",
+        check_in_at: "2026-10-06T09:15:00+05:30",
+        check_out_at: "2026-10-06T18:30:00+05:30",
+        status: "checked_out" as const,
+        created_at: "2026-10-06T09:15:00+05:30",
+        updated_at: "2026-10-06T18:30:00+05:30"
+      }
+    ];
+
+    const report = buildWorkLogReport({
+      ...base,
+      person: creator,
+      from: "2026-10-06",
+      to: "2026-10-06",
+      attendanceLogs
+    });
+
+    const oct6 = report.days.find((d) => d.date === "2026-10-06");
+    expect(oct6).toBeDefined();
+    expect(oct6?.attendance).toBeDefined();
+    expect(oct6?.attendance?.checkInAt).toBe("2026-10-06T09:15:00+05:30");
+    expect(oct6?.attendance?.checkOutAt).toBe("2026-10-06T18:30:00+05:30");
+  });
+
+  it("updates checkout time to the last activity stored in AdFlow before 12 AM for non-admin users", () => {
+    // Creator checked in at 09:15 IST (03:45 UTC).
+    // Creator later submits work at 21:45 IST (16:15 UTC).
+    const lateLog = log("ad1", "c1", "creator_item_created", "2026-10-06T16:15:00Z");
+    const attendanceLogs = [
+      {
+        id: "att-2",
+        user_id: "c1",
+        date: "2026-10-06",
+        check_in_at: "2026-10-06T03:45:00Z", // 09:15 IST
+        check_out_at: null, // User never manually checked out
+        status: "checked_in" as const,
+        created_at: "2026-10-06T03:45:00Z",
+        updated_at: "2026-10-06T03:45:00Z"
+      }
+    ];
+
+    const report = buildWorkLogReport({
+      ...base,
+      logs: [...logs, lateLog],
+      person: creator,
+      from: "2026-10-06",
+      to: "2026-10-06",
+      attendanceLogs
+    });
+
+    const oct6 = report.days.find((d) => d.date === "2026-10-06");
+    expect(oct6).toBeDefined();
+    expect(oct6?.attendance).toBeDefined();
+    // The last activity in AdFlow before 12 AM becomes the checkout
+    expect(oct6?.attendance?.checkOutAt).toBe("2026-10-06T16:15:00.000Z");
+  });
+
+  it("exempts admins from attendance tracking in the work log", () => {
+    const attendanceLogs = [
+      {
+        id: "att-admin",
+        user_id: "a1",
+        date: "2026-10-06",
+        check_in_at: "2026-10-06T09:15:00+05:30",
+        check_out_at: "2026-10-06T18:30:00+05:30",
+        status: "checked_out" as const,
+        created_at: "2026-10-06T09:15:00+05:30",
+        updated_at: "2026-10-06T18:30:00+05:30"
+      }
+    ];
+
+    const report = buildWorkLogReport({
+      ...base,
+      person: admin,
+      from: "2026-10-06",
+      to: "2026-10-06",
+      attendanceLogs
+    });
+
+    const oct6 = report.days.find((d) => d.date === "2026-10-06");
+    expect(oct6).toBeDefined();
+    expect(oct6?.attendance).toBeNull();
+  });
 });
+
+
+
 

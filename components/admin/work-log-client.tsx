@@ -39,6 +39,7 @@ import {
   type WorkLogReport,
   type WorkLogSummary
 } from "@/lib/work-log";
+import { formatAttendanceTime } from "@/lib/attendance-shared";
 
 export type WorkLogPersonOption = { id: string; name: string; role: string; avatar_url: string | null; active: boolean };
 
@@ -135,9 +136,11 @@ export function WorkLogClient({
 
   const sameDay = from === to;
   const rangeLabel = sameDay ? formatDateOnly(from) : `${formatDateOnly(from)} – ${formatDateOnly(to)}`;
-  const selected = selectedId === "all" ? null : people.find((item) => item.id === selectedId) ?? null;
-  const grouped = roleOrder.map((role) => ({ role, items: people.filter((item) => item.role === role) })).filter((group) => group.items.length);
+  const activePeople = useMemo(() => people.filter((item) => item.active), [people]);
+  const selected = selectedId === "all" ? null : activePeople.find((item) => item.id === selectedId) ?? null;
+  const grouped = roleOrder.map((role) => ({ role, items: activePeople.filter((item) => item.role === role) })).filter((group) => group.items.length);
   const allDays = useMemo(() => enumerateDays(from, to), [from, to]);
+
 
   const activeLightboxReport = lightboxData ? reports[lightboxData.person.id] : undefined;
 
@@ -241,7 +244,7 @@ export function WorkLogClient({
       {/* Main View Area */}
       {viewMode === "sheet" ? (
         <TeamCalendarSheet
-          people={selected ? [selected] : people}
+          people={selected ? [selected] : activePeople}
           reports={reports}
           days={allDays}
           today={today}
@@ -254,8 +257,9 @@ export function WorkLogClient({
           onOpenLightbox={(date) => setLightboxData({ person: selected, date })}
         />
       ) : (
-        <TeamOverview people={people} reports={reports} onSelect={(id) => navigate({ person: id })} />
+        <TeamOverview people={activePeople} reports={reports} onSelect={(id) => navigate({ person: id })} />
       )}
+
 
       {/* Interactive Day Details Lightbox */}
       {lightboxData ? (
@@ -288,34 +292,78 @@ function TeamCalendarSheet({
   today: string;
   onOpenLightbox: (person: WorkLogPersonOption, date: string) => void;
 }) {
+  const [sheetMetric, setSheetMetric] = useState<"new" | "all" | "attendance">("new");
+
   const rows = people.map((person) => {
     const report = reports[person.id];
     const summary = report?.summary ?? emptySummary();
     const dayMap = new Map((report?.days ?? []).map((d) => [d.date, d]));
     const totalActions = summary.totalEvents;
     const isEditor = person.role === "editor";
-    return { person, summary, dayMap, totalActions, isEditor };
+    const attendedDaysCount = (report?.days ?? []).filter((d) => Boolean(d.attendance?.checkInAt)).length;
+    return { person, summary, dayMap, totalActions, isEditor, attendedDaysCount };
   });
 
   return (
     <section className="overflow-hidden rounded-xl border border-border bg-card shadow-soft">
-      <div className="border-b border-border px-4 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+      <div className="border-b border-border px-4 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h2 className="font-semibold text-foreground">Work Log Calendar Sheet</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Each cell displays total work done (new submissions, resubmissions, revisions and status changes). Click any day box to open detailed logs.
+            {sheetMetric === "new"
+              ? "Default view shows count of new creatives submitted with attendance hours. Click any day box for details."
+              : sheetMetric === "attendance"
+              ? "Showing attendance check-in and check-out times for team members."
+              : "Showing all activity numbers (new submissions, resubmissions, reviews, and status changes)."}
           </p>
         </div>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1.5">
-            <span className="size-2.5 rounded bg-primary" /> Active work
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="size-2.5 rounded bg-muted border border-border" /> No activity
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="size-2 rounded-full bg-primary" /> Today
-          </span>
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Metric Selector: New (Default) vs All vs Attendance */}
+          <div className="flex rounded-lg border border-border bg-muted/40 p-0.5 text-xs">
+            <button
+              type="button"
+              onClick={() => setSheetMetric("new")}
+              className={cn(
+                "rounded-md px-2.5 py-1 font-medium transition-colors",
+                sheetMetric === "new" ? "bg-primary text-primary-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              New submissions (Default)
+            </button>
+            <button
+              type="button"
+              onClick={() => setSheetMetric("all")}
+              className={cn(
+                "rounded-md px-2.5 py-1 font-medium transition-colors",
+                sheetMetric === "all" ? "bg-primary text-primary-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              All activity
+            </button>
+            <button
+              type="button"
+              onClick={() => setSheetMetric("attendance")}
+              className={cn(
+                "rounded-md px-2.5 py-1 font-medium transition-colors flex items-center gap-1",
+                sheetMetric === "attendance" ? "bg-primary text-primary-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Clock className="size-3" />
+              Attendance
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <span className="size-2 rounded-full bg-success" /> Attendance
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="size-2.5 rounded bg-primary" /> Active work
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="size-2 rounded-full bg-primary" /> Today
+            </span>
+          </div>
         </div>
       </div>
 
@@ -325,7 +373,7 @@ function TeamCalendarSheet({
             <col className="w-56 min-w-[224px] max-w-[224px]" />
             <col className="w-32 min-w-[128px] max-w-[128px]" />
             {days.map((date) => (
-              <col key={date} className="w-[50px] min-w-[50px] max-w-[50px]" />
+              <col key={date} className="w-[58px] min-w-[58px] max-w-[58px]" />
             ))}
           </colgroup>
           <thead>
@@ -334,7 +382,7 @@ function TeamCalendarSheet({
                 Team member
               </th>
               <th className="w-32 min-w-[128px] max-w-[128px] border-r border-border px-3 py-3 text-center text-muted-foreground font-semibold">
-                Period Total
+                {sheetMetric === "new" ? "New Creatives" : sheetMetric === "attendance" ? "Attendance" : "Period Total"}
               </th>
               {days.map((date) => {
                 const isToday = date === today;
@@ -342,7 +390,7 @@ function TeamCalendarSheet({
                   <th
                     key={date}
                     className={cn(
-                      "w-[50px] min-w-[50px] max-w-[50px] p-1 text-center border-r border-border/30",
+                      "w-[58px] min-w-[58px] max-w-[58px] p-1 text-center border-r border-border/30",
                       isToday && "bg-primary/10 text-primary font-semibold"
                     )}
                   >
@@ -358,102 +406,191 @@ function TeamCalendarSheet({
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {rows.map(({ person, summary, dayMap, totalActions, isEditor }) => (
-              <tr key={person.id} className="hover:bg-muted/20 transition-colors">
-                {/* Sticky Team Member Column */}
-                <td className="sticky left-0 z-10 w-56 min-w-[224px] max-w-[224px] border-r border-border bg-card px-4 py-3">
-                  <div className="flex items-center gap-2.5">
-                    <Avatar name={person.name} src={person.avatar_url} className="size-8 shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-foreground truncate">{person.name}</p>
-                      <p className="text-[11px] text-muted-foreground">{roleLabels[person.role] ?? person.role}</p>
+            {rows.map(({ person, summary, dayMap, totalActions, isEditor, attendedDaysCount }) => {
+              const isAdmin = person.role === "admin";
+              return (
+                <tr key={person.id} className="hover:bg-muted/20 transition-colors">
+                  {/* Sticky Team Member Column */}
+                  <td className="sticky left-0 z-10 w-56 min-w-[224px] max-w-[224px] border-r border-border bg-card px-4 py-3">
+                    <div className="flex items-center gap-2.5">
+                      <Avatar name={person.name} src={person.avatar_url} className="size-8 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-foreground truncate">{person.name}</p>
+                        <p className="text-[11px] text-muted-foreground">{roleLabels[person.role] ?? person.role}</p>
+                      </div>
                     </div>
-                  </div>
-                </td>
+                  </td>
 
-                {/* Period Total Summary */}
-                <td className="w-32 min-w-[128px] max-w-[128px] border-r border-border px-2 py-2 text-center align-middle">
-                  <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold bg-primary/10 text-primary">
-                    {totalActions > 0
-                      ? `${totalActions} ${totalActions === 1 ? "action" : "actions"}`
-                      : summary.editingSeconds > 0
-                      ? formatWorkLogDuration(summary.editingSeconds)
-                      : "0 actions"}
-                  </span>
-                  <p className="mt-1 font-semibold text-foreground text-xs">
-                    {summary.creativesTouched} {summary.creativesTouched === 1 ? "creative" : "creatives"}
-                  </p>
-                  {isEditor && summary.editingSeconds > 0 && totalActions > 0 ? (
-                    <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                      {formatWorkLogDuration(summary.editingSeconds)}
+                  {/* Period Total Summary */}
+                  <td className="w-32 min-w-[128px] max-w-[128px] border-r border-border px-2 py-2 text-center align-middle">
+                    <span className={cn(
+                      "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                      sheetMetric === "attendance" ? "bg-success/15 text-success" : "bg-primary/10 text-primary"
+                    )}>
+                      {sheetMetric === "attendance"
+                        ? (isAdmin ? "—" : `${attendedDaysCount}d present`)
+                        : sheetMetric === "new"
+                        ? `${summary.newSubmissions} new`
+                        : totalActions > 0
+                        ? `${totalActions} ${totalActions === 1 ? "action" : "actions"}`
+                        : summary.editingSeconds > 0
+                        ? formatWorkLogDuration(summary.editingSeconds)
+                        : "0 actions"}
+                    </span>
+                    <p className="mt-1 font-semibold text-foreground text-xs">
+                      {summary.creativesTouched} {summary.creativesTouched === 1 ? "creative" : "creatives"}
                     </p>
-                  ) : null}
-                </td>
+                    {sheetMetric !== "attendance" && !isAdmin && attendedDaysCount > 0 ? (
+                      <p className="text-[10px] font-medium text-success mt-0.5 flex items-center justify-center gap-1">
+                        <span className="size-1.5 rounded-full bg-success inline-block" />
+                        {attendedDaysCount}d present
+                      </p>
+                    ) : sheetMetric === "new" && totalActions > 0 ? (
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        {totalActions} total action{totalActions === 1 ? "" : "s"}
+                      </p>
+                    ) : isEditor && summary.editingSeconds > 0 && totalActions > 0 ? (
+                      <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                        {formatWorkLogDuration(summary.editingSeconds)}
+                      </p>
+                    ) : null}
+                  </td>
 
-                {/* Day Cells - Exactly 44px by 44px uniform square boxes */}
-                {days.map((date) => {
-                  const day = dayMap.get(date);
-                  const dayCount = day?.totalEvents ?? 0;
-                  const dayEditing = day?.editingSeconds ?? 0;
-                  const hasDayActivity = dayCount > 0 || dayEditing > 0;
-                  const isToday = date === today;
+                  {/* Day Cells */}
+                  {days.map((date) => {
+                    const day = dayMap.get(date);
+                    const dayNew = day?.newSubmissions ?? 0;
+                    const dayCount = day?.totalEvents ?? 0;
+                    const dayEditing = day?.editingSeconds ?? 0;
+                    const hasDayActivity = dayCount > 0 || dayEditing > 0;
+                    const isToday = date === today;
+                    const checkInTime = day?.attendance?.checkInAt ? formatAttendanceTime(day.attendance.checkInAt) : null;
+                    const checkOutTime = day?.attendance?.checkOutAt ? formatAttendanceTime(day.attendance.checkOutAt) : null;
+                    const hasAttendance = Boolean(checkInTime);
+                    const attendanceTitle = checkInTime
+                      ? ` | Checked in: ${checkInTime}${checkOutTime ? `, Checked out: ${checkOutTime}` : " (Active)"}`
+                      : "";
 
-                  let subLabel = "";
-                  if (dayCount > 0 && isEditor && dayEditing > 0) {
-                    subLabel = formatWorkLogDuration(dayEditing);
-                  } else if (day && day.newSubmissions > 0) {
-                    subLabel = `${day.newSubmissions} new`;
-                  } else if (day && day.resubmissions > 0) {
-                    subLabel = `${day.resubmissions} resub`;
-                  } else if (day && day.revisionsRequested > 0) {
-                    subLabel = `${day.revisionsRequested} rev`;
-                  } else if (day && day.approvals > 0) {
-                    subLabel = `${day.approvals} app`;
-                  } else if (dayCount === 0 && dayEditing > 0) {
-                    subLabel = "editing";
-                  } else if (dayCount > 0) {
-                    subLabel = "logs";
-                  }
+                    let subLabel = "";
+                    if (sheetMetric === "new") {
+                      if (dayNew > 0) {
+                        subLabel = "new";
+                      } else if (dayCount > 0 && isEditor && dayEditing > 0) {
+                        subLabel = formatWorkLogDuration(dayEditing);
+                      } else if (dayCount > 0) {
+                        subLabel = "act";
+                      } else if (dayEditing > 0) {
+                        subLabel = "edit";
+                      }
+                    } else {
+                      if (dayCount > 0 && isEditor && dayEditing > 0) {
+                        subLabel = formatWorkLogDuration(dayEditing);
+                      } else if (day && day.newSubmissions > 0) {
+                        subLabel = `${day.newSubmissions} new`;
+                      } else if (day && day.resubmissions > 0) {
+                        subLabel = `${day.resubmissions} resub`;
+                      } else if (day && day.revisionsRequested > 0) {
+                        subLabel = `${day.revisionsRequested} rev`;
+                      } else if (day && day.approvals > 0) {
+                        subLabel = `${day.approvals} app`;
+                      } else if (dayCount === 0 && dayEditing > 0) {
+                        subLabel = "editing";
+                      } else if (dayCount > 0) {
+                        subLabel = "logs";
+                      }
+                    }
 
-                  return (
-                    <td
-                      key={date}
-                      className="w-[50px] min-w-[50px] max-w-[50px] p-1 text-center align-middle border-r border-border/30"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => onOpenLightbox(person, date)}
-                        title={`${person.name} on ${date}: ${dayCount} actions, ${day?.newSubmissions ?? 0} new, ${day?.resubmissions ?? 0} resubmitted${dayEditing ? `, ${formatWorkLogDuration(dayEditing)} editing` : ""}. Click for full logs.`}
-                        className={cn(
-                          "group relative flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-lg border text-[10px] transition-all duration-150 cursor-pointer mx-auto overflow-hidden",
-                          hasDayActivity
-                            ? "border-primary/40 bg-primary/10 text-primary font-semibold shadow-2xs hover:bg-primary/20 hover:border-primary hover:scale-105"
-                            : "border-border/50 bg-muted/20 text-muted-foreground/40 hover:border-border hover:bg-muted/50 hover:text-muted-foreground",
-                          isToday && !hasDayActivity && "border-primary/50 bg-primary/5 text-primary/70",
-                          isToday && hasDayActivity && "ring-2 ring-primary/40"
-                        )}
+                    const primaryNumber = sheetMetric === "new"
+                      ? (dayNew > 0 ? dayNew : (hasDayActivity ? 0 : null))
+                      : (dayCount > 0 ? dayCount : (dayEditing > 0 ? formatWorkLogDuration(dayEditing) : null));
+
+                    return (
+                      <td
+                        key={date}
+                        className="w-[58px] min-w-[58px] max-w-[58px] p-1 text-center align-middle border-r border-border/30"
                       >
-                        {isToday ? (
-                          <span className="absolute top-1 right-1 size-1.5 rounded-full bg-primary" title="Today" />
-                        ) : null}
-                        {hasDayActivity ? (
-                          <>
-                            <span className="text-xs font-bold leading-tight">
-                              {dayCount > 0 ? dayCount : formatWorkLogDuration(dayEditing)}
-                            </span>
-                            <span className="text-[8px] font-medium opacity-80 leading-none truncate max-w-[36px] mt-0.5">
-                              {subLabel}
-                            </span>
-                          </>
-                        ) : (
-                          <span className="text-xs font-light text-muted-foreground/30 group-hover:text-muted-foreground/70">—</span>
-                        )}
-                      </button>
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
+                        <button
+                          type="button"
+                          onClick={() => onOpenLightbox(person, date)}
+                          title={`${person.name} on ${date}: ${dayNew} new, ${dayCount} total actions${dayEditing ? `, ${formatWorkLogDuration(dayEditing)} editing` : ""}${attendanceTitle}. Click for detailed activity logs.`}
+                          className={cn(
+                            "group relative flex h-[50px] w-[54px] shrink-0 flex-col items-center justify-center rounded-lg border text-[10px] transition-all duration-150 cursor-pointer mx-auto overflow-hidden p-0.5",
+                            sheetMetric === "attendance"
+                              ? hasAttendance && !isAdmin
+                                ? "border-success/40 bg-success/10 text-success font-semibold shadow-2xs hover:bg-success/20 hover:border-success"
+                                : "border-border/50 bg-muted/20 text-muted-foreground/40 hover:border-border hover:bg-muted/50 hover:text-muted-foreground"
+                              : hasDayActivity || dayNew > 0
+                              ? "border-primary/40 bg-primary/10 text-primary font-semibold shadow-2xs hover:bg-primary/20 hover:border-primary hover:scale-105"
+                              : hasAttendance && !isAdmin
+                              ? "border-success/30 bg-success/5 text-foreground hover:bg-muted/50 hover:border-border"
+                              : "border-border/50 bg-muted/20 text-muted-foreground/40 hover:border-border hover:bg-muted/50 hover:text-muted-foreground",
+                            isToday && !hasDayActivity && !hasAttendance && "border-primary/50 bg-primary/5 text-primary/70",
+                            isToday && (hasDayActivity || hasAttendance) && "ring-2 ring-primary/40"
+                          )}
+                        >
+                          {/* Attendance Dot Indicator */}
+                          {hasAttendance && !isAdmin ? (
+                            <span
+                              className="absolute top-1 left-1 size-1.5 rounded-full bg-success ring-1 ring-success/50"
+                              title={`Attendance: Checked in at ${checkInTime}${checkOutTime ? `, Checked out at ${checkOutTime}` : " (Active)"}`}
+                            />
+                          ) : null}
+
+                          {isToday ? (
+                            <span className="absolute top-1 right-1 size-1.5 rounded-full bg-primary" title="Today" />
+                          ) : null}
+
+                          {sheetMetric === "attendance" ? (
+                            isAdmin ? (
+                              <span className="text-xs font-light text-muted-foreground/30 group-hover:text-muted-foreground/70">—</span>
+                            ) : hasAttendance ? (
+                              <div className="flex flex-col items-center justify-center w-full px-0.5 leading-tight">
+                                <span className="text-[9px] font-bold text-success truncate max-w-full">
+                                  {checkInTime ? checkInTime.replace(/\s+/g, "") : ""}
+                                </span>
+                                <span className="text-[7.5px] text-muted-foreground font-medium truncate max-w-full mt-0.5">
+                                  {checkOutTime ? checkOutTime.replace(/\s+/g, "") : "Active"}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-xs font-light text-muted-foreground/30 group-hover:text-muted-foreground/70">—</span>
+                            )
+                          ) : (
+                            <>
+                              {primaryNumber !== null ? (
+                                <>
+                                  <span className="text-xs font-bold leading-tight">
+                                    {primaryNumber}
+                                  </span>
+                                  <span className="text-[8px] font-medium opacity-80 leading-none truncate max-w-[44px] mt-0.5">
+                                    {subLabel}
+                                  </span>
+                                </>
+                              ) : (
+                                <span className="text-xs font-light text-muted-foreground/30 group-hover:text-muted-foreground/70">—</span>
+                              )}
+
+                              {/* Attendance pill directly on cell */}
+                              {!isAdmin && hasAttendance ? (
+                                <span
+                                  className={cn(
+                                    "text-[7px] font-semibold rounded px-1 leading-tight truncate max-w-[50px] mt-0.5",
+                                    checkOutTime ? "bg-muted text-muted-foreground" : "bg-success/20 text-success"
+                                  )}
+                                  title={`Checked in: ${checkInTime}${checkOutTime ? ` · Out: ${checkOutTime}` : " (Active)"}`}
+                                >
+                                  {checkInTime ? checkInTime.replace(/\s*(AM|PM)/i, "") : ""}{checkOutTime ? `–${checkOutTime.replace(/\s*(AM|PM)/i, "")}` : ""}
+                                </span>
+                              ) : null}
+                            </>
+                          )}
+                        </button>
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -462,6 +599,7 @@ function TeamCalendarSheet({
 }
 
 /**
+
  * Interactive Lightbox Dialog showing complete logs for a specific person on a specific day.
  */
 function WorkLogDayLightbox({
@@ -578,6 +716,24 @@ function WorkLogDayLightbox({
             </span>
           ) : null}
         </div>
+
+        {/* Attendance Details Card */}
+        {daySummary?.attendance?.checkInAt ? (
+          <div className="mx-5 mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-success/30 bg-success/10 px-3.5 py-2 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="size-2 rounded-full bg-success animate-pulse" />
+              <span className="font-semibold text-success">Attendance Recorded</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-muted-foreground">
+              <span>Checked in: <strong className="text-foreground">{formatAttendanceTime(daySummary.attendance.checkInAt)}</strong></span>
+              {daySummary.attendance.checkOutAt ? (
+                <span>Checked out: <strong className="text-foreground">{formatAttendanceTime(daySummary.attendance.checkOutAt)}</strong></span>
+              ) : (
+                <span className="font-medium text-success">Working / Active</span>
+              )}
+            </div>
+          </div>
+        ) : null}
 
         {/* Category Tabs inside Lightbox */}
         <div className="border-b border-border bg-muted/30 px-5 pt-2 flex flex-wrap gap-1 text-xs">

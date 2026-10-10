@@ -43,8 +43,10 @@ export default async function WorkLogPage({
   const [profiles, data] = await Promise.all([getProfiles(), getWorkLogData(from, to)]);
 
   const people: WorkLogPersonOption[] = profiles
+    .filter((item) => item.active)
     .map((item) => ({ id: item.id, name: item.name, role: item.role, avatar_url: item.avatar_url ?? null, active: item.active }))
     .sort((a, b) => a.name.localeCompare(b.name));
+
   const actorNames = Object.fromEntries(profiles.map((item) => [item.id, item.name]));
 
   const requested = first(query.person);
@@ -52,8 +54,8 @@ export default async function WorkLogPage({
 
   const reports: Record<string, WorkLogReport> = {};
   for (const person of people) {
-    const report = buildWorkLogReport({ person, from, to, ads: data.ads, logs: data.logs, timeLogs: data.timeLogs, actorNames, nowMs });
-    const hasActivity = report.summary.creativesTouched > 0 || report.summary.editingSeconds > 0;
+    const report = buildWorkLogReport({ person, from, to, ads: data.ads, logs: data.logs, timeLogs: data.timeLogs, attendanceLogs: data.attendanceLogs, actorNames, nowMs });
+    const hasActivity = report.summary.creativesTouched > 0 || report.summary.editingSeconds > 0 || report.days.some((d) => Boolean(d.attendance?.checkInAt));
     // Retain days and creatives for all active people so the team calendar sheet and day lightboxes work instantly
     if (person.id === selectedId || hasActivity) {
       reports[person.id] = report;

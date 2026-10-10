@@ -33,6 +33,8 @@ import { NotificationBell } from "@/components/notification-bell";
 import { RealtimeSync } from "@/components/realtime-sync";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AnnouncementOverlay } from "@/components/announcements/announcement-overlay";
+import { AttendancePromptModal } from "@/components/attendance/attendance-prompt-modal";
+import { AttendanceHeaderWidget } from "@/components/attendance/attendance-header-widget";
 import { cn } from "@/lib/utils";
 
 type NavItem = { href: string; label: string; icon: LucideIcon; children?: Array<{ href: string; label: string }> };
@@ -177,6 +179,7 @@ export function AppShell({
             <div className="flex items-center gap-1.5">
               <ThemeToggle />
               <RealtimeSync userId={profile.id} role={profile.role} />
+              <AttendanceHeaderWidget profile={profile} />
               <NotificationBell notifications={notifications} userId={profile.id}>
                 <Bell className="size-[18px]" aria-hidden />
               </NotificationBell>
@@ -195,6 +198,7 @@ export function AppShell({
           </div>
         </header>
         {children}
+        <AttendancePromptModal profile={profile} />
         <AnnouncementOverlay profile={profile} />
       </div>
     </div>

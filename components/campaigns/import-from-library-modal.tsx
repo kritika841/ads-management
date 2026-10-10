@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, FileSpreadsheet, Film, Filter, Library, Loader2, Play, RotateCcw, Search, Square, SquareCheck, Video, X } from "lucide-react";
+import { ArrowUpDown, CalendarDays, CheckCircle2, FileSpreadsheet, Film, Filter, Library, Loader2, Play, RotateCcw, Search, Square, SquareCheck, Video, X } from "lucide-react";
 import { bulkAssignCampaign } from "@/app/actions/ads";
 import { listImportableCreatives, type ImportableCreative } from "@/app/actions/campaign-import";
 import { Button } from "@/components/ui/button";
@@ -57,7 +57,7 @@ function CreativeThumb({
 
 /**
  * Campaign-side counterpart of the Creative Library's bulk "Add to campaign": pick any number of
- * existing creatives and move them into this campaign in one go.
+ * existing creatives and add them into this campaign in one go.
  */
 export function ImportFromLibraryModal({
   campaignId,
@@ -81,6 +81,10 @@ export function ImportFromLibraryModal({
   const [tagFilter, setTagFilter] = useState("all");
   const [stageFilter, setStageFilter] = useState("all");
   const [approvalFilter, setApprovalFilter] = useState<"all" | "approved" | "unapproved">("all");
+  const [dateFilter, setDateFilter] = useState<"all" | "today" | "last_7_days" | "last_30_days" | "this_month" | "custom">("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [sortBy, setSortBy] = useState<"created_desc" | "created_asc" | "approved_desc" | "name_asc">("created_desc");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -132,17 +136,52 @@ export function ImportFromLibraryModal({
     return Array.from(set);
   }, [creatives]);
 
-  const hasActiveFilters = creatorFilter !== "all" || tagFilter !== "all" || stageFilter !== "all" || approvalFilter !== "all";
+  const hasActiveFilters =
+    creatorFilter !== "all" ||
+    tagFilter !== "all" ||
+    stageFilter !== "all" ||
+    approvalFilter !== "all" ||
+    dateFilter !== "all" ||
+    dateFrom !== "" ||
+    dateTo !== "" ||
+    sortBy !== "created_desc";
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return (creatives ?? []).filter((item) => {
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const msDay = 24 * 60 * 60 * 1000;
+
+    const filtered = (creatives ?? []).filter((item) => {
       if (scope === "unassigned" && item.campaign_id) return false;
       if (creatorFilter !== "all" && item.creator_id !== creatorFilter) return false;
       if (tagFilter !== "all" && !item.tags.includes(tagFilter)) return false;
       if (stageFilter !== "all" && item.production_stage !== stageFilter) return false;
       if (approvalFilter === "approved" && !item.final_approved_at && !item.approved_at) return false;
       if (approvalFilter === "unapproved" && (item.final_approved_at || item.approved_at)) return false;
+
+      // Date filtering
+      const itemDateStr = item.created_at ? item.created_at.slice(0, 10) : "";
+      const itemDateMs = item.created_at ? Date.parse(item.created_at) : 0;
+
+      if (dateFilter === "today") {
+        if (itemDateStr !== todayStr) return false;
+      } else if (dateFilter === "last_7_days") {
+        if (now.getTime() - itemDateMs > 7 * msDay) return false;
+      } else if (dateFilter === "last_30_days") {
+        if (now.getTime() - itemDateMs > 30 * msDay) return false;
+      } else if (dateFilter === "this_month") {
+        const monthPrefix = todayStr.slice(0, 7);
+        if (!itemDateStr.startsWith(monthPrefix)) return false;
+      } else if (dateFilter === "custom") {
+        if (dateFrom && itemDateStr < dateFrom) return false;
+        if (dateTo && itemDateStr > dateTo) return false;
+      }
+
+      // Standalone date picker inputs fallback
+      if (dateFrom && itemDateStr < dateFrom) return false;
+      if (dateTo && itemDateStr > dateTo) return false;
+
       if (!needle) return true;
       return (
         item.name.toLowerCase().includes(needle) ||
@@ -151,7 +190,26 @@ export function ImportFromLibraryModal({
         item.tags.some((t) => t.toLowerCase().includes(needle))
       );
     });
-  }, [creatives, query, scope, creatorFilter, tagFilter, stageFilter, approvalFilter]);
+
+    // Date-wise and attribute sorting
+    return filtered.sort((a, b) => {
+      if (sortBy === "created_desc") {
+        return Date.parse(b.created_at) - Date.parse(a.created_at);
+      }
+      if (sortBy === "created_asc") {
+        return Date.parse(a.created_at) - Date.parse(b.created_at);
+      }
+      if (sortBy === "approved_desc") {
+        const aApp = a.final_approved_at || a.approved_at || a.created_at;
+        const bApp = b.final_approved_at || b.approved_at || b.created_at;
+        return Date.parse(bApp) - Date.parse(aApp);
+      }
+      if (sortBy === "name_asc") {
+        return a.name.localeCompare(b.name);
+      }
+      return 0;
+    });
+  }, [creatives, query, scope, creatorFilter, tagFilter, stageFilter, approvalFilter, dateFilter, dateFrom, dateTo, sortBy]);
 
   const allVisibleSelected = visible.length > 0 && visible.every((item) => selected.has(item.id));
   const movingFromOther = (creatives ?? []).filter((item) => selected.has(item.id) && item.campaign_id).length;
@@ -178,6 +236,10 @@ export function ImportFromLibraryModal({
     setTagFilter("all");
     setStageFilter("all");
     setApprovalFilter("all");
+    setDateFilter("all");
+    setDateFrom("");
+    setDateTo("");
+    setSortBy("created_desc");
     setQuery("");
   }
 
@@ -247,7 +309,7 @@ export function ImportFromLibraryModal({
                 </div>
               </div>
 
-              {/* Filters bar: Creator, Tag, Stage */}
+              {/* Filters bar: Creator, Tag, Stage, Approval, Date, Sort */}
               <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/30 px-5 py-2.5 text-xs">
                 <span className="flex items-center gap-1 font-medium text-muted-foreground">
                   <Filter className="size-3.5" aria-hidden /> Filters:
@@ -303,6 +365,69 @@ export function ImportFromLibraryModal({
                   <option value="approved">Approved Only</option>
                   <option value="unapproved">Not Yet Approved</option>
                 </select>
+
+                {/* Date Filter */}
+                <div className="flex items-center gap-1.5">
+                  <CalendarDays className="size-3.5 text-muted-foreground ml-1" aria-hidden />
+                  <select
+                    value={dateFilter}
+                    onChange={(e) => {
+                      const next = e.target.value as typeof dateFilter;
+                      setDateFilter(next);
+                      if (next !== "custom") {
+                        setDateFrom("");
+                        setDateTo("");
+                      }
+                    }}
+                    className="h-8 rounded-md border border-border bg-background px-2.5 text-xs text-foreground outline-none transition focus:border-primary focus:ring-1 focus:ring-primary"
+                    aria-label="Filter by date"
+                  >
+                    <option value="all">All Dates</option>
+                    <option value="today">Created Today</option>
+                    <option value="last_7_days">Last 7 Days</option>
+                    <option value="last_30_days">Last 30 Days</option>
+                    <option value="this_month">This Month</option>
+                    <option value="custom">Custom Date Range…</option>
+                  </select>
+                </div>
+
+                {dateFilter === "custom" ? (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="date"
+                      value={dateFrom}
+                      onChange={(e) => setDateFrom(e.target.value)}
+                      placeholder="From"
+                      aria-label="Date from"
+                      className="h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none transition focus:border-primary focus:ring-1 focus:ring-primary"
+                    />
+                    <span className="text-muted-foreground">–</span>
+                    <input
+                      type="date"
+                      value={dateTo}
+                      onChange={(e) => setDateTo(e.target.value)}
+                      placeholder="To"
+                      aria-label="Date to"
+                      className="h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none transition focus:border-primary focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                ) : null}
+
+                {/* Sort By Dropdown */}
+                <div className="flex items-center gap-1.5 ml-auto sm:ml-0">
+                  <ArrowUpDown className="size-3.5 text-muted-foreground ml-1" aria-hidden />
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                    className="h-8 rounded-md border border-border bg-background px-2.5 text-xs text-foreground font-medium outline-none transition focus:border-primary focus:ring-1 focus:ring-primary"
+                    aria-label="Sort creatives"
+                  >
+                    <option value="created_desc">Newest First</option>
+                    <option value="created_asc">Oldest First</option>
+                    <option value="approved_desc">Recently Approved</option>
+                    <option value="name_asc">Name (A–Z)</option>
+                  </select>
+                </div>
 
                 {hasActiveFilters ? (
                   <button
@@ -406,7 +531,7 @@ export function ImportFromLibraryModal({
               <footer className="flex flex-col gap-3 border-t border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-xs text-muted-foreground">
                   {onUseCsv ? <button type="button" onClick={onUseCsv} className="inline-flex items-center gap-1.5 font-medium text-primary hover:underline"><FileSpreadsheet className="size-3.5" aria-hidden />Import new creatives from CSV instead</button> : null}
-                  {movingFromOther ? <p className="mt-1 text-warning">{movingFromOther} selected creative{movingFromOther === 1 ? " is" : "s are"} currently in another campaign and will be moved.</p> : null}
+                  {movingFromOther ? <p className="mt-1 text-primary">{movingFromOther} selected creative{movingFromOther === 1 ? " is" : "s are"} in another campaign and will be added to this campaign as well.</p> : null}
                   {error ? <p className="mt-1 text-destructive" role="alert">{error}</p> : null}
                 </div>
                 <div className="flex gap-2 sm:justify-end">

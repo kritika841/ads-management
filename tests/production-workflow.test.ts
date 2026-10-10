@@ -219,6 +219,51 @@ describe("production workflow", () => {
         })
       ).toBe(false);
     });
+
+    it("does not block content creators if the creative with creator_changes_requested is soft-deleted", () => {
+      const blocked = isCreativeCreationBlocked({
+        role: "content_creator",
+        userId: "creator-1",
+        ads: [
+          {
+            creator_id: "creator-1",
+            production_stage: "creator_changes_requested",
+            deleted_at: "2026-10-09T12:00:00Z"
+          }
+        ]
+      });
+      expect(blocked).toBe(false);
+    });
+
+    it("does not block content creators if another creator's ad has creator_changes_requested even if their actor_id is in activity logs", () => {
+      const blocked = isCreativeCreationBlocked({
+        role: "content_creator",
+        userId: "creator-1",
+        ads: [
+          {
+            creator_id: "other-creator",
+            production_stage: "creator_changes_requested",
+            activity_logs: [{ actor_id: "creator-1", action: "creator_item_created" }]
+          }
+        ]
+      });
+      expect(blocked).toBe(false);
+    });
+
+    it("does not block managers if their creative with creator_changes_requested is soft-deleted", () => {
+      const blocked = isCreativeCreationBlocked({
+        role: "manager",
+        userId: "manager-1",
+        ads: [
+          {
+            creator_id: "manager-1",
+            production_stage: "creator_changes_requested",
+            deleted_at: "2026-10-09T12:00:00Z"
+          }
+        ]
+      });
+      expect(blocked).toBe(false);
+    });
   });
 });
 

@@ -15,7 +15,8 @@ import {
   canToggleEditingFreeze,
   creatorControlledStages,
   creatorEditableStages,
-  inProgressEditingStages
+  inProgressEditingStages,
+  legacyStatusForProductionStage
 } from "@/lib/production-workflow";
 import { getDriveMetadata } from "@/lib/drive";
 import { parseGoogleDriveVideoFileUrl } from "@/lib/drive-urls";
@@ -80,21 +81,29 @@ export async function saveCreatorItem(payload: z.input<typeof creatorItemSchema>
   const admin = createSupabaseAdminClient();
 
   if (!data.id && (profile.role === "content_creator" || profile.role === "manager" || profile.role === "admin")) {
-    const { data: userAds } = await admin
-      .from("ads")
-      .select("id, creator_id, production_stage")
-      .eq("production_stage", "creator_changes_requested");
+    const binReady = await isRecycleBinReady();
+    const { data: userAds } = await liveOnly(
+      admin
+        .from("ads")
+        .select("id, creator_id, production_stage, deleted_at")
+        .eq("production_stage", "creator_changes_requested"),
+      binReady
+    );
 
-    if (userAds && userAds.length > 0) {
-      const directMatch = userAds.some((ad) => ad.creator_id === profile.id);
+    const activeUserAds = (userAds ?? []).filter((ad) => !ad.deleted_at);
+
+    if (activeUserAds.length > 0) {
+      const directMatch = activeUserAds.some((ad) => ad.creator_id === profile.id);
       if (directMatch) {
         return { ok: false, message: "You must resolve requested changes before creating another creative." };
       }
 
-      const adIds = userAds.map((ad) => ad.id);
-      const { data: createdLogs } = profile.role === "admin"
-        ? { data: null }
-        : await admin
+      // Only managers authoring on behalf of another creator get blocked by activity logs.
+      // Content creators only ever own ads where ad.creator_id === profile.id.
+      // Admins are exempt from authored-on-behalf blocks.
+      if (profile.role === "manager") {
+        const adIds = activeUserAds.map((ad) => ad.id);
+        const { data: createdLogs } = await admin
           .from("activity_logs")
           .select("ad_id")
           .in("ad_id", adIds)
@@ -102,8 +111,9 @@ export async function saveCreatorItem(payload: z.input<typeof creatorItemSchema>
           .eq("action", "creator_item_created")
           .limit(1);
 
-      if (createdLogs && createdLogs.length > 0) {
-        return { ok: false, message: "You must resolve requested changes before creating another creative." };
+        if (createdLogs && createdLogs.length > 0) {
+          return { ok: false, message: "You must resolve requested changes before creating another creative." };
+        }
       }
     }
   }
@@ -1123,6 +1133,7 @@ export async function resolveCreatorChangeRequest(payload: z.input<typeof creato
       editor_id: editor.id,
       assigned_at: new Date().toISOString(),
       production_stage: "ready_for_edit",
+      status: legacyStatusForProductionStage("ready_for_edit"),
       approval_stage: "manager_review",
       deadline: data.deadline,
       creator_reviewed_at: null,
@@ -1148,6 +1159,7 @@ export async function resolveCreatorChangeRequest(payload: z.input<typeof creato
   const { error: updateError } = await admin.from("ads").update({
     ...creativeFields,
     production_stage: "final_review",
+    status: legacyStatusForProductionStage("final_review"),
     approval_stage: "admin_final",
     creator_reviewed_at: new Date().toISOString(),
     final_approved_at: null
@@ -2026,20 +2038,77 @@ export async function bulkAssignCampaign(adIds: string[], campaignId: string) {
       targetName = `${ad.name} (${Math.floor(Math.random() * 900) + 100})`;
     }
 
-    const { error: updateError } = await admin
-      .from("ads")
-      .update({
-        campaign_id: campaignId,
-        name: targetName,
-        updated_at: now
-      })
-      .eq("id", ad.id);
+    // If creative already belongs to another campaign, clone it so it can exist in multiple campaigns
+    if (ad.campaign_id) {
+      const { data: sourceAd, error: fetchFullError } = await admin
+        .from("ads")
+        .select("*")
+        .eq("id", ad.id)
+        .single();
 
-    if (updateError) {
-      errors.push(`Failed to update ${ad.name}: ${updateError.message}`);
+      if (fetchFullError || !sourceAd) {
+        errors.push(`Failed to load source creative ${ad.name}: ${fetchFullError?.message ?? "Not found"}`);
+        continue;
+      }
+
+      // Prepare cloned ad payload
+      const { id: _oldId, created_at: _cAt, updated_at: _uAt, deleted_at: _dAt, ...restOfAd } = sourceAd as Record<string, unknown>;
+      const clonePayload = {
+        ...restOfAd,
+        name: targetName,
+        campaign_id: campaignId,
+        created_at: now,
+        updated_at: now
+      };
+
+      const { data: insertedAd, error: insertError } = await admin
+        .from("ads")
+        .insert(clonePayload)
+        .select("id")
+        .single();
+
+      if (insertError || !insertedAd) {
+        errors.push(`Failed to add creative ${ad.name} to campaign: ${insertError?.message ?? "Insert failed"}`);
+      } else {
+        // Copy existing tags from source ad to the newly added creative
+        try {
+          const { data: tagsToCopy } = await admin
+            .from("ad_tags")
+            .select("tag_id")
+            .eq("ad_id", ad.id);
+
+          if (tagsToCopy && tagsToCopy.length > 0) {
+            await admin.from("ad_tags").insert(
+              tagsToCopy.map((t) => ({
+                ad_id: insertedAd.id,
+                tag_id: t.tag_id
+              }))
+            );
+          }
+        } catch (tagErr) {
+          console.warn("Non-fatal: failed to duplicate tags for campaign ad copy:", tagErr);
+        }
+
+        updatedCount++;
+        updatedAdIds.push(insertedAd.id);
+      }
     } else {
-      updatedCount++;
-      updatedAdIds.push(ad.id);
+      // Creative had no previous campaign; assign it directly
+      const { error: updateError } = await admin
+        .from("ads")
+        .update({
+          campaign_id: campaignId,
+          name: targetName,
+          updated_at: now
+        })
+        .eq("id", ad.id);
+
+      if (updateError) {
+        errors.push(`Failed to update ${ad.name}: ${updateError.message}`);
+      } else {
+        updatedCount++;
+        updatedAdIds.push(ad.id);
+      }
     }
   }
 

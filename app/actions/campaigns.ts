@@ -20,68 +20,60 @@ const campaignPayloadSchema = z.object({
 });
 
 export async function saveInternalCampaign(payload: z.input<typeof campaignPayloadSchema>) {
-  const profile = await requireProfile();
-  if (profile.role !== "admin" && profile.role !== "manager") {
-    return { ok: false, message: "Only managers and admins can create or edit campaigns." };
-  }
-  const parsed = campaignPayloadSchema.safeParse(payload);
-  if (!parsed.success) {
-    return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid campaign data." };
-  }
+  try {
+    const profile = await requireProfile();
+    if (profile.role !== "admin" && profile.role !== "manager") {
+      return { ok: false, message: "Only managers and admins can create or edit campaigns." };
+    }
+    const parsed = campaignPayloadSchema.safeParse(payload);
+    if (!parsed.success) {
+      return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid campaign data." };
+    }
 
-  const data = parsed.data;
-  const admin = createSupabaseAdminClient();
+    const data = parsed.data;
+    const admin = createSupabaseAdminClient();
 
-  const fullPatch = {
-    name: data.name,
-    description: data.description || null,
-    video_goal: (data.videoGoal != null && data.videoGoal > 0) ? data.videoGoal : null,
-    active: data.active
-  };
-
-  // Attempt with video_goal first
-  let { data: savedCampaign, error } = data.id
-    ? await admin.from("campaigns").update(fullPatch).eq("id", data.id).select("*").single()
-    : await admin.from("campaigns").insert(fullPatch).select("*").single();
-
-  // If column doesn't exist or has a not-null constraint on remote yet, fallback gracefully
-  if (error && (error.message?.includes("video_goal") || error.code === "PGRST204" || error.code === "42703" || error.code === "23502")) {
-    const fallbackPatch = {
+    // The Supabase campaigns table schema has columns: id, name, description, active, created_at, updated_at, deleted_at, deleted_by.
+    // video_goal is managed separately via writeCampaignGoal / campaign-goals.json to prevent PGRST204 errors.
+    const patch = {
       name: data.name,
       description: data.description || null,
       active: data.active
     };
-    const retry = data.id
-      ? await admin.from("campaigns").update(fallbackPatch).eq("id", data.id).select("*").single()
-      : await admin.from("campaigns").insert(fallbackPatch).select("*").single();
-    savedCampaign = retry.data;
-    error = retry.error;
-  }
 
-  if (error) {
+    const { data: savedCampaign, error } = data.id
+      ? await admin.from("campaigns").update(patch).eq("id", data.id).select("*").single()
+      : await admin.from("campaigns").insert(patch).select("*").single();
+
+    if (error) {
+      return {
+        ok: false,
+        message: error.code === "23505" ? "A campaign with this name already exists." : error.message
+      };
+    }
+
+    const campaignId = savedCampaign?.id ?? data.id;
+    if (campaignId) {
+      await writeCampaignGoal(campaignId, data.videoGoal != null && data.videoGoal > 0 ? data.videoGoal : null);
+    }
+
+    if (savedCampaign) {
+      savedCampaign.video_goal = data.videoGoal != null && data.videoGoal > 0 ? data.videoGoal : null;
+    }
+
+    revalidatePath("/campaigns");
+    if (campaignId) {
+      revalidatePath(`/campaigns/${campaignId}`);
+    }
+
+    return { ok: true, campaign: savedCampaign };
+  } catch (err) {
+    console.error("Failed to save internal campaign:", err);
     return {
       ok: false,
-      message: error.code === "23505" ? "A campaign with this name already exists." : error.message
+      message: err instanceof Error ? err.message : "Failed to save campaign. Please try again."
     };
   }
-
-  const campaignId = savedCampaign?.id ?? data.id;
-  if (campaignId) {
-    await writeCampaignGoal(campaignId, data.videoGoal != null && data.videoGoal > 0 ? data.videoGoal : null);
-  }
-
-  if (savedCampaign) {
-    savedCampaign.video_goal = data.videoGoal != null && data.videoGoal > 0 ? data.videoGoal : null;
-  }
-
-  revalidatePath("/campaigns");
-  if (campaignId) {
-    revalidatePath(`/campaigns/${campaignId}`);
-  }
-  revalidatePath("/dashboard");
-  revalidatePath("/library"); invalidateLibraryCache();
-
-  return { ok: true, campaign: savedCampaign };
 }
 
 export async function deleteInternalCampaign(id: string) {

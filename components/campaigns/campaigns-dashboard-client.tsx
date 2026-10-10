@@ -285,6 +285,7 @@ export function CampaignsDashboardClient({
   const [videoGoal, setVideoGoal] = useState<number | null>(null);
   const [active, setActive] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSavingCampaign, setIsSavingCampaign] = useState(false);
 
   const canManage = profile.role === "admin" || profile.role === "manager";
 
@@ -546,6 +547,7 @@ export function CampaignsDashboardClient({
     setVideoGoal(null);
     setActive(true);
     setErrorMessage(null);
+    setIsSavingCampaign(false);
     setModalOpen(true);
   };
 
@@ -557,6 +559,7 @@ export function CampaignsDashboardClient({
     setVideoGoal(campaign.video_goal ?? null);
     setActive(campaign.active);
     setErrorMessage(null);
+    setIsSavingCampaign(false);
     setModalOpen(true);
   };
 
@@ -567,10 +570,11 @@ export function CampaignsDashboardClient({
     setVideoGoal(campaign.video_goal ?? null);
     setActive(campaign.active);
     setErrorMessage(null);
+    setIsSavingCampaign(false);
     setModalOpen(true);
   };
 
-  const handleSaveCampaign = (e: React.FormEvent) => {
+  const handleSaveCampaign = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       setErrorMessage("Campaign name is required.");
@@ -578,7 +582,8 @@ export function CampaignsDashboardClient({
     }
 
     setErrorMessage(null);
-    startTransition(async () => {
+    setIsSavingCampaign(true);
+    try {
       const response = await runServerAction(() =>
         saveInternalCampaign({
           id: editingCampaign?.id,
@@ -591,12 +596,19 @@ export function CampaignsDashboardClient({
 
       if (!response.ok) {
         setErrorMessage(response.message ?? "Failed to save campaign.");
+        setIsSavingCampaign(false);
         return;
       }
 
       setModalOpen(false);
-      router.refresh();
-    });
+      setIsSavingCampaign(false);
+      startTransition(() => {
+        router.refresh();
+      });
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : "Failed to save campaign.");
+      setIsSavingCampaign(false);
+    }
   };
 
   const handleDeleteCampaign = (campaignId: string, campaignName: string, e: React.MouseEvent) => {
@@ -2062,12 +2074,12 @@ export function CampaignsDashboardClient({
                   type="button"
                   variant="secondary"
                   onClick={() => setModalOpen(false)}
-                  disabled={isPending}
+                  disabled={isSavingCampaign}
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={isPending || !name.trim()} className="gap-2">
-                  {isPending ? (
+                <Button type="submit" disabled={isSavingCampaign || !name.trim()} className="gap-2">
+                  {isSavingCampaign ? (
                     <Loader2 className="size-4 animate-spin" />
                   ) : (
                     <Plus className="size-4" />
