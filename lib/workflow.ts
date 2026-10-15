@@ -7,7 +7,19 @@ export function reviewPermissionError(params: {
   stage: ApprovalStage;
   reviewerRole: UserRole;
   twoStepApproval: boolean;
+  decision?: ReviewDecision;
+  isChangeRequestApproval?: boolean;
 }) {
+  if (params.reviewerRole === "media_buyer") {
+    if (params.decision === "approve") {
+      if (params.isChangeRequestApproval) {
+        return null;
+      }
+      return "Media buyers cannot approve ads.";
+    }
+    return null;
+  }
+
   if (params.reviewerRole !== "admin" && params.reviewerRole !== "manager") {
     return "Only managers and admins can review ads.";
   }

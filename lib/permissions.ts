@@ -12,7 +12,7 @@ export function canEditAd(params: {
   }
 
   return (
-    ["content_creator", "editor"].includes(params.role) &&
+    ["content_creator", "editor", "media_buyer"].includes(params.role) &&
     ["draft", "changes_requested", "rejected"].includes(params.status) &&
     (params.userId === params.creatorId || params.userId === params.editorId)
   );
@@ -30,7 +30,7 @@ export function canSubmitAd(params: {
   }
 
   return (
-    ["content_creator", "editor"].includes(params.role) &&
+    ["content_creator", "editor", "media_buyer"].includes(params.role) &&
     ["draft", "changes_requested", "rejected"].includes(params.status) &&
     (params.userId === params.creatorId || params.userId === params.editorId)
   );

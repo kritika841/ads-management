@@ -37,6 +37,16 @@ export function queuesForRole(role: UserRole): { key: QueueKey; label: string }[
       { key: "approved", label: "Approved" }
     ];
   }
+  if (role === "media_buyer") {
+    return [
+      { key: "all", label: "All" },
+      { key: "approved", label: "Approved" },
+      { key: "in_production", label: "In production" },
+      { key: "needs_review", label: "In review" },
+      { key: "creator_changes", label: "Changes: Creator" },
+      { key: "changes", label: "Changes: Editor" }
+    ];
+  }
   return [
     { key: "needs_review", label: "Needs review" },
     { key: "pending_editor_assign", label: "Pending editor assign" },

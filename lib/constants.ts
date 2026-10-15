@@ -1,6 +1,6 @@
 import type { AdStatus, Platform, UserRole } from "@/lib/types";
 
-export const userRoles: UserRole[] = ["admin", "manager", "editor", "content_creator"];
+export const userRoles: UserRole[] = ["admin", "manager", "media_buyer", "editor", "content_creator"];
 
 export const adStatuses: AdStatus[] = [
   "draft",
@@ -38,12 +38,26 @@ export const statusStyles: Record<AdStatus, string> = {
 
 export const reviewerRoles: UserRole[] = ["admin", "manager"];
 
+export const roleHierarchy: Record<UserRole, number> = {
+  admin: 4,
+  manager: 3,
+  media_buyer: 2,
+  editor: 1,
+  content_creator: 1
+};
+
+export function getRoleHierarchyLevel(role: UserRole | string): number {
+  return roleHierarchy[role as UserRole] ?? 1;
+}
+
 export function roleLabel(role: UserRole | string): string {
   switch (role) {
     case "admin":
       return "Admin";
     case "manager":
       return "Manager";
+    case "media_buyer":
+      return "Media Buyer";
     case "editor":
       return "Editor";
     case "content_creator":
@@ -52,3 +66,4 @@ export function roleLabel(role: UserRole | string): string {
       return role;
   }
 }
+

@@ -294,7 +294,7 @@ export function CampaignsDashboardClient({
     return campaignOverviews.flatMap((ov) =>
       ov.creatives
         .filter((creative) => {
-          if (profile.role === "admin" || profile.role === "manager") return true;
+          if (profile.role === "admin" || profile.role === "manager" || profile.role === "media_buyer") return true;
           if (profile.role === "content_creator") return creative.creator_id === profile.id;
           if (profile.role === "editor") return creative.editor_id === profile.id;
           return true;

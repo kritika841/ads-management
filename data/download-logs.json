@@ -25,8 +25,34 @@
     "zip_filename": "summer-campaign.zip",
     "error": null,
     "download_count": 1,
-    "last_downloaded_at": "2026-09-28T09:57:18.381Z",
-    "expires_at": "2026-10-01T09:57:18.375Z",
-    "created_at": "2026-09-28T09:57:18.375Z"
+    "last_downloaded_at": "2026-10-14T02:39:06.107Z",
+    "expires_at": "2026-10-17T02:39:06.099Z",
+    "created_at": "2026-10-14T02:39:06.099Z"
+  },
+  {
+    "id": "0b937906-8e95-467f-9fdc-43f2eff5d94b",
+    "user_id": "c2d5c47f-b97b-4625-8dce-88c3ac1a20d5",
+    "user_name": "kritika media buyer testing",
+    "user_role": "media_buyer",
+    "title": "HIM0207",
+    "source": "single_ad",
+    "campaign_id": null,
+    "campaign_name": null,
+    "creative_count": 1,
+    "creative_ids": [
+      "ba8814ad-ac02-4217-a336-581cf8445b94"
+    ],
+    "creative_names": [
+      "HIM0207"
+    ],
+    "status": "ready",
+    "zip_size_bytes": 41562929,
+    "zip_file_path": null,
+    "zip_filename": "HIM0207.mp4",
+    "error": null,
+    "download_count": 1,
+    "last_downloaded_at": "2026-10-12T07:41:04.123Z",
+    "expires_at": "2026-10-15T07:41:04.123Z",
+    "created_at": "2026-10-12T07:41:04.123Z"
   }
 ]

@@ -74,6 +74,18 @@ describe("campaign permissions and sync safeguards", () => {
     created_at: new Date().toISOString()
   };
 
+  const mediaBuyerUser: Profile = {
+    id: "media-buyer-uuid-1",
+    name: "Media Buyer",
+    email: "mediabuyer@example.com",
+    role: "media_buyer",
+    avatar_url: null,
+    active: true,
+    deleted_at: null,
+    updated_at: new Date().toISOString(),
+    created_at: new Date().toISOString()
+  };
+
   it("filters campaign creatives so creators cannot see other creators' ads", () => {
     const rawAds = [
       { id: "ad-1", creator_id: "creator-uuid-1", editor_id: "editor-uuid-1", name: "Ad 1" },
@@ -84,9 +96,12 @@ describe("campaign permissions and sync safeguards", () => {
     const collaboratorAdIds = new Set<string>();
 
     const filterForProfile = (profile: Profile) => {
-      const isFullAccess = profile.role === "admin" || profile.role === "manager";
+      const isFullAccess = profile.role === "admin" || profile.role === "manager" || profile.role === "media_buyer";
       if (isFullAccess) return rawAds;
       return rawAds.filter((ad) => {
+        if (profile.role === "media_buyer") {
+          return true;
+        }
         if (profile.role === "content_creator") {
           return ad.creator_id === profile.id || collaboratorAdIds.has(ad.id);
         }
@@ -115,6 +130,10 @@ describe("campaign permissions and sync safeguards", () => {
 
     const adminAds = filterForProfile(adminUser);
     expect(adminAds).toHaveLength(3);
+
+    const mediaBuyerAds = filterForProfile(mediaBuyerUser);
+    expect(mediaBuyerAds).toHaveLength(3);
+    expect(mediaBuyerAds.map((a) => a.id)).toEqual(["ad-1", "ad-2", "ad-3"]);
   });
 
   it("includes collaborator ads for contributors who were granted access", () => {

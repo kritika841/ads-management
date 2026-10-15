@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import {
   AlertCircle,
   AlertTriangle,
   Calendar,
   CheckCircle2,
   Clock,
+  Download,
   Eye,
   EyeOff,
   History,
@@ -26,14 +27,20 @@ import { changePasswordAction } from "@/app/actions/password";
 import type { PasswordStatus } from "@/lib/password-security";
 import type { Profile } from "@/lib/types";
 import { roleLabel } from "@/lib/constants";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, cn } from "@/lib/utils";
+import { DownloadLogsPanel } from "@/components/admin/download-logs-panel";
+import type { DownloadLog } from "@/lib/download-logs";
 
 export function UserSettingsClient({
   profile,
-  initialStatus
+  initialStatus,
+  downloadLogs = [],
+  retentionDays = 3
 }: {
   profile: Profile;
   initialStatus: PasswordStatus;
+  downloadLogs?: DownloadLog[];
+  retentionDays?: number;
 }) {
   const [status, setStatus] = useState<PasswordStatus>(initialStatus);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -42,6 +49,23 @@ export function UserSettingsClient({
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+
+  const canDownload = profile.role === "admin" || profile.role === "manager" || profile.role === "media_buyer" || downloadLogs.length > 0;
+  const [activeTab, setActiveTab] = useState<"account" | "downloads">("account");
+
+  useEffect(() => {
+    const handleHash = () => {
+      const h = window.location.hash;
+      if (h === "#downloads") {
+        setActiveTab("downloads");
+      } else if (h === "#account" || h === "#security" || !h) {
+        setActiveTab("account");
+      }
+    };
+    handleHash();
+    window.addEventListener("hashchange", handleHash);
+    return () => window.removeEventListener("hashchange", handleHash);
+  }, []);
 
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -100,16 +124,72 @@ export function UserSettingsClient({
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8 px-4 py-8 lg:px-8">
+    <div className="mx-auto max-w-4xl space-y-6 px-4 py-8 lg:px-8">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-          Account Settings
+          Settings
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Manage your personal profile, credentials, and password security policies.
+          {canDownload
+            ? "Manage your personal profile, credentials, password security, and export download logs."
+            : "Manage your personal profile, credentials, and password security policies."}
         </p>
       </div>
+
+      {/* Tabs for roles with download access */}
+      {canDownload ? (
+        <div className="flex border-b border-border text-sm">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("account");
+              window.location.hash = "#account";
+            }}
+            className={cn(
+              "flex items-center gap-2 border-b-2 px-4 py-2.5 font-medium transition-colors cursor-pointer",
+              activeTab === "account"
+                ? "border-primary text-foreground font-semibold"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Shield className="size-4" />
+            <span>Account & Security</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("downloads");
+              window.location.hash = "#downloads";
+            }}
+            className={cn(
+              "flex items-center gap-2 border-b-2 px-4 py-2.5 font-medium transition-colors cursor-pointer",
+              activeTab === "downloads"
+                ? "border-primary text-foreground font-semibold"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Download className="size-4" />
+            <span>Download Logs</span>
+            {downloadLogs.length > 0 ? (
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                {downloadLogs.length}
+              </span>
+            ) : null}
+          </button>
+        </div>
+      ) : null}
+
+      {activeTab === "downloads" && canDownload ? (
+        <DownloadLogsPanel
+          initialLogs={downloadLogs}
+          retentionDays={retentionDays}
+          canEditRetention={false}
+          hideRoleFilter={true}
+          canDelete={true}
+        />
+      ) : (
+        <div className="space-y-8">
 
       {/* Profile Overview Card */}
       <div className="panel p-6">
@@ -342,6 +422,8 @@ export function UserSettingsClient({
           </form>
         </div>
       </div>
+      </div>
+      )}
     </div>
   );
 }

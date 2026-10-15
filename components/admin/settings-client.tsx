@@ -29,6 +29,12 @@ import { SecuritySettingsPanel, type PasswordStatusItem } from "@/components/adm
 import { RecycleBinPanel } from "@/components/admin/recycle-bin-panel";
 import type { RecycleBinSnapshot } from "@/lib/recycle-bin";
 import { DEFAULT_RECYCLE_BIN_RETENTION_DAYS, formatRetentionDays } from "@/lib/retention";
+import {
+  ADS_PERFORMANCE_NAV_INFO,
+  ADS_PERFORMANCE_NAV_ITEMS,
+  DEFAULT_ADS_PERFORMANCE_NAV_ITEMS,
+  type AdsPerformanceNavItemKey
+} from "@/lib/metric-visibility";
 
 type SettingsTab = "workflow" | "security" | "downloads" | "audit" | "announcements" | "recyclebin";
 
@@ -87,6 +93,11 @@ export function SettingsClient({
   const [bulkAddToCampaignRoles, setBulkAddToCampaignRoles] = useState<("admin" | "content_creator" | "editor" | "manager")[]>(
     settings.bulk_add_to_campaign_roles ?? ["admin"]
   );
+  const [adsPerformanceNavItems, setAdsPerformanceNavItems] = useState<AdsPerformanceNavItemKey[]>(
+    settings.ads_performance_nav_items && settings.ads_performance_nav_items.length > 0
+      ? settings.ads_performance_nav_items
+      : [...DEFAULT_ADS_PERFORMANCE_NAV_ITEMS]
+  );
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -121,7 +132,8 @@ export function SettingsClient({
         maxConcurrentEdits,
         allowManagerFinalApproval,
         managerCreativeScope,
-        bulkAddToCampaignRoles
+        bulkAddToCampaignRoles,
+        adsPerformanceNavItems
       }));
       setMessage(response.ok ? "Settings saved." : response.message ?? "Unable to save settings.");
     });
@@ -509,6 +521,81 @@ export function SettingsClient({
                         <span className="text-[10px] text-muted-foreground">Allow editors to bulk assign campaigns</span>
                       </div>
                     </label>
+                  </div>
+                </div>
+
+                <div className="space-y-3 rounded-lg border border-border bg-card/60 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold text-foreground">Ads Performance Sidebar Sub-menu Items</p>
+                      <p className="mt-1 text-[11px] text-muted-foreground leading-4">
+                        Choose which creative category tabs and tools appear in the Ads Performance sub-menu in the left navigation sidebar.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setAdsPerformanceNavItems([...ADS_PERFORMANCE_NAV_ITEMS])}
+                        className="h-6 px-2 text-[10px]"
+                      >
+                        Select all
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setAdsPerformanceNavItems([...DEFAULT_ADS_PERFORMANCE_NAV_ITEMS])}
+                        className="h-6 px-2 text-[10px]"
+                      >
+                        Reset
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                    {ADS_PERFORMANCE_NAV_ITEMS.map((key) => {
+                      const info = ADS_PERFORMANCE_NAV_INFO[key];
+                      const isChecked = adsPerformanceNavItems.includes(key);
+                      return (
+                        <label
+                          key={`admin-settings-nav-${key}`}
+                          className={cn(
+                            "flex items-center justify-between gap-2.5 rounded-lg border px-3 py-2 cursor-pointer transition select-none",
+                            isChecked
+                              ? "border-primary/40 bg-card shadow-2xs"
+                              : "border-border/60 bg-muted/20 opacity-60 hover:opacity-90"
+                          )}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
+                                setAdsPerformanceNavItems((prev) =>
+                                  prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+                                );
+                              }}
+                              className="size-3.5 rounded border-border text-primary focus:ring-primary cursor-pointer"
+                            />
+                            <div className="min-w-0">
+                              <span className="block truncate text-xs font-medium text-foreground">{info.label}</span>
+                              <span className="block truncate text-[10px] text-muted-foreground">{info.description}</span>
+                            </div>
+                          </div>
+                          {info.adminOnly ? (
+                            <span className="shrink-0 rounded bg-warning/15 px-1.5 py-0.5 text-[9px] font-medium text-warning">
+                              Admin
+                            </span>
+                          ) : info.managerOrAdmin ? (
+                            <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-[9px] font-medium text-accent-foreground">
+                              Manager+
+                            </span>
+                          ) : null}
+                        </label>
+                      );
+                    })}
                   </div>
                 </div>
 

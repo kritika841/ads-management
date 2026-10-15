@@ -73,12 +73,12 @@ export function UserAnnouncementsFeed({
     };
     window.addEventListener("adflow:announcement-updated", handleCustomEvent);
 
-    // 4. Background polling fallback every 4 seconds when page is visible
+    // 4. Background polling fallback every 30 seconds when page is visible
     const timer = setInterval(() => {
       if (document.visibilityState === "visible") {
         void refreshAnnouncements();
       }
-    }, 4000);
+    }, 30000);
 
     const onVisibility = () => {
       if (document.visibilityState === "visible") void refreshAnnouncements();

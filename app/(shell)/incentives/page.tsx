@@ -27,6 +27,7 @@ export default async function IncentivesPage() {
       overrideAllUsers={settings.override_all_users}
       usersWithAllAdsAccess={settings.users_with_all_ads_access}
       hiddenCampaignsByUser={settings.hidden_campaigns_by_user}
+      adsPerformanceNavItems={settings.ads_performance_nav_items}
       allProfiles={allProfiles}
       {...dashboard}
     />

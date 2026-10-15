@@ -2,6 +2,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { ActivityLog, EditorTimeLog } from "@/lib/types";
 import { workLogRangeBoundsMs, type WorkLogAd } from "@/lib/work-log";
 import { getAttendanceForRange } from "@/lib/attendance";
+import { getUserSessionsForRange } from "@/lib/user-sessions";
 
 const PAGE_SIZE = 1000;
 const MAX_PAGES = 30;
@@ -21,14 +22,14 @@ async function fetchAllPages<T>(query: (from: number, to: number) => PromiseLike
   return rows;
 }
 
-/** Loads only what the work log needs for the date range (activity, editing sessions, creatives, and attendance). */
+/** Loads only what the work log needs for the date range (activity, editing sessions, creatives, attendance, and user sessions). */
 export async function getWorkLogData(from: string, to: string) {
   const admin = createSupabaseAdminClient();
   const { start, end } = workLogRangeBoundsMs(from, to);
   const startIso = new Date(start).toISOString();
   const endIso = new Date(end).toISOString();
 
-  const [logs, timeLogs, attendanceLogs] = await Promise.all([
+  const [logs, timeLogs, attendanceLogs, userSessions] = await Promise.all([
     fetchAllPages<ActivityLog>((a, b) =>
       admin
         .from("activity_logs")
@@ -48,7 +49,8 @@ export async function getWorkLogData(from: string, to: string) {
         .order("session_started_at", { ascending: true })
         .range(a, b) as unknown as PromiseLike<Page<EditorTimeLog>>
     ),
-    getAttendanceForRange(from, to)
+    getAttendanceForRange(from, to),
+    getUserSessionsForRange(from, to)
   ]);
 
   const adIds = Array.from(new Set([...logs.map((log) => log.ad_id), ...timeLogs.map((log) => log.ad_id)].filter((id): id is string => Boolean(id))));
@@ -62,5 +64,5 @@ export async function getWorkLogData(from: string, to: string) {
     ads.push(...((data ?? []) as WorkLogAd[]));
   }
 
-  return { logs, timeLogs, ads, attendanceLogs };
+  return { logs, timeLogs, ads, attendanceLogs, userSessions };
 }

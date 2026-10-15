@@ -383,7 +383,7 @@ export function CampaignDetailClient({
   const editors = useMemo(() => profiles.filter((p) => p.role === "editor" && p.active), [profiles]);
 
   const canAddCreative =
-    profile.role === "content_creator" || profile.role === "admin" || profile.role === "manager";
+    profile.role === "content_creator" || profile.role === "admin" || profile.role === "manager" || profile.role === "media_buyer";
   const canEditCampaign = profile.role === "admin" || profile.role === "manager";
 
   const [editCampaignModalOpen, setEditCampaignModalOpen] = useState(false);

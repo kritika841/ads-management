@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { zipSync } from "fflate";
 import { getCurrentProfile } from "@/lib/auth";
 import { getDriveMedia, getDriveMetadata } from "@/lib/drive";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { resolveAdMedia } from "@/lib/ad-media-export";
+import { createDownloadLog } from "@/lib/download-logs";
 
 const folderMime = "application/vnd.google-apps.folder";
 
@@ -52,6 +54,26 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     });
     const length = source.headers.get("content-length");
     if (length) headers.set("Content-Length", length);
+
+    await createDownloadLog({
+      id: randomUUID(),
+      userId: profile.id,
+      userName: profile.name,
+      userRole: profile.role,
+      title: ad.name,
+      source: "single_ad",
+      creativeCount: 1,
+      creativeIds: [ad.id],
+      creativeNames: [ad.name],
+      zipFilename: filename,
+      zipSizeBytes: length ? Number(length) : null,
+      status: "ready",
+      downloadCount: 1,
+      lastDownloadedAt: new Date().toISOString(),
+    }).catch((err) => {
+      console.error("Failed to log single ad download:", err);
+    });
+
     return new NextResponse(source.body, { headers });
   }
 
@@ -61,10 +83,31 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
 
   const zipped = zipSync(media.files, { level: 0 });
+  const filename = `${safeName(ad.name)}.zip`;
+
+  await createDownloadLog({
+    id: randomUUID(),
+    userId: profile.id,
+    userName: profile.name,
+    userRole: profile.role,
+    title: ad.name,
+    source: "single_ad",
+    creativeCount: 1,
+    creativeIds: [ad.id],
+    creativeNames: [ad.name],
+    zipFilename: filename,
+    zipSizeBytes: zipped.byteLength,
+    status: "ready",
+    downloadCount: 1,
+    lastDownloadedAt: new Date().toISOString(),
+  }).catch((err) => {
+    console.error("Failed to log single ad download:", err);
+  });
+
   return new NextResponse(zipped, {
     headers: {
       "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="${safeName(ad.name)}.zip"`,
+      "Content-Disposition": `attachment; filename="${filename}"`,
       "Content-Length": String(zipped.byteLength),
       "Cache-Control": "no-store",
     }

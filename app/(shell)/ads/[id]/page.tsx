@@ -193,7 +193,7 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
               {ad.tags.length ? <div className="mt-4 flex flex-wrap gap-1.5 border-t border-border pt-4">{ad.tags.map((tag) => <span key={tag.id} className="rounded-md bg-accent px-2 py-1 text-[11px] font-medium text-accent-foreground">#{tag.name}</span>)}</div> : null}
             </section>
 
-            {isReviewer ? <ReviewPanel ad={ad} profile={profile} reviews={reviews} annotations={annotations} allowManagerFinalApproval={settings.allow_manager_final_approval ?? true} /> : null}
+            {(isReviewer || profile.role === "media_buyer") ? <ReviewPanel ad={ad} profile={profile} reviews={reviews} annotations={annotations} allowManagerFinalApproval={settings.allow_manager_final_approval ?? true} /> : null}
             {isReviewer && ad.editor_id ? <EditingTimeDisplay timeLogs={timeLogs} /> : null}
             <CommentThread adId={ad.id} comments={comments} mentionableUsers={mentionableUsers} canGrantAccess={isReviewer} />
           </aside>

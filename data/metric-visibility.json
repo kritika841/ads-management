@@ -1,24 +1,8 @@
 {
-  "content_creator": [
-    "revenue",
-    "cpa"
-  ],
-  "editor": [
-    "spend",
-    "impressions",
-    "reach",
-    "clicks",
-    "purchases",
-    "revenue",
-    "cpa",
-    "roas",
-    "ctr",
-    "cpm"
-  ],
-  "manager": [
-    "purchases",
-    "revenue"
-  ],
+  "content_creator": [],
+  "editor": [],
+  "manager": [],
+  "media_buyer": [],
   "manager_creative_scope": "all",
   "bulk_add_to_campaign_roles": [
     "admin"
@@ -40,5 +24,10 @@
   "users_with_all_ads_access": [],
   "hidden_campaigns_by_user": {
     "360a1a7a-258a-4591-aee1-7bce60eaee4b": []
-  }
+  },
+  "ads_performance_nav_items": [
+    "overview",
+    "settings",
+    "mapping"
+  ]
 }

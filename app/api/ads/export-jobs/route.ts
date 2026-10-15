@@ -34,9 +34,9 @@ export async function GET() {
 
   try {
     const logs = await getDownloadLogs();
-    // Non-admins only see their own logs if applicable, admins and managers see all logs
+    // Only admins see all download logs dashboard-wide; non-admins only see their own logs
     const filtered =
-      profile.role === "admin" || profile.role === "manager"
+      profile.role === "admin"
         ? logs
         : logs.filter((log) => log.user_id === profile.id);
 

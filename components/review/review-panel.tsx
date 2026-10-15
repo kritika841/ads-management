@@ -34,13 +34,19 @@ export function ReviewPanel({
   const isReviewer = profile.role === "admin" || profile.role === "manager";
   const isAdmin = profile.role === "admin";
   const isManager = profile.role === "manager";
+  const isMediaBuyer = profile.role === "media_buyer";
+  const hasReviewAccess = isReviewer || isMediaBuyer;
+  const hasMediaBuyerRequestedChanges = isMediaBuyer && (
+    ad.latest_change_request?.reviewer?.id === profile.id ||
+    reviews.some((r) => r.reviewer_id === profile.id && r.decision === "request_changes")
+  );
   const managerApprovedPendingAdmin = !allowManagerFinalApproval && isManager && ad.approval_stage === "admin_final";
-  const canReviewNow = isReviewer && ad.status === "pending_review" && (ad.production_stage === "creator_review" || ad.production_stage === "final_review");
-  const canReopenApproved = (isAdmin || isManager) && ad.production_stage === "approved";
-  const canChooseChangeTarget = isReviewer && (canReviewNow || canReopenApproved);
-  const permissionMessage = isReviewer && !canReviewNow && !canReopenApproved
+  const canReviewNow = hasReviewAccess && ad.status === "pending_review" && (ad.production_stage === "creator_review" || ad.production_stage === "final_review");
+  const canReopenApproved = (isAdmin || isManager || isMediaBuyer) && ad.production_stage === "approved";
+  const canChooseChangeTarget = hasReviewAccess && (canReviewNow || canReopenApproved);
+  const permissionMessage = hasReviewAccess && !canReviewNow && !canReopenApproved
     ? ad.production_stage === "approved"
-      ? "Final approval is complete."
+      ? (isMediaBuyer ? null : "Final approval is complete.")
       : "Final approval becomes available after the editor submits the video."
     : null;
 
@@ -49,8 +55,10 @@ export function ReviewPanel({
       setApprovalQueued(true);
       const isIntermediate = !allowManagerFinalApproval && isManager;
       toast({
-        title: "Approved",
-        description: isIntermediate
+        title: isMediaBuyer ? "Approved changes" : "Approved",
+        description: isMediaBuyer
+          ? "Approval for your requested changes will be saved in 5 seconds."
+          : isIntermediate
           ? "Approval will be submitted to Admin in 5 seconds."
           : "Final approval will be saved in 5 seconds.",
         tone: "success",
@@ -69,10 +77,22 @@ export function ReviewPanel({
       setApprovalQueued(false);
       const isIntermediate = !allowManagerFinalApproval && isManager;
       toast({
-        title: response.ok ? (decision === "approve" ? (isIntermediate ? "Approved by manager" : "Creative approved") : "Changes requested") : "Review not saved",
+        title: response.ok
+          ? (decision === "approve"
+            ? (isMediaBuyer
+              ? "Changes approved"
+              : isIntermediate
+              ? "Approved by manager"
+              : "Creative approved")
+            : "Changes requested")
+          : "Review not saved",
         description: response.ok
           ? (decision === "approve"
-            ? (isIntermediate ? "Forwarded to Administrator for final approval." : "Final approval is complete.")
+            ? (isMediaBuyer
+              ? "Your requested changes have been approved and forwarded for final review."
+              : isIntermediate
+              ? "Forwarded to Administrator for final approval."
+              : "Final approval is complete.")
             : changeTarget === "creator" ? "The creative was returned to the creator." : "The creative was returned to the editor.")
           : response.message ?? "Unable to review.",
         tone: response.ok ? "success" : "error"
@@ -87,17 +107,36 @@ export function ReviewPanel({
 
   return (
     <section className="panel p-5">
-      <div className="flex items-center justify-between gap-3"><h2 className="section-heading">Final approval</h2>{canReviewNow ? <span className="inline-flex items-center gap-1.5 text-xs font-medium text-warning"><span className="size-1.5 rounded-full bg-warning" />Action required</span> : null}</div>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="section-heading">
+          {isMediaBuyer
+            ? (hasMediaBuyerRequestedChanges ? "Review requested changes" : "Request creative changes")
+            : "Final approval"}
+        </h2>
+        {canReviewNow ? <span className="inline-flex items-center gap-1.5 text-xs font-medium text-warning"><span className="size-1.5 rounded-full bg-warning" />{isMediaBuyer ? "Review open" : "Action required"}</span> : null}
+      </div>
 
-      {isReviewer ? (
+      {hasReviewAccess ? (
         <div className="mt-4 space-y-4">
           {permissionMessage ? (
             <p className="rounded-md bg-warning/15 px-3 py-2 text-sm text-warning">{permissionMessage}</p>
           ) : null}
-          {canReviewNow && ad.production_stage === "creator_review" ? (
+          {canReviewNow && !isMediaBuyer && ad.production_stage === "creator_review" ? (
             <p className="rounded-md bg-accent px-3 py-2 text-sm text-accent-foreground">
               The content creator has not approved yet. You can still provide direct final approval.
             </p>
+          ) : null}
+          {canReviewNow && isMediaBuyer ? (
+            hasMediaBuyerRequestedChanges ? (
+              <p className="rounded-md bg-accent px-3 py-2 text-sm text-accent-foreground flex items-center gap-1.5">
+                <CheckCircle2 className="size-4 text-primary shrink-0" aria-hidden />
+                You requested changes on this creative. You can approve the revised changes to forward for final approval, or request further changes below.
+              </p>
+            ) : ad.production_stage === "creator_review" ? (
+              <p className="rounded-md bg-accent px-3 py-2 text-sm text-accent-foreground">
+                This creative is currently undergoing review. You can inspect the video and request changes if needed.
+              </p>
+            ) : null
           ) : null}
 
           {canReviewNow ? (
@@ -161,30 +200,60 @@ export function ReviewPanel({
               ) : null}
 
               <div className="grid gap-2">
-                {managerApprovedPendingAdmin ? (
+                {isMediaBuyer ? (
+                  hasMediaBuyerRequestedChanges ? (
+                    <>
+                      <Button disabled={isPending || approvalQueued} onClick={() => decide("approve")}>
+                        {isPending || approvalQueued ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" aria-hidden />}
+                        Approve changes
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        disabled={isPending || approvalQueued || !note.trim() || !changeTarget}
+                        onClick={() => decide("request_changes")}
+                        title={!note.trim() || !changeTarget ? "Add a review note and choose a change target to request changes" : undefined}
+                      >
+                        <Send className="size-4" aria-hidden />
+                        Request changes
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      variant="secondary"
+                      disabled={isPending || approvalQueued || !note.trim() || !changeTarget}
+                      onClick={() => decide("request_changes")}
+                      title={!note.trim() || !changeTarget ? "Add a review note and choose a change target to request changes" : undefined}
+                    >
+                      <Send className="size-4" aria-hidden />
+                      Request changes
+                    </Button>
+                  )
+                ) : managerApprovedPendingAdmin ? (
                   <Button disabled variant="secondary" className="gap-1.5">
                     <Check className="size-4 text-primary" aria-hidden />
                     Approved · Waiting for Admin
                   </Button>
                 ) : (
-                  <Button disabled={isPending || approvalQueued} onClick={() => decide("approve")}>
-                    {isPending || approvalQueued ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" aria-hidden />}
-                    {!allowManagerFinalApproval && isManager
-                      ? "Approve & Submit to Admin"
-                      : isAdmin && !allowManagerFinalApproval && ad.approval_stage === "admin_final"
-                      ? "Grant final approval"
-                      : "Final approve"}
-                  </Button>
+                  <>
+                    <Button disabled={isPending || approvalQueued} onClick={() => decide("approve")}>
+                      {isPending || approvalQueued ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" aria-hidden />}
+                      {!allowManagerFinalApproval && isManager
+                        ? "Approve & Submit to Admin"
+                        : isAdmin && !allowManagerFinalApproval && ad.approval_stage === "admin_final"
+                        ? "Grant final approval"
+                        : "Final approve"}
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      disabled={isPending || approvalQueued || !note.trim() || !changeTarget}
+                      onClick={() => decide("request_changes")}
+                      title={!note.trim() || !changeTarget ? "Add a review note and choose a change target to request changes" : undefined}
+                    >
+                      <Send className="size-4" aria-hidden />
+                      Request changes
+                    </Button>
+                  </>
                 )}
-                <Button
-                  variant="secondary"
-                  disabled={isPending || approvalQueued || !note.trim() || !changeTarget}
-                  onClick={() => decide("request_changes")}
-                  title={!note.trim() || !changeTarget ? "Add a review note and choose a change target to request changes" : undefined}
-                >
-                  <Send className="size-4" aria-hidden />
-                  Request changes
-                </Button>
               </div>
             </>
           ) : null}
@@ -229,7 +298,7 @@ export function ReviewPanel({
           ) : null}
         </div>
       ) : (
-        <p className="mt-3 text-sm text-muted-foreground">Review actions are available to managers and admins.</p>
+        <p className="mt-3 text-sm text-muted-foreground">Review actions are available to managers, admins, and media buyers.</p>
       )}
 
       <ReviewNotes adId={ad.id} annotations={annotations} />

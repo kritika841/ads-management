@@ -70,12 +70,20 @@ export async function createDownloadLog(input: {
   creativeCount: number;
   creativeIds: string[];
   creativeNames: string[];
-  zipFilename: string;
+  zipFilename?: string;
   zipFilePath?: string | null;
+  zipSizeBytes?: number | null;
+  status?: DownloadLogStatus;
+  downloadCount?: number;
+  lastDownloadedAt?: string | null;
 }): Promise<DownloadLog> {
   const now = new Date();
   const { downloadDays } = await getRetentionSettings();
   const expiresAt = new Date(now.getTime() + downloadDays * DAY_MS);
+
+  const defaultFilename = input.title
+    ? `${input.title.replace(/[^a-zA-Z0-9._\- ]/g, "_")}.zip`
+    : "download.zip";
 
   const log: DownloadLog = {
     id: input.id,
@@ -89,13 +97,13 @@ export async function createDownloadLog(input: {
     creative_count: input.creativeCount,
     creative_ids: input.creativeIds,
     creative_names: input.creativeNames,
-    status: "preparing",
-    zip_size_bytes: null,
+    status: input.status || "preparing",
+    zip_size_bytes: input.zipSizeBytes ?? null,
     zip_file_path: input.zipFilePath ?? null,
-    zip_filename: input.zipFilename,
+    zip_filename: input.zipFilename ?? defaultFilename,
     error: null,
-    download_count: 0,
-    last_downloaded_at: null,
+    download_count: input.downloadCount ?? 0,
+    last_downloaded_at: input.lastDownloadedAt ?? null,
     expires_at: expiresAt.toISOString(),
     created_at: now.toISOString(),
   };

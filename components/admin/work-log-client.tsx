@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  Activity,
   ArrowUpRight,
   CalendarDays,
   CheckCircle2,
@@ -17,7 +18,9 @@ import {
   Layers,
   Loader2,
   MessageSquareWarning,
+  Monitor,
   Repeat2,
+  Timer,
   Users,
   X
 } from "lucide-react";
@@ -40,11 +43,14 @@ import {
   type WorkLogSummary
 } from "@/lib/work-log";
 import { formatAttendanceTime } from "@/lib/attendance-shared";
+import { TimeLogSheet } from "@/components/admin/time-log-sheet";
+import type { UserTimeSession } from "@/lib/user-sessions-shared";
+import { formatSessionDuration, formatTimeShort } from "@/lib/user-sessions-shared";
 
 export type WorkLogPersonOption = { id: string; name: string; role: string; avatar_url: string | null; active: boolean };
 
-const roleLabels: Record<string, string> = { content_creator: "Creator", editor: "Editor", manager: "Manager", admin: "Admin" };
-const roleOrder = ["content_creator", "editor", "manager", "admin"];
+const roleLabels: Record<string, string> = { content_creator: "Creator", editor: "Editor", media_buyer: "Media Buyer", manager: "Manager", admin: "Admin" };
+const roleOrder = ["content_creator", "editor", "media_buyer", "manager", "admin"];
 
 function shift(day: string, delta: number) {
   return new Date(Date.parse(`${day}T00:00:00Z`) + delta * 86_400_000).toISOString().slice(0, 10);
@@ -90,7 +96,9 @@ export function WorkLogClient({
   from,
   to,
   today,
-  selectedId
+  selectedId,
+  isAdmin = false,
+  userSessions = []
 }: {
   people: WorkLogPersonOption[];
   reports: Record<string, WorkLogReport>;
@@ -98,11 +106,13 @@ export function WorkLogClient({
   to: string;
   today: string;
   selectedId: string;
+  isAdmin?: boolean;
+  userSessions?: UserTimeSession[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const [isPending, startTransition] = useTransition();
-  const [viewMode, setViewMode] = useState<"sheet" | "detail">("sheet");
+  const [viewMode, setViewMode] = useState<"sheet" | "detail" | "time-log">("sheet");
   const [lightboxData, setLightboxData] = useState<{ person: WorkLogPersonOption; date: string } | null>(null);
 
   function navigate(next: { person?: string; from?: string; to?: string }) {
@@ -232,6 +242,29 @@ export function WorkLogClient({
             >
               Detailed Timeline
             </button>
+            {isAdmin ? (
+              <button
+                type="button"
+                onClick={() => setViewMode("time-log")}
+                className={cn(
+                  "rounded-md px-3 py-1 font-medium transition-colors flex items-center gap-1.5",
+                  viewMode === "time-log" ? "bg-primary text-primary-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Clock className="size-3.5" />
+                Time Log
+                <span
+                  className={cn(
+                    "rounded-full px-1.5 py-0.2 text-[9px] font-bold uppercase tracking-wider",
+                    viewMode === "time-log"
+                      ? "bg-primary-foreground/20 text-primary-foreground"
+                      : "bg-primary/10 text-primary"
+                  )}
+                >
+                  Admin
+                </span>
+              </button>
+            ) : null}
           </div>
         </div>
       </section>
@@ -242,7 +275,18 @@ export function WorkLogClient({
       </p>
 
       {/* Main View Area */}
-      {viewMode === "sheet" ? (
+      {viewMode === "time-log" && isAdmin ? (
+        <TimeLogSheet
+          people={selected ? [selected] : people}
+          reports={reports}
+          sessions={userSessions}
+          days={allDays}
+          today={today}
+          from={from}
+          to={to}
+          onOpenLightbox={(person, date) => setLightboxData({ person, date })}
+        />
+      ) : viewMode === "sheet" ? (
         <TeamCalendarSheet
           people={selected ? [selected] : activePeople}
           reports={reports}
@@ -268,6 +312,8 @@ export function WorkLogClient({
           date={lightboxData.date}
           report={activeLightboxReport}
           onClose={() => setLightboxData(null)}
+          isAdmin={isAdmin}
+          userSessions={userSessions}
         />
       ) : null}
     </div>
@@ -371,6 +417,7 @@ function TeamCalendarSheet({
         <table className="table-fixed text-xs border-collapse">
           <colgroup>
             <col className="w-56 min-w-[224px] max-w-[224px]" />
+            <col className="w-28 min-w-[112px] max-w-[112px]" />
             <col className="w-32 min-w-[128px] max-w-[128px]" />
             {days.map((date) => (
               <col key={date} className="w-[58px] min-w-[58px] max-w-[58px]" />
@@ -381,8 +428,11 @@ function TeamCalendarSheet({
               <th className="sticky left-0 z-20 w-56 min-w-[224px] max-w-[224px] border-r border-border bg-muted px-4 py-3 text-left text-muted-foreground font-semibold">
                 Team member
               </th>
+              <th className="w-28 min-w-[112px] max-w-[112px] border-r border-border px-3 py-3 text-center text-muted-foreground font-semibold">
+                {sheetMetric === "attendance" ? "Attendance" : "New Creatives"}
+              </th>
               <th className="w-32 min-w-[128px] max-w-[128px] border-r border-border px-3 py-3 text-center text-muted-foreground font-semibold">
-                {sheetMetric === "new" ? "New Creatives" : sheetMetric === "attendance" ? "Attendance" : "Period Total"}
+                Activity
               </th>
               {days.map((date) => {
                 const isToday = date === today;
@@ -421,39 +471,49 @@ function TeamCalendarSheet({
                     </div>
                   </td>
 
-                  {/* Period Total Summary */}
-                  <td className="w-32 min-w-[128px] max-w-[128px] border-r border-border px-2 py-2 text-center align-middle">
+                  {/* New Creatives / Attendance Column */}
+                  <td className="w-28 min-w-[112px] max-w-[112px] border-r border-border px-2 py-2 text-center align-middle">
                     <span className={cn(
                       "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold",
                       sheetMetric === "attendance" ? "bg-success/15 text-success" : "bg-primary/10 text-primary"
                     )}>
                       {sheetMetric === "attendance"
                         ? (isAdmin ? "—" : `${attendedDaysCount}d present`)
-                        : sheetMetric === "new"
-                        ? `${summary.newSubmissions} new`
-                        : totalActions > 0
-                        ? `${totalActions} ${totalActions === 1 ? "action" : "actions"}`
-                        : summary.editingSeconds > 0
-                        ? formatWorkLogDuration(summary.editingSeconds)
-                        : "0 actions"}
+                        : `${summary.newSubmissions} new`}
                     </span>
-                    <p className="mt-1 font-semibold text-foreground text-xs">
-                      {summary.creativesTouched} {summary.creativesTouched === 1 ? "creative" : "creatives"}
-                    </p>
                     {sheetMetric !== "attendance" && !isAdmin && attendedDaysCount > 0 ? (
-                      <p className="text-[10px] font-medium text-success mt-0.5 flex items-center justify-center gap-1">
+                      <p className="text-[10px] font-medium text-success mt-1 flex items-center justify-center gap-1">
                         <span className="size-1.5 rounded-full bg-success inline-block" />
                         {attendedDaysCount}d present
                       </p>
-                    ) : sheetMetric === "new" && totalActions > 0 ? (
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
-                        {totalActions} total action{totalActions === 1 ? "" : "s"}
-                      </p>
-                    ) : isEditor && summary.editingSeconds > 0 && totalActions > 0 ? (
-                      <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                        {formatWorkLogDuration(summary.editingSeconds)}
-                      </p>
                     ) : null}
+                  </td>
+
+                  {/* Activity Column (dedicated column on which all logs appear) */}
+                  <td className="w-32 min-w-[128px] max-w-[128px] border-r border-border px-2 py-2 text-center align-middle">
+                    <button
+                      type="button"
+                      onClick={() => onOpenLightbox(person, today)}
+                      title={`Click to view all activity logs for ${person.name}`}
+                      className="w-full flex flex-col items-center justify-center rounded p-1 hover:bg-muted/40 transition-colors group cursor-pointer"
+                    >
+                      <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                        <Activity className="size-3 text-primary" />
+                        {totalActions > 0
+                          ? `${totalActions} ${totalActions === 1 ? "action" : "actions"}`
+                          : summary.editingSeconds > 0
+                          ? formatWorkLogDuration(summary.editingSeconds)
+                          : "0 actions"}
+                      </span>
+                      <p className="mt-1 font-semibold text-foreground text-xs group-hover:text-primary transition-colors">
+                        {summary.creativesTouched} {summary.creativesTouched === 1 ? "creative" : "creatives"}
+                      </p>
+                      {isEditor && summary.editingSeconds > 0 ? (
+                        <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                          {formatWorkLogDuration(summary.editingSeconds)} editing
+                        </p>
+                      ) : null}
+                    </button>
                   </td>
 
                   {/* Day Cells */}
@@ -606,17 +666,24 @@ function WorkLogDayLightbox({
   person,
   date,
   report,
-  onClose
+  onClose,
+  isAdmin = false,
+  userSessions = []
 }: {
   person: WorkLogPersonOption;
   date: string;
   report?: WorkLogReport;
   onClose: () => void;
+  isAdmin?: boolean;
+  userSessions?: UserTimeSession[];
 }) {
-  const [activeCategory, setActiveCategory] = useState<"all" | WorkLogCategory | "time_sessions">("all");
+  const [activeCategory, setActiveCategory] = useState<"all" | "activity" | WorkLogCategory | "time_sessions" | "app_sessions">("all");
 
   const daySummary = report?.days.find((d) => d.date === date);
   const timeSessions = daySummary?.timeSessions ?? [];
+  const dayUserSessions = useMemo(() => {
+    return userSessions.filter((s) => s.user_id === person.id && s.date === date);
+  }, [userSessions, person.id, date]);
 
   // Extract all events that occurred on this specific day for this person
   const dayEvents = useMemo(() => {
@@ -638,6 +705,48 @@ function WorkLogDayLightbox({
     return events.sort((a, b) => b.at.localeCompare(a.at));
   }, [report, date]);
 
+  // Extract individual app activity events for the person on this day
+  const appActivityItems = useMemo(() => {
+    const list: Array<{
+      id: string;
+      timestamp: string;
+      description: string;
+      path?: string;
+      sessionNumber: number;
+      isOngoingSession?: boolean;
+    }> = [];
+
+    dayUserSessions.forEach((session, sIdx) => {
+      const sNum = sIdx + 1;
+      const isOngoing = !session.session_ended_at;
+      if (session.activities && session.activities.length > 0) {
+        session.activities.forEach((act, aIdx) => {
+          list.push({
+            id: `${session.id}-act-${aIdx}`,
+            timestamp: act.timestamp,
+            description: act.description,
+            path: act.path,
+            sessionNumber: sNum,
+            isOngoingSession: isOngoing && aIdx === session.activities.length - 1
+          });
+        });
+      } else {
+        list.push({
+          id: `${session.id}-start`,
+          timestamp: session.session_started_at,
+          description: session.session_ended_at
+            ? `App Session completed (${formatSessionDuration(session.duration_seconds)})`
+            : "App Session started (Active)",
+          path: undefined,
+          sessionNumber: sNum,
+          isOngoingSession: isOngoing
+        });
+      }
+    });
+
+    return list.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  }, [dayUserSessions]);
+
   // Group events by category
   const categorized = useMemo(() => {
     const newlySubmitted = dayEvents.filter((e) => categorizeWorkLogAction(e.action) === "newly_submitted");
@@ -656,8 +765,11 @@ function WorkLogDayLightbox({
     };
   }, [dayEvents]);
 
-  const filteredEvents = activeCategory === "all" || activeCategory === "time_sessions" ? dayEvents : categorized[activeCategory];
-  const totalItemCount = dayEvents.length + timeSessions.length;
+  const filteredEvents =
+    activeCategory === "all" || activeCategory === "activity" || activeCategory === "time_sessions" || activeCategory === "app_sessions"
+      ? dayEvents
+      : categorized[activeCategory as WorkLogCategory] ?? [];
+  const totalActivityCount = dayEvents.length + appActivityItems.length + timeSessions.length;
 
   return (
     <div
@@ -693,6 +805,10 @@ function WorkLogDayLightbox({
 
         {/* Quick KPI summary badges for the day */}
         <div className="border-b border-border bg-card px-5 py-3 flex flex-wrap items-center gap-2 text-xs">
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-primary/20 bg-primary/10 px-2.5 py-1 font-semibold text-primary">
+            <Activity className="size-3.5" />
+            {totalActivityCount} Total Activity
+          </span>
           <span className="inline-flex items-center gap-1.5 rounded-md border border-primary/20 bg-primary/10 px-2.5 py-1 font-semibold text-primary">
             <FilePlus2 className="size-3.5" />
             {categorized.newly_submitted.length} Newly Submitted
@@ -747,7 +863,20 @@ function WorkLogDayLightbox({
                 : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
-            All Logs ({dayEvents.length})
+            All Logs ({totalActivityCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveCategory("activity")}
+            className={cn(
+              "px-3 py-1.5 border-b-2 font-medium transition-colors text-xs flex items-center gap-1.5",
+              activeCategory === "activity"
+                ? "border-primary text-foreground font-semibold"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Activity className="size-3 text-primary" />
+            Activity ({totalActivityCount})
           </button>
           <button
             type="button"
@@ -811,13 +940,143 @@ function WorkLogDayLightbox({
               Editing Sessions ({timeSessions.length})
             </button>
           ) : null}
+          {isAdmin && dayUserSessions.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setActiveCategory("app_sessions")}
+              className={cn(
+                "px-3 py-1.5 border-b-2 font-medium transition-colors text-xs flex items-center gap-1",
+                activeCategory === "app_sessions"
+                  ? "border-primary text-foreground font-semibold"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Monitor className="size-3" />
+              App Sessions ({dayUserSessions.length})
+            </button>
+          ) : null}
         </div>
 
         {/* Body Event List */}
-        <div className="overflow-y-auto p-5 space-y-3 flex-1">
+        <div className="overflow-y-auto p-5 space-y-4 flex-1">
+          {/* App sessions card for admin */}
+          {(activeCategory === "all" || activeCategory === "app_sessions") && isAdmin && dayUserSessions.length > 0 ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <Monitor className="size-3.5 text-primary" />
+                  Recorded App Sessions ({dayUserSessions.length})
+                </p>
+                <span className="text-[11px] font-mono text-muted-foreground">
+                  Active time: {formatSessionDuration(dayUserSessions.reduce((acc, s) => acc + (s.duration_seconds || 0), 0))}
+                </span>
+              </div>
+              <ul className="space-y-2">
+                {dayUserSessions.map((session, sIdx) => {
+                  const isActive = !session.session_ended_at;
+                  const isIdle = session.end_reason === "idle_5m";
+                  return (
+                    <li
+                      key={session.id}
+                      className="rounded-lg border border-border bg-card p-3 text-xs space-y-2"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-foreground">
+                            Session #{sIdx + 1}
+                          </span>
+                          <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-mono text-foreground border border-border">
+                            {formatSessionDuration(session.duration_seconds)}
+                          </span>
+                          {isActive ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-semibold text-success">
+                              <span className="size-1.5 rounded-full bg-success animate-ping" />
+                              Active Now
+                            </span>
+                          ) : isIdle ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-semibold text-warning">
+                              <Timer className="size-3" />
+                              5m Idle Checkout
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground border border-border">
+                              Completed
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] font-mono text-muted-foreground">
+                          {formatTimeShort(session.session_started_at)} – {session.session_ended_at ? formatTimeShort(session.session_ended_at) : "Ongoing"} IST
+                        </span>
+                      </div>
+                      {session.activities && session.activities.length > 0 ? (
+                        <div className="rounded bg-muted/40 p-2 space-y-1 text-[11px]">
+                          {session.activities.map((act, aIdx) => (
+                            <div key={aIdx} className="flex items-center gap-2 text-muted-foreground">
+                              <span className="font-mono text-[10px] text-muted-foreground/70">{formatTimeShort(act.timestamp)}</span>
+                              <span className="text-foreground">{act.description}</span>
+                              {act.path ? <span className="text-[10px] font-mono opacity-60">({act.path})</span> : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : null}
+
+          {/* Activity Log Feed (Shown in 'all' and 'activity' tabs when app activities exist) */}
+          {(activeCategory === "all" || activeCategory === "activity") && appActivityItems.length > 0 ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <Activity className="size-3.5 text-primary" />
+                  Activity Logs ({appActivityItems.length})
+                </p>
+                <span className="text-[11px] text-muted-foreground">
+                  User app actions & page navigation
+                </span>
+              </div>
+              <ul className="space-y-1.5">
+                {appActivityItems.map((act) => (
+                  <li
+                    key={act.id}
+                    className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2 text-xs hover:border-primary/30 transition-colors"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="font-mono text-[11px] text-muted-foreground shrink-0">
+                        {formatTimeShort(act.timestamp)}
+                      </span>
+                      <span className="font-medium text-foreground truncate">
+                        {act.description}
+                      </span>
+                      {act.path ? (
+                        <span className="font-mono text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded border border-border shrink-0">
+                          {act.path}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground border border-border">
+                        Session #{act.sessionNumber}
+                      </span>
+                      {act.isOngoingSession ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-semibold text-success">
+                          <span className="size-1 rounded-full bg-success animate-ping" />
+                          Live
+                        </span>
+                      ) : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
           {/* Editing sessions on this day */}
-          {(activeCategory === "all" || activeCategory === "time_sessions") && timeSessions.length > 0 ? (
-            <div className="space-y-2 mb-3">
+          {(activeCategory === "all" || activeCategory === "activity" || activeCategory === "time_sessions") && timeSessions.length > 0 ? (
+            <div className="space-y-2">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 Editing Sessions ({timeSessions.length})
               </p>
@@ -858,86 +1117,115 @@ function WorkLogDayLightbox({
             </div>
           ) : null}
 
-          {/* Activity Log Events */}
-          {activeCategory !== "time_sessions" && filteredEvents.length > 0 ? (
-            <ol className="space-y-3">
-              {filteredEvents.map((event) => {
-                const category = categorizeWorkLogAction(event.action);
-                const isRevision = category === "revision_requested";
-                const isApproval = category === "approved";
-                const isNew = category === "newly_submitted";
-                const isResub = category === "resubmitted";
+          {/* Creative Activity Log Events */}
+          {activeCategory !== "time_sessions" && activeCategory !== "app_sessions" && filteredEvents.length > 0 ? (
+            <div className="space-y-2">
+              {(activeCategory === "all" || activeCategory === "activity") ? (
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <FilePlus2 className="size-3.5 text-primary" />
+                  Creative Actions ({filteredEvents.length})
+                </p>
+              ) : null}
+              <ol className="space-y-3">
+                {filteredEvents.map((event) => {
+                  const category = categorizeWorkLogAction(event.action);
+                  const isRevision = category === "revision_requested";
+                  const isApproval = category === "approved";
+                  const isNew = category === "newly_submitted";
+                  const isResub = category === "resubmitted";
 
-                return (
-                  <li
-                    key={event.id}
-                    className={cn(
-                      "rounded-lg border p-3 text-xs transition-colors",
-                      isRevision
-                        ? "border-warning/30 bg-warning/5"
-                        : isApproval
-                        ? "border-success/30 bg-success/5"
-                        : isNew
-                        ? "border-primary/30 bg-primary/5"
-                        : isResub
-                        ? "border-purple-500/30 bg-purple-500/5"
-                        : "border-border bg-card"
-                    )}
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <Link
-                          href={`/ads/${event.adId}`}
-                          className="font-semibold text-foreground hover:text-primary transition-colors inline-flex items-center gap-1"
-                        >
-                          <span>{event.creativeName}</span>
-                          <ArrowUpRight className="size-3 text-muted-foreground" />
-                        </Link>
-                        {event.stage ? (
-                          <ProductionStageBadge stage={event.stage} className="h-5 px-1.5 text-[9px]" />
-                        ) : null}
-                      </div>
-                      <span className="text-[11px] font-mono text-muted-foreground">
-                        {formatDateTime(event.at).split(",")[1]?.trim() || formatDateTime(event.at)}
-                      </span>
-                    </div>
-
-                    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
-                      <span
-                        className={cn(
-                          "rounded-full px-2 py-0.5 text-[10px] font-medium",
-                          isRevision
-                            ? "bg-warning/15 text-warning font-semibold"
-                            : isApproval
-                            ? "bg-success/15 text-success font-semibold"
-                            : isNew
-                            ? "bg-primary/15 text-primary font-semibold"
-                            : isResub
-                            ? "bg-purple-500/15 text-purple-600 dark:text-purple-400 font-semibold"
-                            : "bg-muted text-muted-foreground"
-                        )}
-                      >
-                        {event.label}
-                      </span>
-                      {event.direction === "on_their_work" ? (
-                        <span className="text-muted-foreground">
-                          by <span className="font-medium text-foreground">{event.actorName ?? "Reviewer"}</span>
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">by {person.name}</span>
+                  return (
+                    <li
+                      key={event.id}
+                      className={cn(
+                        "rounded-lg border p-3 text-xs transition-colors",
+                        isRevision
+                          ? "border-warning/30 bg-warning/5"
+                          : isApproval
+                          ? "border-success/30 bg-success/5"
+                          : isNew
+                          ? "border-primary/30 bg-primary/5"
+                          : isResub
+                          ? "border-purple-500/30 bg-purple-500/5"
+                          : "border-border bg-card"
                       )}
-                    </div>
-
-                    {event.note ? (
-                      <div className="mt-2 rounded border border-border/80 bg-background/80 p-2 text-xs text-foreground/90 italic">
-                        “{event.note}”
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <Link
+                            href={`/ads/${event.adId}`}
+                            className="font-semibold text-foreground hover:text-primary transition-colors inline-flex items-center gap-1"
+                          >
+                            <span>{event.creativeName}</span>
+                            <ArrowUpRight className="size-3 text-muted-foreground" />
+                          </Link>
+                          {event.stage ? (
+                            <ProductionStageBadge stage={event.stage} className="h-5 px-1.5 text-[9px]" />
+                          ) : null}
+                        </div>
+                        <span className="text-[11px] font-mono text-muted-foreground">
+                          {formatDateTime(event.at).split(",")[1]?.trim() || formatDateTime(event.at)}
+                        </span>
                       </div>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ol>
-          ) : activeCategory !== "time_sessions" && timeSessions.length === 0 ? (
+
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
+                        <span
+                          className={cn(
+                            "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                            isRevision
+                              ? "bg-warning/15 text-warning font-semibold"
+                              : isApproval
+                              ? "bg-success/15 text-success font-semibold"
+                              : isNew
+                              ? "bg-primary/15 text-primary font-semibold"
+                              : isResub
+                              ? "bg-purple-500/15 text-purple-600 dark:text-purple-400 font-semibold"
+                              : "bg-muted text-muted-foreground"
+                          )}
+                        >
+                          {event.label}
+                        </span>
+                        {event.direction === "on_their_work" ? (
+                          <span className="text-muted-foreground">
+                            by <span className="font-medium text-foreground">{event.actorName ?? "Reviewer"}</span>
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">by {person.name}</span>
+                        )}
+                      </div>
+
+                      {event.note ? (
+                        <div className="mt-2 rounded border border-border/80 bg-background/80 p-2 text-xs text-foreground/90 italic">
+                          “{event.note}”
+                        </div>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+          ) : null}
+
+          {/* Empty state when no logs match the current filter */}
+          {((activeCategory === "all" || activeCategory === "activity") && totalActivityCount === 0) ? (
+            <div className="py-12 text-center text-muted-foreground">
+              <Activity className="mx-auto size-8 opacity-40 mb-2" />
+              <p className="text-sm font-medium text-foreground">No activity recorded</p>
+              <p className="text-xs mt-1">There was no recorded activity or actions for {person.name} on {formatDateOnly(date)}.</p>
+            </div>
+          ) : activeCategory === "time_sessions" && timeSessions.length === 0 ? (
+            <div className="py-12 text-center text-muted-foreground">
+              <Clock className="mx-auto size-8 opacity-40 mb-2" />
+              <p className="text-sm font-medium text-foreground">No editing sessions</p>
+              <p className="text-xs mt-1">There were no recorded editing sessions on {formatDateOnly(date)}.</p>
+            </div>
+          ) : activeCategory === "app_sessions" && dayUserSessions.length === 0 ? (
+            <div className="py-12 text-center text-muted-foreground">
+              <Monitor className="mx-auto size-8 opacity-40 mb-2" />
+              <p className="text-sm font-medium text-foreground">No app sessions</p>
+              <p className="text-xs mt-1">There were no recorded app sessions on {formatDateOnly(date)}.</p>
+            </div>
+          ) : activeCategory !== "all" && activeCategory !== "activity" && activeCategory !== "time_sessions" && activeCategory !== "app_sessions" && filteredEvents.length === 0 ? (
             <div className="py-12 text-center text-muted-foreground">
               <Film className="mx-auto size-8 opacity-40 mb-2" />
               <p className="text-sm font-medium text-foreground">No logs in this category</p>
@@ -949,7 +1237,9 @@ function WorkLogDayLightbox({
         {/* Footer */}
         <div className="border-t border-border px-5 py-3 flex items-center justify-between bg-muted/10">
           <p className="text-[11px] text-muted-foreground">
-            {dayEvents.length} action{dayEvents.length === 1 ? "" : "s"}
+            {totalActivityCount} {totalActivityCount === 1 ? "activity log" : "activity logs"}
+            {dayEvents.length > 0 ? ` · ${dayEvents.length} creative action${dayEvents.length === 1 ? "" : "s"}` : ""}
+            {appActivityItems.length > 0 ? ` · ${appActivityItems.length} app action${appActivityItems.length === 1 ? "" : "s"}` : ""}
             {timeSessions.length > 0 ? ` · ${timeSessions.length} editing session${timeSessions.length === 1 ? "" : "s"}` : ""} on this day
           </p>
           <Button variant="secondary" size="sm" onClick={onClose}>
@@ -995,32 +1285,37 @@ function TeamOverview({ people, reports, onSelect }: { people: WorkLogPersonOpti
                   <th className="px-3 py-3 text-center font-semibold">Resubmitted</th>
                   <th className="px-3 py-3 text-center font-semibold">Status changes</th>
                   <th className="px-3 py-3 text-center font-semibold">Approved</th>
+                  <th className="px-3 py-3 text-center font-semibold">Activity</th>
                   <th className="px-3 py-3 text-center font-semibold">Creatives</th>
                   <th className="px-3 py-3 text-center font-semibold">Editing time</th>
                   <th className="w-10 px-3 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {rows.map(({ person, summary }) => (
-                  <tr key={person.id} className="cursor-pointer transition-colors hover:bg-muted" onClick={() => onSelect(person.id)}>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <Avatar name={person.name} src={person.avatar_url} className="size-8" />
-                        <div>
-                          <p className="font-medium text-foreground">{person.name}</p>
-                          <p className="text-xs text-muted-foreground">{roleLabels[person.role] ?? person.role}</p>
+                {rows.map(({ person, summary }) => {
+                  const totalActions = (summary.newSubmissions || 0) + (summary.resubmissions || 0) + (summary.statusChanges || 0);
+                  return (
+                    <tr key={person.id} className="cursor-pointer transition-colors hover:bg-muted" onClick={() => onSelect(person.id)}>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <Avatar name={person.name} src={person.avatar_url} className="size-8" />
+                          <div>
+                            <p className="font-medium text-foreground">{person.name}</p>
+                            <p className="text-xs text-muted-foreground">{roleLabels[person.role] ?? person.role}</p>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <Cell value={summary.newSubmissions} strong />
-                    <Cell value={summary.resubmissions} />
-                    <Cell value={summary.statusChanges} />
-                    <Cell value={summary.stageCounts.approved} />
-                    <Cell value={summary.creativesTouched} />
-                    <td className="px-3 py-3 text-center text-muted-foreground">{formatWorkLogDuration(summary.editingSeconds)}</td>
-                    <td className="px-3 py-3 text-muted-foreground"><ChevronRight className="size-4" aria-hidden /></td>
-                  </tr>
-                ))}
+                      </td>
+                      <Cell value={summary.newSubmissions} strong />
+                      <Cell value={summary.resubmissions} />
+                      <Cell value={summary.statusChanges} />
+                      <Cell value={summary.stageCounts.approved} />
+                      <Cell value={totalActions} strong />
+                      <Cell value={summary.creativesTouched} />
+                      <td className="px-3 py-3 text-center text-muted-foreground">{formatWorkLogDuration(summary.editingSeconds)}</td>
+                      <td className="px-3 py-3 text-muted-foreground"><ChevronRight className="size-4" aria-hidden /></td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

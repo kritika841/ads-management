@@ -2,7 +2,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { activeEditorStages, inProgressEditingStages } from "@/lib/production-workflow";
 import { sanitizeScriptHtml } from "@/lib/sanitize";
-import { DEFAULT_HIDDEN_METRICS, type HiddenMetricsByRole } from "@/lib/metric-visibility";
+import { DEFAULT_ADS_PERFORMANCE_NAV_ITEMS, DEFAULT_HIDDEN_METRICS, type HiddenMetricsByRole } from "@/lib/metric-visibility";
 import { readMetricVisibilityFile } from "@/lib/metric-visibility-server";
 import { readCampaignGoals } from "@/lib/campaign-goals";
 import { DEFAULT_DOWNLOAD_RETENTION_DAYS, DEFAULT_RECYCLE_BIN_RETENTION_DAYS, normalizeRetentionDays } from "@/lib/retention";
@@ -238,6 +238,7 @@ export async function getAppSettings() {
     bulk_add_to_campaign_roles: ["admin"],
     download_retention_days: DEFAULT_DOWNLOAD_RETENTION_DAYS,
     recycle_bin_retention_days: DEFAULT_RECYCLE_BIN_RETENTION_DAYS,
+    ads_performance_nav_items: [...DEFAULT_ADS_PERFORMANCE_NAV_ITEMS],
     updated_at: new Date().toISOString()
   };
 
@@ -276,6 +277,7 @@ export async function getAppSettings() {
       override_all_users: Boolean(fileMetrics.override_all_users),
       users_with_all_ads_access: fileMetrics.users_with_all_ads_access ?? [],
       hidden_campaigns_by_user: fileMetrics.hidden_campaigns_by_user ?? {},
+      ads_performance_nav_items: fileMetrics.ads_performance_nav_items ?? DEFAULT_ADS_PERFORMANCE_NAV_ITEMS,
       download_retention_days: normalizeRetentionDays(record.download_retention_days, DEFAULT_DOWNLOAD_RETENTION_DAYS),
       recycle_bin_retention_days: normalizeRetentionDays(record.recycle_bin_retention_days, DEFAULT_RECYCLE_BIN_RETENTION_DAYS)
     } as AppSettings;
@@ -782,11 +784,18 @@ export async function getCampaignsWithOverview(profile?: Profile): Promise<Campa
   }
 
   const managerScope = appSettings.manager_creative_scope ?? "all";
-  const isFullAccess = !profile || profile.role === "admin" || (profile.role === "manager" && managerScope !== "own");
+  const isFullAccess =
+    !profile ||
+    profile.role === "admin" ||
+    profile.role === "media_buyer" ||
+    (profile.role === "manager" && managerScope !== "own");
 
   const ads = isFullAccess
     ? rawAds
     : rawAds.filter((ad) => {
+        if (profile.role === "media_buyer") {
+          return true;
+        }
         if (profile.role === "content_creator") {
           return ad.creator_id === profile.id || collaboratorAdIds.has(ad.id);
         }

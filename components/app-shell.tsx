@@ -27,14 +27,14 @@ import {
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Notification, Profile } from "@/lib/types";
+import { DEFAULT_ADS_PERFORMANCE_NAV_ITEMS, type AdsPerformanceNavItemKey } from "@/lib/metric-visibility";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { NotificationBell } from "@/components/notification-bell";
 import { RealtimeSync } from "@/components/realtime-sync";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AnnouncementOverlay } from "@/components/announcements/announcement-overlay";
-import { AttendancePromptModal } from "@/components/attendance/attendance-prompt-modal";
-import { AttendanceHeaderWidget } from "@/components/attendance/attendance-header-widget";
+import { UserSessionTracker } from "@/components/session/user-session-tracker";
 import { cn } from "@/lib/utils";
 
 type NavItem = { href: string; label: string; icon: LucideIcon; children?: Array<{ href: string; label: string }> };
@@ -42,14 +42,38 @@ type NavItem = { href: string; label: string; icon: LucideIcon; children?: Array
 export function AppShell({
   profile,
   notifications,
+  adsPerformanceNavItems,
   children
 }: {
   profile: Profile;
   notifications: Notification[];
+  adsPerformanceNavItems?: AdsPerformanceNavItemKey[];
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const activeSubmenuKeys = adsPerformanceNavItems && adsPerformanceNavItems.length > 0
+    ? adsPerformanceNavItems
+    : DEFAULT_ADS_PERFORMANCE_NAV_ITEMS;
+
+  const adsPerformanceChildren = [
+    activeSubmenuKeys.includes("overview") ? { href: "/incentives#overview", label: "Overview" } : null,
+    activeSubmenuKeys.includes("active") ? { href: "/incentives#active", label: "Active creatives" } : null,
+    activeSubmenuKeys.includes("testing") ? { href: "/incentives#testing", label: "Testing creatives" } : null,
+    activeSubmenuKeys.includes("winning") ? { href: "/incentives#winning", label: "Winning creatives" } : null,
+    activeSubmenuKeys.includes("losing") ? { href: "/incentives#losing", label: "Losing creatives" } : null,
+    activeSubmenuKeys.includes("paused") ? { href: "/incentives#paused", label: "Paused creatives" } : null,
+    (profile.role === "admin" || profile.role === "manager") && activeSubmenuKeys.includes("mapping")
+      ? { href: "/incentives#mapping", label: "Creative attribution" }
+      : null,
+    profile.role === "admin" && activeSubmenuKeys.includes("settings")
+      ? { href: "/incentives#settings", label: "Settings" }
+      : null
+  ].filter(Boolean) as Array<{ href: string; label: string }>;
+
+  const firstAdsHref = adsPerformanceChildren[0]?.href ?? "/incentives#overview";
+
   const workspaceLinks: NavItem[] = [
     { href: "/dashboard", label: "Home", icon: House },
     { href: "/campaigns", label: "Campaigns", icon: FolderKanban },
@@ -57,23 +81,10 @@ export function AppShell({
     { href: "/library", label: "Creative library", icon: LayoutDashboard },
     { href: "/raw-clips-search", label: "Ad Library", icon: Clapperboard },
     {
-      href: "/incentives#overview",
+      href: firstAdsHref,
       label: "Ads performance",
       icon: Trophy,
-      children: [
-        { href: "/incentives#overview", label: "Overview" },
-        { href: "/incentives#active", label: "Active creatives" },
-        { href: "/incentives#testing", label: "Testing creatives" },
-        { href: "/incentives#winning", label: "Winning creatives" },
-        { href: "/incentives#losing", label: "Losing creatives" },
-        { href: "/incentives#paused", label: "Paused creatives" },
-        ...(profile.role === "admin" || profile.role === "manager"
-          ? [{ href: "/incentives#mapping", label: "Creative attribution" }]
-          : []),
-        ...(profile.role === "admin"
-          ? [{ href: "/incentives#settings", label: "Settings" }]
-          : [])
-      ]
+      ...(adsPerformanceChildren.length > 0 ? { children: adsPerformanceChildren } : {})
     },
     ...(profile.role === "admin" || profile.role === "manager"
       ? [{ href: "/analytics", label: "Analytics", icon: BarChart3 }]
@@ -87,7 +98,19 @@ export function AppShell({
           { href: "/recycle-bin", label: "Recycle Bin", icon: ArchiveRestore }
         ]
       : []),
-    ...(profile.role !== "admin"
+    ...(profile.role === "media_buyer" || profile.role === "manager"
+      ? [
+          {
+            href: "/settings#account",
+            label: "Settings",
+            icon: Settings,
+            children: [
+              { href: "/settings#account", label: "Account & Passwords" },
+              { href: "/settings#downloads", label: "Download Logs" }
+            ]
+          }
+        ]
+      : profile.role !== "admin"
       ? [{ href: "/settings", label: "Settings", icon: Settings }]
       : [])
   ];
@@ -179,7 +202,6 @@ export function AppShell({
             <div className="flex items-center gap-1.5">
               <ThemeToggle />
               <RealtimeSync userId={profile.id} role={profile.role} />
-              <AttendanceHeaderWidget profile={profile} />
               <NotificationBell notifications={notifications} userId={profile.id}>
                 <Bell className="size-[18px]" aria-hidden />
               </NotificationBell>
@@ -198,7 +220,7 @@ export function AppShell({
           </div>
         </header>
         {children}
-        <AttendancePromptModal profile={profile} />
+        <UserSessionTracker profile={profile} />
         <AnnouncementOverlay profile={profile} />
       </div>
     </div>
@@ -291,12 +313,20 @@ function NavGroup({
 }) {
   const [hash, setHash] = useState("");
   useEffect(() => {
-    const defaultHash = pathname.startsWith("/admin/settings") ? "#workflow" : "#overview";
+    const activeItem = items.find((item) => isActivePath(pathname, item.href));
+    const firstChildHash = activeItem?.children?.[0]?.href.includes("#")
+      ? `#${activeItem.children[0].href.split("#")[1]}`
+      : "";
+    const defaultHash = pathname.startsWith("/admin/settings")
+      ? "#workflow"
+      : pathname.startsWith("/settings")
+      ? "#account"
+      : (firstChildHash || "#overview");
     const syncHash = () => setHash(window.location.hash || defaultHash);
     syncHash();
     window.addEventListener("hashchange", syncHash);
     return () => window.removeEventListener("hashchange", syncHash);
-  }, [pathname]);
+  }, [pathname, items]);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(
       items
@@ -376,7 +406,12 @@ function NavGroup({
                 <div className="ml-9 mt-1 space-y-0.5 border-l border-border pl-2">
                   {item.children.map((child) => {
                     const childHash = child.href.includes("#") ? `#${child.href.split("#")[1]}` : "";
-                    const defaultHash = pathname.startsWith("/admin/settings") ? "#workflow" : "#overview";
+                    const firstChildHash = item.children?.[0]?.href.includes("#") ? `#${item.children[0].href.split("#")[1]}` : "";
+                    const defaultHash = pathname.startsWith("/admin/settings")
+                      ? "#workflow"
+                      : pathname.startsWith("/settings")
+                      ? "#account"
+                      : (firstChildHash || "#overview");
                     const activeHash = hash || defaultHash;
                     const childActive =
                       pathname === child.href.split("#")[0] &&

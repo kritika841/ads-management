@@ -244,7 +244,7 @@ export function isCreativeCreationBlocked({
     deleted_at?: string | null;
   }>;
 }): boolean {
-  if (role !== "content_creator" && role !== "manager" && role !== "admin") {
+  if (role !== "content_creator" && role !== "manager" && role !== "admin" && role !== "media_buyer") {
     return false;
   }
 

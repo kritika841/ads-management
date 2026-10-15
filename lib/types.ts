@@ -1,4 +1,4 @@
-export type UserRole = "admin" | "manager" | "editor" | "content_creator";
+export type UserRole = "admin" | "manager" | "media_buyer" | "editor" | "content_creator";
 
 export type AdStatus =
   | "draft"
@@ -317,6 +317,7 @@ export type AppSettings = {
   override_all_users?: boolean;
   users_with_all_ads_access?: string[];
   hidden_campaigns_by_user?: Record<string, string[]>;
+  ads_performance_nav_items?: import("@/lib/metric-visibility").AdsPerformanceNavItemKey[];
   /** How long export archives stay in Download Logs before they expire (default 3). */
   download_retention_days?: number;
   /** How long deleted campaigns, creatives and scripts stay restorable in the Recycle Bin (default 7). */

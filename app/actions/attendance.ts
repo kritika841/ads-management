@@ -73,6 +73,12 @@ export async function checkInAttendance() {
 
   try {
     const record = await recordCheckIn(profile.id, profile.name, profile.role);
+    try {
+      const { recordAttendanceSessionActivity } = await import("@/lib/user-sessions");
+      await recordAttendanceSessionActivity(profile.id, "check_in");
+    } catch {
+      // non-fatal
+    }
     revalidatePath("/work-log");
     revalidatePath("/dashboard");
     return { ok: true, record };
@@ -89,6 +95,12 @@ export async function checkOutAttendance() {
 
   try {
     const record = await recordCheckOut(profile.id);
+    try {
+      const { recordAttendanceSessionActivity } = await import("@/lib/user-sessions");
+      await recordAttendanceSessionActivity(profile.id, "check_out");
+    } catch {
+      // non-fatal
+    }
     revalidatePath("/work-log");
     revalidatePath("/dashboard");
     return { ok: true, record };
@@ -109,7 +121,7 @@ export async function recordAttendanceActivityTouch() {
 
   try {
     const { recordActivityTouch } = await import("@/lib/attendance");
-    const record = await recordActivityTouch(profile.id, profile.role);
+    const record = await recordActivityTouch(profile.id, profile.role, Date.now(), profile.name);
     return { ok: true, record };
   } catch {
     return { ok: false };

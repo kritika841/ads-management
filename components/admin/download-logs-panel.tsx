@@ -26,7 +26,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
 import { useToast } from "@/components/ui/toast";
 import type { DownloadLog } from "@/lib/download-logs";
-import { cn } from "@/lib/utils";
+import { cn, formatDateTime } from "@/lib/utils";
+import { roleLabel } from "@/lib/constants";
 
 function formatBytes(bytes: number | null | undefined): string {
   if (!bytes || bytes <= 0) return "—";
@@ -52,6 +53,48 @@ function formatRelativeTime(dateString: string): string {
     return `${diffDays}d ago`;
   } catch {
     return dateString;
+  }
+}
+
+function getRoleBadge(role: string) {
+  const normalized = role?.toLowerCase() ?? "";
+  switch (normalized) {
+    case "admin":
+      return (
+        <span className="inline-flex items-center rounded-md bg-primary/15 px-2 py-0.5 text-[11px] font-medium text-primary ring-1 ring-inset ring-primary/30">
+          Admin
+        </span>
+      );
+    case "manager":
+      return (
+        <span className="inline-flex items-center rounded-md bg-accent px-2 py-0.5 text-[11px] font-medium text-accent-foreground ring-1 ring-inset ring-accent-foreground/20">
+          Manager
+        </span>
+      );
+    case "media_buyer":
+      return (
+        <span className="inline-flex items-center rounded-md bg-success/15 px-2 py-0.5 text-[11px] font-medium text-success ring-1 ring-inset ring-success/30">
+          Media Buyer
+        </span>
+      );
+    case "editor":
+      return (
+        <span className="inline-flex items-center rounded-md bg-secondary px-2 py-0.5 text-[11px] font-medium text-secondary-foreground ring-1 ring-inset ring-border">
+          Editor
+        </span>
+      );
+    case "content_creator":
+      return (
+        <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground ring-1 ring-inset ring-border">
+          Creator
+        </span>
+      );
+    default:
+      return (
+        <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground ring-1 ring-inset ring-border">
+          {roleLabel(role)}
+        </span>
+      );
   }
 }
 
@@ -84,11 +127,17 @@ function formatExpiry(expiresAtString: string): { label: string; isUrgent: boole
 export function DownloadLogsPanel({
   initialLogs = [],
   retentionDays: initialRetentionDays = DEFAULT_DOWNLOAD_RETENTION_DAYS,
-  canEditRetention = false
+  canEditRetention = false,
+  hideAnalytics = false,
+  hideRoleFilter = false,
+  canDelete = true
 }: {
   initialLogs?: DownloadLog[];
   retentionDays?: number;
   canEditRetention?: boolean;
+  hideAnalytics?: boolean;
+  hideRoleFilter?: boolean;
+  canDelete?: boolean;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -96,7 +145,8 @@ export function DownloadLogsPanel({
   const [logs, setLogs] = useState<DownloadLog[]>(initialLogs);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "ready" | "building" | "failed">("all");
-  const [sourceFilter, setSourceFilter] = useState<"all" | "creative_library" | "campaigns">("all");
+  const [sourceFilter, setSourceFilter] = useState<"all" | "creative_library" | "campaigns" | "single_ad">("all");
+  const [roleFilter, setRoleFilter] = useState<"all" | "media_buyer" | "admin" | "manager" | "editor" | "content_creator">("all");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -191,8 +241,13 @@ export function DownloadLogsPanel({
 
     try {
       const link = document.createElement("a");
-      link.href = `/api/ads/export-jobs/${log.id}/download`;
-      link.download = log.zip_filename || `${log.title}.zip`;
+      if (log.source === "single_ad" && log.creative_ids?.[0] && !log.zip_file_path) {
+        link.href = `/api/ads/${log.creative_ids[0]}/download`;
+        link.download = log.zip_filename || `${log.title}.mp4`;
+      } else {
+        link.href = `/api/ads/export-jobs/${log.id}/download`;
+        link.download = log.zip_filename || `${log.title}.zip`;
+      }
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -244,78 +299,84 @@ export function DownloadLogsPanel({
       if (sourceFilter !== "all" && log.source !== sourceFilter) {
         return false;
       }
+      if (roleFilter !== "all" && log.user_role !== roleFilter) {
+        return false;
+      }
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
         const matchesTitle = log.title.toLowerCase().includes(query);
         const matchesCampaign = log.campaign_name?.toLowerCase().includes(query);
         const matchesCreatives = log.creative_names?.some((name) => name.toLowerCase().includes(query));
-        if (!matchesTitle && !matchesCampaign && !matchesCreatives) {
+        const matchesUser = log.user_name?.toLowerCase().includes(query);
+        if (!matchesTitle && !matchesCampaign && !matchesCreatives && !matchesUser) {
           return false;
         }
       }
       return true;
     });
-  }, [logs, statusFilter, sourceFilter, searchQuery]);
+  }, [logs, statusFilter, sourceFilter, roleFilter, searchQuery]);
 
   return (
     <div className="space-y-6">
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-medium uppercase tracking-wider">Total Archives</span>
-            <FolderArchive className="size-4 text-primary" />
+      {!hideAnalytics && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="text-xs font-medium uppercase tracking-wider">Total Archives</span>
+              <FolderArchive className="size-4 text-primary" />
+            </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl font-semibold text-foreground">{stats.total}</span>
+              <span className="text-xs text-muted-foreground">downloads tracked</span>
+            </div>
           </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-semibold text-foreground">{stats.total}</span>
-            <span className="text-xs text-muted-foreground">exports tracked</span>
-          </div>
-        </div>
 
-        <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-medium uppercase tracking-wider">Ready for Download</span>
-            <CheckCircle2 className="size-4 text-success" />
+          <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="text-xs font-medium uppercase tracking-wider">Ready for Download</span>
+              <CheckCircle2 className="size-4 text-success" />
+            </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl font-semibold text-success">{stats.ready}</span>
+              {stats.inProgress > 0 ? (
+                <span className="inline-flex items-center gap-1 text-xs text-warning">
+                  <Loader2 className="size-3 animate-spin" /> {stats.inProgress} building
+                </span>
+              ) : (
+                <span className="text-xs text-muted-foreground">available instantly</span>
+              )}
+            </div>
           </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-semibold text-success">{stats.ready}</span>
-            {stats.inProgress > 0 ? (
-              <span className="inline-flex items-center gap-1 text-xs text-warning">
-                <Loader2 className="size-3 animate-spin" /> {stats.inProgress} building
-              </span>
-            ) : (
-              <span className="text-xs text-muted-foreground">available instantly</span>
-            )}
-          </div>
-        </div>
 
-        <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-medium uppercase tracking-wider">Storage Retained</span>
-            <HardDrive className="size-4 text-primary" />
+          <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="text-xs font-medium uppercase tracking-wider">Storage Retained</span>
+              <HardDrive className="size-4 text-primary" />
+            </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl font-semibold text-foreground">{formatBytes(stats.totalBytes)}</span>
+              <span className="text-xs text-muted-foreground">on server disk</span>
+            </div>
           </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-semibold text-foreground">{formatBytes(stats.totalBytes)}</span>
-            <span className="text-xs text-muted-foreground">on server disk</span>
-          </div>
-        </div>
 
-        <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-medium uppercase tracking-wider">Retention Policy</span>
-            <Clock className="size-4 text-warning" />
-          </div>
-          <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-            <RetentionDaysEditor
-              value={retentionDays}
-              editable={canEditRetention}
-              onSave={saveRetention}
-              ariaLabel="download archive retention in days"
-            />
-            <span className="text-xs text-muted-foreground">auto-purge stale ZIPs</span>
+          <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="text-xs font-medium uppercase tracking-wider">Retention Policy</span>
+              <Clock className="size-4 text-warning" />
+            </div>
+            <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <RetentionDaysEditor
+                value={retentionDays}
+                editable={canEditRetention}
+                onSave={saveRetention}
+                ariaLabel="download archive retention in days"
+              />
+              <span className="text-xs text-muted-foreground">auto-purge stale ZIPs</span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Main Table Section */}
       <section className="panel overflow-hidden border border-border shadow-xs">
@@ -330,7 +391,9 @@ export function DownloadLogsPanel({
               )}
             </h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Pre-built creative ZIP archives. Archived on server for {formatRetentionDays(retentionDays)} so you can re-download anytime without re-zipping.
+              {hideAnalytics
+                ? `Audit log of your requested creative downloads. Preserved on server for ${formatRetentionDays(retentionDays)}.`
+                : `Audit log of creative downloads across the dashboard. Preserved on server for ${formatRetentionDays(retentionDays)}.`}
             </p>
           </div>
 
@@ -354,7 +417,7 @@ export function DownloadLogsPanel({
             <div className="relative w-full max-w-xs">
               <Search className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
               <Input
-                placeholder="Search archive, campaign, or creative..."
+                placeholder="Search creative, user, campaign..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="h-8 pl-8 text-xs bg-background"
@@ -395,29 +458,51 @@ export function DownloadLogsPanel({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>Source:</span>
-            <select
-              value={sourceFilter}
-              onChange={(e) => setSourceFilter(e.target.value as "all" | "creative_library" | "campaigns")}
-              className="h-8 rounded-lg border border-border bg-background px-2 text-xs text-foreground focus:outline-none"
-            >
-              <option value="all">All sources</option>
-              <option value="creative_library">Creative Library</option>
-              <option value="campaigns">Campaigns</option>
-            </select>
+          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+            {!hideRoleFilter && !hideAnalytics && (
+              <div className="flex items-center gap-1.5">
+                <span>Role:</span>
+                <select
+                  value={roleFilter}
+                  onChange={(e) => setRoleFilter(e.target.value as typeof roleFilter)}
+                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs text-foreground focus:outline-none"
+                >
+                  <option value="all">All roles</option>
+                  <option value="media_buyer">Media Buyer</option>
+                  <option value="admin">Admin</option>
+                  <option value="manager">Manager</option>
+                  <option value="editor">Editor</option>
+                  <option value="content_creator">Content Creator</option>
+                </select>
+              </div>
+            )}
+
+            <div className="flex items-center gap-1.5">
+              <span>Source:</span>
+              <select
+                value={sourceFilter}
+                onChange={(e) => setSourceFilter(e.target.value as typeof sourceFilter)}
+                className="h-8 rounded-lg border border-border bg-background px-2 text-xs text-foreground focus:outline-none"
+              >
+                <option value="all">All sources</option>
+                <option value="creative_library">Creative Library</option>
+                <option value="campaigns">Campaigns</option>
+                <option value="single_ad">Single Ad</option>
+              </select>
+            </div>
           </div>
         </div>
 
         {/* Table Content */}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left text-sm">
+          <table className="w-full min-w-[840px] text-left text-sm">
             <thead className="border-b border-border bg-muted/60 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               <tr>
-                <th className="px-4 py-3">Archive / Scope</th>
+                <th className="px-4 py-3">Archive / Creative</th>
                 <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">ZIP Size</th>
-                <th className="px-4 py-3">Created</th>
+                <th className="px-4 py-3">Size</th>
+                <th className="px-4 py-3">Downloaded By</th>
+                <th className="px-4 py-3">Date & Time</th>
                 <th className="px-4 py-3">Expires</th>
                 <th className="px-4 py-3">Downloads</th>
                 <th className="px-4 py-3 text-right">Actions</th>
@@ -426,12 +511,12 @@ export function DownloadLogsPanel({
             <tbody className="divide-y divide-border">
               {filteredLogs.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center">
+                  <td colSpan={8} className="px-4 py-12 text-center">
                     <FolderArchive className="mx-auto size-8 text-muted-foreground/50" />
                     <p className="mt-2 text-sm font-medium text-foreground">No download archives found</p>
                     <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">
-                      Whenever you select and download creatives from the Creative Library or Campaigns,
-                      the zipping process runs in the background and preserves the ZIP file here for {formatRetentionDays(retentionDays)}.
+                      Whenever you or your team download creatives from the Creative Library, Single Ads, or Campaigns,
+                      the activity is logged and files are retained here for {formatRetentionDays(retentionDays)}.
                     </p>
                   </td>
                 </tr>
@@ -473,10 +558,12 @@ export function DownloadLogsPanel({
                                     "rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider",
                                     log.source === "campaigns"
                                       ? "bg-accent text-accent-foreground"
+                                      : log.source === "single_ad"
+                                      ? "bg-warning/15 text-warning ring-1 ring-inset ring-warning/30"
                                       : "bg-primary/10 text-primary"
                                   )}
                                 >
-                                  {log.source === "campaigns" ? "Campaigns" : "Library"}
+                                  {log.source === "campaigns" ? "Campaigns" : log.source === "single_ad" ? "Single Ad" : "Library"}
                                 </span>
                               </div>
 
@@ -526,9 +613,22 @@ export function DownloadLogsPanel({
                           {formatBytes(log.zip_size_bytes)}
                         </td>
 
+                        <td className="px-4 py-3.5 text-xs">
+                          <div className="flex items-center gap-1.5 font-medium text-foreground">
+                            <span className="truncate max-w-[130px]" title={log.user_name}>{log.user_name}</span>
+                          </div>
+                          <div className="mt-1">
+                            {getRoleBadge(log.user_role)}
+                          </div>
+                        </td>
+
                         <td className="px-4 py-3.5 text-xs text-muted-foreground">
-                          <div>{formatRelativeTime(log.created_at)}</div>
-                          <div className="text-[11px] text-muted-foreground/70">by {log.user_name}</div>
+                          <div className="font-mono text-xs text-foreground/90 font-medium">
+                            {formatDateTime(log.created_at)}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground/75 mt-0.5">
+                            {formatRelativeTime(log.created_at)}
+                          </div>
                         </td>
 
                         <td className="px-4 py-3.5 text-xs">
@@ -567,7 +667,7 @@ export function DownloadLogsPanel({
                                 ) : (
                                   <Download className="size-3.5" />
                                 )}
-                                Download ZIP
+                                {log.source === "single_ad" ? "Download File" : "Download ZIP"}
                               </Button>
                             )}
 
@@ -592,7 +692,7 @@ export function DownloadLogsPanel({
                       {/* Expanded Creative Items Row */}
                       {isExpanded && log.creative_names && log.creative_names.length > 0 && (
                         <tr className="bg-muted/20">
-                          <td colSpan={7} className="px-6 py-3 border-t border-border/50">
+                          <td colSpan={8} className="px-6 py-3 border-t border-border/50">
                             <div className="text-xs">
                               <p className="font-semibold text-foreground mb-1.5 flex items-center gap-1.5">
                                 <Sparkles className="size-3.5 text-primary" />

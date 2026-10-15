@@ -4,6 +4,13 @@ import { Fragment, useCallback, useEffect, useMemo, useState, useTransition } fr
 import { useRouter } from "next/navigation";
 import { Award, CheckCircle2, CircleDollarSign, Download, Eye, EyeOff, Gauge, Loader2, Megaphone, MousePointerClick, Pencil, Percent, Play, Plus, RefreshCw, Search, Target, Trash2, TrendingUp, Trophy, Users, Video, X } from "lucide-react";
 import { deleteIncentiveCampaign, deactivateIncentiveCampaign, removeIncentiveCreative, saveIncentiveCampaign, updateCampaignDestination } from "@/app/actions/incentives";
+import {
+  type IncentiveCampaign,
+  type IncentiveCreative,
+  type MetaAd,
+  calculateMonthlyIncentive,
+  evaluateIncentiveCreative
+} from "@/lib/incentives";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
@@ -12,8 +19,7 @@ import { IncentivePerformance, type IncentivesPeriodSummary } from "@/components
 import { MetricVisibilitySettings } from "@/components/incentives/metric-visibility-settings";
 import { ReliableMetaVideo, type LiveMetaVideo } from "@/components/incentives/reliable-meta-video";
 import { runServerAction } from "@/lib/client-action";
-import { calculateMonthlyIncentive, evaluateIncentiveCreative, type IncentiveCampaign, type IncentiveCreative, type MetaAd } from "@/lib/incentives";
-import { PERFORMANCE_METRIC_KEYS, type HiddenMetricsByRole, type ManagerCreativeScope, type PerformanceMetricKey } from "@/lib/metric-visibility";
+import { PERFORMANCE_METRIC_KEYS, type AdsPerformanceNavItemKey, type HiddenMetricsByRole, type ManagerCreativeScope, type PerformanceMetricKey } from "@/lib/metric-visibility";
 import type { Product, Profile } from "@/lib/types";
 import { cn } from "@/lib/utils";
 type EligibleAd = {
@@ -97,6 +103,7 @@ export function IncentivesDashboard({
     overrideAllUsers = false,
     usersWithAllAdsAccess = [],
     hiddenCampaignsByUser = {},
+    adsPerformanceNavItems,
     allProfiles = []
 }: {
     campaigns: IncentiveCampaign[];
@@ -114,6 +121,7 @@ export function IncentivesDashboard({
     overrideAllUsers?: boolean;
     usersWithAllAdsAccess?: string[];
     hiddenCampaignsByUser?: Record<string, string[]>;
+    adsPerformanceNavItems?: AdsPerformanceNavItemKey[];
     allProfiles?: Profile[];
 }) {
     const router = useRouter();
@@ -147,16 +155,22 @@ export function IncentivesDashboard({
         const metrics = overviewMetrics && overviewMetrics.length > 0 ? overviewMetrics : PERFORMANCE_METRIC_KEYS;
         return metrics.filter((key) => !roleHiddenMetrics.includes(key));
     }, [overviewMetrics, roleHiddenMetrics]);
+    const activeNavKeys = adsPerformanceNavItems && adsPerformanceNavItems.length > 0 ? adsPerformanceNavItems : ["overview"];
     useEffect(() => {
         const applyHash = () => {
             const raw = window.location.hash.replace(/^#/, "").toLowerCase();
             const valid = ["overview", "winning", "losing", "active", "paused", "testing", "settings", "mapping"] as const;
-            setSection((valid as readonly string[]).includes(raw) ? (raw as (typeof valid)[number]) : "overview");
+            if ((valid as readonly string[]).includes(raw)) {
+                setSection(raw as (typeof valid)[number]);
+            } else {
+                const firstAllowed = activeNavKeys.find((k) => (valid as readonly string[]).includes(k as (typeof valid)[number])) ?? "overview";
+                setSection(firstAllowed as (typeof valid)[number]);
+            }
         };
         applyHash();
         window.addEventListener("hashchange", applyHash);
         return () => window.removeEventListener("hashchange", applyHash);
-    }, []);
+    }, [activeNavKeys]);
     const updateOverviewPeriod = useCallback((summary: IncentivesPeriodSummary) => {
         setOverviewPeriod((current) => {
             if (
@@ -349,6 +363,7 @@ export function IncentivesDashboard({
               initialOverrideAllUsers={overrideAllUsers}
               initialUsersWithAllAdsAccess={usersWithAllAdsAccess}
               initialHiddenCampaignsByUser={hiddenCampaignsByUser}
+              initialAdsPerformanceNavItems={adsPerformanceNavItems}
               allProfiles={allProfiles}
               metaAds={metaAds}
               campaigns={campaigns}

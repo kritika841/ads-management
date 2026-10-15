@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { POST as uploadHandler } from "@/app/api/announcements/attachments/route";
 import { GET as downloadHandler } from "@/app/api/announcements/attachments/[id]/route";
+import { GET as pendingHandler } from "@/app/api/announcements/pending/route";
 
 vi.mock("@/lib/auth", () => ({
   getCurrentProfile: vi.fn(),
@@ -128,3 +129,36 @@ describe("Announcement Attachments API", () => {
     expect(downloadRes.status).toBe(404);
   });
 });
+
+describe("GET /api/announcements/pending Route Handler", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns 401 when user session is missing or expired", async () => {
+    const { getCurrentProfile } = await import("@/lib/auth");
+    (getCurrentProfile as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+    const res = await pendingHandler();
+    expect(res.status).toBe(401);
+    const data = await res.json();
+    expect(data.ok).toBe(false);
+    expect(data.announcements).toEqual([]);
+  });
+
+  it("returns 200 with pending announcements for an authenticated user", async () => {
+    const { getCurrentProfile } = await import("@/lib/auth");
+    (getCurrentProfile as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "creator-1",
+      role: "content_creator",
+      name: "Creator"
+    });
+
+    const res = await pendingHandler();
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.ok).toBe(true);
+    expect(Array.isArray(data.announcements)).toBe(true);
+  });
+});
+

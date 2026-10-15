@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { Announcement, AnnouncementAttachment } from "@/lib/announcements";
 import type { Profile } from "@/lib/types";
-import { acknowledgeAnnouncement, getPendingAnnouncements } from "@/app/actions/announcements";
+import { acknowledgeAnnouncement } from "@/app/actions/announcements";
 import { getAttachmentIcon, formatFileSize } from "./announcement-card";
 export function AnnouncementPopupModal({
   announcement,
@@ -293,13 +293,17 @@ export function AnnouncementOverlay({ profile }: { profile: Profile }) {
 
   const loadPending = async () => {
     try {
-      const announcements = await getPendingAnnouncements();
-      if (Array.isArray(announcements)) {
-        setPendingList(announcements);
-        setCurrentIndex((prev) => (prev >= announcements.length ? 0 : prev));
+      const res = await fetch("/api/announcements/pending", {
+        headers: { "Cache-Control": "no-cache" }
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data?.ok && Array.isArray(data.announcements)) {
+        setPendingList(data.announcements);
+        setCurrentIndex((prev) => (prev >= data.announcements.length ? 0 : prev));
       }
-    } catch (e) {
-      console.error("Failed to load pending announcements:", e);
+    } catch {
+      // Non-fatal: safely ignore network or fetch errors during idle/tab resume
     }
   };
 
@@ -333,12 +337,12 @@ export function AnnouncementOverlay({ profile }: { profile: Profile }) {
     };
     window.addEventListener("adflow:announcement-updated", handleCustomEvent);
 
-    // 4. Background polling fallback every 4 seconds when page is visible
+    // 4. Background polling fallback every 30 seconds when page is visible
     const timer = setInterval(() => {
       if (document.visibilityState === "visible") {
         void loadPending();
       }
-    }, 4000);
+    }, 30000);
 
     const onVisibility = () => {
       if (document.visibilityState === "visible") void loadPending();

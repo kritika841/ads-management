@@ -1,6 +1,17 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { DEFAULT_HIDDEN_METRICS, DEFAULT_MANAGER_CREATIVE_SCOPE, PERFORMANCE_METRIC_KEYS, type HiddenMetricsByRole, type ManagerCreativeScope, type PerformanceMetricKey } from "@/lib/metric-visibility";
+import {
+  ADS_PERFORMANCE_NAV_ITEMS,
+  DEFAULT_ADS_PERFORMANCE_NAV_ITEMS,
+  DEFAULT_HIDDEN_METRICS,
+  DEFAULT_MANAGER_CREATIVE_SCOPE,
+  PERFORMANCE_METRIC_KEYS,
+  type AdsPerformanceNavItemKey,
+  type HiddenMetricsByRole,
+  type ManagerCreativeScope,
+  type PerformanceMetricKey
+} from "@/lib/metric-visibility";
+import type { UserRole } from "@/lib/types";
 
 const METRIC_VISIBILITY_FILE = path.join(process.cwd(), "data", "metric-visibility.json");
 
@@ -15,11 +26,12 @@ export const DEFAULT_OVERVIEW_METRICS: PerformanceMetricKey[] = [
 
 export type MetricVisibilityConfig = HiddenMetricsByRole & {
   manager_creative_scope?: ManagerCreativeScope;
-  bulk_add_to_campaign_roles?: ("admin" | "content_creator" | "editor" | "manager")[];
+  bulk_add_to_campaign_roles?: UserRole[];
   overview_metrics?: PerformanceMetricKey[];
   override_all_users?: boolean;
   users_with_all_ads_access?: string[];
   hidden_campaigns_by_user?: Record<string, string[]>;
+  ads_performance_nav_items?: AdsPerformanceNavItemKey[];
 };
 
 function sanitizeKeys(arr: unknown): PerformanceMetricKey[] {
@@ -29,11 +41,11 @@ function sanitizeKeys(arr: unknown): PerformanceMetricKey[] {
   );
 }
 
-function sanitizeRoles(arr: unknown): ("admin" | "content_creator" | "editor" | "manager")[] {
+function sanitizeRoles(arr: unknown): UserRole[] {
   if (!Array.isArray(arr)) return ["admin"];
-  const allowed = ["admin", "content_creator", "editor", "manager"];
-  const filtered = arr.filter((item): item is "admin" | "content_creator" | "editor" | "manager" =>
-    typeof item === "string" && allowed.includes(item)
+  const allowed: UserRole[] = ["admin", "content_creator", "editor", "manager", "media_buyer"];
+  const filtered = arr.filter((item): item is UserRole =>
+    typeof item === "string" && allowed.includes(item as UserRole)
   );
   if (!filtered.includes("admin")) {
     filtered.unshift("admin");
@@ -52,6 +64,14 @@ function sanitizeHiddenCampaigns(input: unknown): Record<string, string[]> {
   return res;
 }
 
+function sanitizeNavItems(arr: unknown): AdsPerformanceNavItemKey[] {
+  if (!Array.isArray(arr)) return [...DEFAULT_ADS_PERFORMANCE_NAV_ITEMS];
+  const valid = arr.filter((item): item is AdsPerformanceNavItemKey =>
+    typeof item === "string" && (ADS_PERFORMANCE_NAV_ITEMS as readonly string[]).includes(item)
+  );
+  return valid.length > 0 ? valid : [...DEFAULT_ADS_PERFORMANCE_NAV_ITEMS];
+}
+
 export async function readMetricVisibilityFile(): Promise<MetricVisibilityConfig> {
   try {
     const raw = await fs.readFile(METRIC_VISIBILITY_FILE, "utf-8");
@@ -60,6 +80,9 @@ export async function readMetricVisibilityFile(): Promise<MetricVisibilityConfig
     const overviewMetrics = Array.isArray(parsed.overview_metrics)
       ? sanitizeKeys(parsed.overview_metrics)
       : DEFAULT_OVERVIEW_METRICS;
+    const navItems = Array.isArray(parsed.ads_performance_nav_items)
+      ? sanitizeNavItems(parsed.ads_performance_nav_items)
+      : [...DEFAULT_ADS_PERFORMANCE_NAV_ITEMS];
 
     return {
       content_creator: sanitizeKeys(parsed.content_creator),
@@ -72,7 +95,8 @@ export async function readMetricVisibilityFile(): Promise<MetricVisibilityConfig
       users_with_all_ads_access: Array.isArray(parsed.users_with_all_ads_access)
         ? parsed.users_with_all_ads_access.filter((u): u is string => typeof u === "string")
         : [],
-      hidden_campaigns_by_user: sanitizeHiddenCampaigns(parsed.hidden_campaigns_by_user)
+      hidden_campaigns_by_user: sanitizeHiddenCampaigns(parsed.hidden_campaigns_by_user),
+      ads_performance_nav_items: navItems
     };
   } catch {
     return {
@@ -82,7 +106,8 @@ export async function readMetricVisibilityFile(): Promise<MetricVisibilityConfig
       overview_metrics: DEFAULT_OVERVIEW_METRICS,
       override_all_users: false,
       users_with_all_ads_access: [],
-      hidden_campaigns_by_user: {}
+      hidden_campaigns_by_user: {},
+      ads_performance_nav_items: [...DEFAULT_ADS_PERFORMANCE_NAV_ITEMS]
     };
   }
 }
@@ -90,12 +115,13 @@ export async function readMetricVisibilityFile(): Promise<MetricVisibilityConfig
 export async function writeMetricVisibilityFile(
   data: HiddenMetricsByRole,
   managerCreativeScope?: ManagerCreativeScope,
-  bulkAddToCampaignRoles?: ("admin" | "content_creator" | "editor" | "manager")[],
+  bulkAddToCampaignRoles?: UserRole[],
   extra?: {
     overview_metrics?: PerformanceMetricKey[];
     override_all_users?: boolean;
     users_with_all_ads_access?: string[];
     hidden_campaigns_by_user?: Record<string, string[]>;
+    ads_performance_nav_items?: AdsPerformanceNavItemKey[];
   }
 ): Promise<void> {
   try {
@@ -104,6 +130,7 @@ export async function writeMetricVisibilityFile(
       content_creator: Array.isArray(data.content_creator) ? data.content_creator : existing.content_creator ?? [],
       editor: Array.isArray(data.editor) ? data.editor : existing.editor ?? [],
       manager: Array.isArray(data.manager) ? data.manager : existing.manager ?? [],
+      media_buyer: Array.isArray(data.media_buyer) ? data.media_buyer : existing.media_buyer ?? [],
       manager_creative_scope: managerCreativeScope ?? existing.manager_creative_scope ?? DEFAULT_MANAGER_CREATIVE_SCOPE,
       bulk_add_to_campaign_roles: bulkAddToCampaignRoles
         ? sanitizeRoles(bulkAddToCampaignRoles)
@@ -119,7 +146,10 @@ export async function writeMetricVisibilityFile(
         : existing.users_with_all_ads_access ?? [],
       hidden_campaigns_by_user: extra?.hidden_campaigns_by_user
         ? sanitizeHiddenCampaigns(extra.hidden_campaigns_by_user)
-        : existing.hidden_campaigns_by_user ?? {}
+        : existing.hidden_campaigns_by_user ?? {},
+      ads_performance_nav_items: extra?.ads_performance_nav_items !== undefined
+        ? sanitizeNavItems(extra.ads_performance_nav_items)
+        : (existing.ads_performance_nav_items ?? [...DEFAULT_ADS_PERFORMANCE_NAV_ITEMS])
     };
     await fs.mkdir(path.dirname(METRIC_VISIBILITY_FILE), { recursive: true });
     await fs.writeFile(METRIC_VISIBILITY_FILE, JSON.stringify(payload, null, 2), "utf-8");

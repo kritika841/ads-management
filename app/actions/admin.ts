@@ -5,7 +5,7 @@ import { invalidateLibraryCache } from "@/lib/library-cache";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { PERFORMANCE_METRIC_KEYS, type HiddenMetricsByRole, type ManagerCreativeScope, type PerformanceMetricKey } from "@/lib/metric-visibility";
+import { PERFORMANCE_METRIC_KEYS, type AdsPerformanceNavItemKey, type HiddenMetricsByRole, type ManagerCreativeScope, type PerformanceMetricKey } from "@/lib/metric-visibility";
 import { writeMetricVisibilityFile } from "@/lib/metric-visibility-server";
 import type { UserRole } from "@/lib/types";
 
@@ -16,7 +16,7 @@ const userSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().trim().min(1),
   email: z.string().trim().email().transform((email) => email.toLowerCase()),
-  role: z.enum(["admin", "manager", "editor", "content_creator"]),
+  role: z.enum(["admin", "manager", "media_buyer", "editor", "content_creator"]),
   avatarUrl: z.string().url().optional().or(z.literal("")),
   password: z.string().min(8).max(72).optional().or(z.literal(""))
 });
@@ -41,11 +41,12 @@ const metricEnum = z.enum(PERFORMANCE_METRIC_KEYS);
 const hiddenMetricsSchema = z.object({
   content_creator: z.array(metricEnum).optional(),
   editor: z.array(metricEnum).optional(),
-  manager: z.array(metricEnum).optional()
+  manager: z.array(metricEnum).optional(),
+  media_buyer: z.array(metricEnum).optional()
 }).optional();
 
 const managerCreativeScopeSchema = z.enum(["all", "own"]).optional();
-const bulkRolesSchema = z.array(z.enum(["admin", "content_creator", "editor", "manager"])).optional();
+const bulkRolesSchema = z.array(z.enum(["admin", "content_creator", "editor", "manager", "media_buyer"])).optional();
 
 const settingsSchema = z.object({
   twoStepApproval: z.boolean(),
@@ -54,7 +55,8 @@ const settingsSchema = z.object({
   allowManagerFinalApproval: z.boolean().default(true),
   managerCreativeScope: managerCreativeScopeSchema,
   hiddenMetricsByRole: hiddenMetricsSchema,
-  bulkAddToCampaignRoles: bulkRolesSchema
+  bulkAddToCampaignRoles: bulkRolesSchema,
+  adsPerformanceNavItems: z.array(z.string()).optional()
 });
 
 const analyticsSlaSchema = z.object({
@@ -430,7 +432,8 @@ export async function updateSettings(payload: {
   allowManagerFinalApproval?: boolean;
   managerCreativeScope?: ManagerCreativeScope;
   hiddenMetricsByRole?: HiddenMetricsByRole;
-  bulkAddToCampaignRoles?: ("admin" | "content_creator" | "editor" | "manager")[];
+  bulkAddToCampaignRoles?: UserRole[];
+  adsPerformanceNavItems?: AdsPerformanceNavItemKey[];
 }) {
   const adminProfile = await requireRole(["admin"]);
   const parsed = settingsSchema.safeParse(payload);
@@ -443,11 +446,14 @@ export async function updateSettings(payload: {
     ? parsed.data.allowManagerFinalApproval
     : !parsed.data.twoStepApproval;
 
-  if (parsed.data.hiddenMetricsByRole || parsed.data.managerCreativeScope || parsed.data.bulkAddToCampaignRoles) {
+  if (parsed.data.hiddenMetricsByRole || parsed.data.managerCreativeScope || parsed.data.bulkAddToCampaignRoles || parsed.data.adsPerformanceNavItems) {
     await writeMetricVisibilityFile(
       parsed.data.hiddenMetricsByRole ?? {},
       parsed.data.managerCreativeScope,
-      parsed.data.bulkAddToCampaignRoles
+      parsed.data.bulkAddToCampaignRoles,
+      {
+        ads_performance_nav_items: parsed.data.adsPerformanceNavItems as AdsPerformanceNavItemKey[] | undefined
+      }
     );
   }
 
@@ -501,6 +507,7 @@ export async function updateSettings(payload: {
   }
 
   await audit(adminProfile.id, "updated_settings", "app_settings", "1", parsed.data);
+  revalidatePath("/", "layout");
   revalidatePath("/admin/settings");
   revalidatePath("/incentives");
   revalidatePath("/library"); invalidateLibraryCache();
@@ -514,6 +521,7 @@ export async function updateMetricVisibilitySettings(payload: {
   overrideAllUsers?: boolean;
   usersWithAllAdsAccess?: string[];
   hiddenCampaignsByUser?: Record<string, string[]>;
+  adsPerformanceNavItems?: AdsPerformanceNavItemKey[];
 }) {
   const adminProfile = await requireRole(["admin"]);
   const parsed = hiddenMetricsSchema.safeParse(payload.hiddenMetricsByRole);
@@ -526,7 +534,8 @@ export async function updateMetricVisibilitySettings(payload: {
     overview_metrics: payload.overviewMetrics,
     override_all_users: payload.overrideAllUsers,
     users_with_all_ads_access: payload.usersWithAllAdsAccess,
-    hidden_campaigns_by_user: payload.hiddenCampaignsByUser
+    hidden_campaigns_by_user: payload.hiddenCampaignsByUser,
+    ads_performance_nav_items: payload.adsPerformanceNavItems
   });
 
   const admin = createSupabaseAdminClient();
@@ -558,8 +567,10 @@ export async function updateMetricVisibilitySettings(payload: {
     overviewMetrics: payload.overviewMetrics,
     overrideAllUsers: payload.overrideAllUsers,
     usersWithAllAdsAccess: payload.usersWithAllAdsAccess,
-    hiddenCampaignsByUser: payload.hiddenCampaignsByUser
+    hiddenCampaignsByUser: payload.hiddenCampaignsByUser,
+    adsPerformanceNavItems: payload.adsPerformanceNavItems
   });
+  revalidatePath("/", "layout");
   revalidatePath("/incentives");
   revalidatePath("/admin/settings");
   return { ok: true, message: "Ads performance settings saved." };

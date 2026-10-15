@@ -14,7 +14,8 @@ export default async function WorkLogPage({
 }: {
   searchParams: Promise<{ person?: string | string[]; from?: string | string[]; to?: string | string[]; month?: string | string[] }>;
 }) {
-  await requireRole(["admin", "manager"]);
+  const currentProfile = await requireRole(["admin", "manager"]);
+  const isAdmin = currentProfile.role === "admin";
   const query = await searchParams;
   const requestedMonth = first(query.month);
   const nowMs = Date.now();
@@ -52,10 +53,13 @@ export default async function WorkLogPage({
   const requested = first(query.person);
   const selectedId = requested && people.some((item) => item.id === requested) ? requested : "all";
 
+  const userSessions = data.userSessions || [];
+
   const reports: Record<string, WorkLogReport> = {};
   for (const person of people) {
     const report = buildWorkLogReport({ person, from, to, ads: data.ads, logs: data.logs, timeLogs: data.timeLogs, attendanceLogs: data.attendanceLogs, actorNames, nowMs });
-    const hasActivity = report.summary.creativesTouched > 0 || report.summary.editingSeconds > 0 || report.days.some((d) => Boolean(d.attendance?.checkInAt));
+    const personSessions = userSessions.filter((s) => s.user_id === person.id);
+    const hasActivity = report.summary.creativesTouched > 0 || report.summary.editingSeconds > 0 || report.days.some((d) => Boolean(d.attendance?.checkInAt)) || personSessions.length > 0;
     // Retain days and creatives for all active people so the team calendar sheet and day lightboxes work instantly
     if (person.id === selectedId || hasActivity) {
       reports[person.id] = report;
@@ -70,7 +74,16 @@ export default async function WorkLogPage({
           See everything a creator, editor or manager worked on in a day or date range — new submissions and every status change.
         </p>
       </div>
-      <WorkLogClient people={people} reports={reports} from={from} to={to} today={workLogDayKey(nowMs)} selectedId={selectedId} />
+      <WorkLogClient
+        people={people}
+        reports={reports}
+        from={from}
+        to={to}
+        today={workLogDayKey(nowMs)}
+        selectedId={selectedId}
+        isAdmin={isAdmin}
+        userSessions={userSessions}
+      />
     </div>
   );
 }

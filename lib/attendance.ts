@@ -212,13 +212,16 @@ export async function recordCheckOut(
 }
 
 /**
- * Updates a user's check-out time to the latest activity timestamp before 12 AM.
+ * Updates a user's attendance tracking:
+ * - If user has not logged in today (after 12 AM IST), automatically records check-in and initial check-out.
+ * - On subsequent activity, advances check-out to the latest activity timestamp.
  * Admins are exempt from tracking.
  */
 export async function recordActivityTouch(
   userId: string,
   userRole?: string | null,
-  nowMs: number = Date.now()
+  nowMs: number = Date.now(),
+  userName?: string
 ): Promise<AttendanceRecord | null> {
   if (userRole === "admin") {
     return null;
@@ -230,9 +233,44 @@ export async function recordActivityTouch(
   const localList = await readLocalAttendance();
   const existingIdx = localList.findIndex((item) => item.user_id === userId && item.date === dateKey);
 
-  // If user is not checked in today, do not auto-checkout; they must check in first
+  // If user is not checked in today after 12 AM, automatically record their login
   if (existingIdx === -1) {
-    return null;
+    const newRecord: AttendanceRecord = {
+      id: crypto.randomUUID(),
+      user_id: userId,
+      user_name: userName || "User",
+      user_role: userRole || "creator",
+      date: dateKey,
+      check_in_at: nowIso,
+      check_out_at: nowIso,
+      created_at: nowIso,
+      updated_at: nowIso
+    };
+    localList.unshift(newRecord);
+    await writeLocalAttendance(localList);
+
+    if (isSupabaseConfigured() && supabaseTableAvailable !== false) {
+      try {
+        const admin = createSupabaseAdminClient();
+        await admin.from("attendance_logs").upsert(
+          {
+            id: newRecord.id,
+            user_id: newRecord.user_id,
+            user_name: newRecord.user_name,
+            user_role: newRecord.user_role,
+            date: newRecord.date,
+            check_in_at: newRecord.check_in_at,
+            check_out_at: newRecord.check_out_at,
+            updated_at: newRecord.updated_at
+          },
+          { onConflict: "user_id,date" }
+        );
+      } catch (cause) {
+        console.warn("Supabase attendance auto-login upsert error:", cause);
+      }
+    }
+
+    return newRecord;
   }
 
   const existing = localList[existingIdx];
@@ -243,6 +281,8 @@ export async function recordActivityTouch(
   if (nowMs >= existingCheckInMs && nowMs >= existingCheckOutMs) {
     const updatedRecord: AttendanceRecord = {
       ...existing,
+      user_name: userName || existing.user_name,
+      user_role: userRole || existing.user_role,
       check_out_at: nowIso,
       updated_at: nowIso
     };
@@ -255,6 +295,8 @@ export async function recordActivityTouch(
         await admin
           .from("attendance_logs")
           .update({
+            user_name: updatedRecord.user_name,
+            user_role: updatedRecord.user_role,
             check_out_at: updatedRecord.check_out_at,
             updated_at: updatedRecord.updated_at
           })

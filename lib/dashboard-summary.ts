@@ -125,6 +125,36 @@ export function buildDashboardSummary(params: {
     };
   }
 
+  if (role === "media_buyer") {
+    const approvedCount = countStages(userAds, ["approved"]);
+    const inReviewCount = countStages(userAds, ["creator_review", "final_review"]);
+    const inProductionCount = countStages(userAds, ["script_writing", "ready_to_shoot", "shoot_complete", "ready_for_edit", "editing"]);
+    const changesCount = countStages(userAds, ["creator_changes_requested", "changes_requested"]);
+
+    return {
+      kind: "reviewer",
+      eyebrow: "Creative pipeline & library",
+      title: `${approvedCount} approved creative${approvedCount === 1 ? "" : "s"} ready`,
+      description: "Monitor creative production flow, inspect incoming videos, request revisions, and download approved assets.",
+      tiles: [
+        tile("approved", "Approved creatives", approvedCount, "approved", "Approved assets ready for campaigns and downloading.", "success"),
+        tile("review", "In review", inReviewCount, "needs_review", "Videos currently in creator or manager review.", inReviewCount ? "attention" : "neutral"),
+        tile("production", "In production", inProductionCount, "in_production", "Creatives currently being scripted, shot, or edited."),
+        tile("changes", "Changes requested", changesCount, "changes", "Creatives returned for creator or editor revisions.")
+      ],
+      priorityTitle: "Recent pipeline activity",
+      priorityEmpty: "No urgent creatives right now.",
+      priorities,
+      production: [
+        { label: "Preparing", count: countStages(userAds, ["script_writing", "ready_to_shoot", "shoot_complete"]) },
+        { label: "With editor", count: countStages(userAds, ["ready_for_edit", "editing"]) },
+        { label: "In review", count: inReviewCount },
+        { label: "Approved", count: approvedCount }
+      ],
+      workloads: []
+    };
+  }
+
   return {
     kind: "reviewer",
     eyebrow: "Team operations today",

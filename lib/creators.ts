@@ -8,7 +8,7 @@
  *   - manager         → self + content creators
  *   - admin           → self + managers + content creators
  */
-export const creatorCapableRoles = ["content_creator", "manager", "admin"] as const;
+export const creatorCapableRoles = ["content_creator", "manager", "admin", "media_buyer"] as const;
 
 export type CreatorCapableRole = (typeof creatorCapableRoles)[number];
 

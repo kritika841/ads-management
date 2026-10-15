@@ -2,8 +2,10 @@
 
 import { useMemo, useState, useTransition } from "react";
 import {
+  Award,
   Check,
   CheckCircle2,
+  Clock,
   Eye,
   EyeOff,
   FolderCheck,
@@ -11,9 +13,16 @@ import {
   LayoutDashboard,
   Loader2,
   Megaphone,
+  Pause,
+  Play,
+  RotateCcw,
   Search,
+  Settings,
   ShieldCheck,
   SlidersHorizontal,
+  Tags,
+  Target,
+  Trophy,
   UserCheck,
   Users,
   X
@@ -23,8 +32,12 @@ import { runServerAction } from "@/lib/client-action";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/field";
 import {
+  ADS_PERFORMANCE_NAV_INFO,
+  ADS_PERFORMANCE_NAV_ITEMS,
+  DEFAULT_ADS_PERFORMANCE_NAV_ITEMS,
   PERFORMANCE_METRIC_KEYS,
   PERFORMANCE_METRICS_INFO,
+  type AdsPerformanceNavItemKey,
   type HiddenMetricsByRole,
   type ManagerCreativeScope,
   type PerformanceMetricKey
@@ -41,6 +54,7 @@ export function MetricVisibilitySettings({
   initialOverrideAllUsers = false,
   initialUsersWithAllAdsAccess = [],
   initialHiddenCampaignsByUser = {},
+  initialAdsPerformanceNavItems,
   allProfiles = [],
   metaAds = [],
   campaigns = []
@@ -51,6 +65,7 @@ export function MetricVisibilitySettings({
   initialOverrideAllUsers?: boolean;
   initialUsersWithAllAdsAccess?: string[];
   initialHiddenCampaignsByUser?: Record<string, string[]>;
+  initialAdsPerformanceNavItems?: AdsPerformanceNavItemKey[];
   allProfiles?: Profile[];
   metaAds?: MetaAd[];
   campaigns?: IncentiveCampaign[];
@@ -77,6 +92,11 @@ export function MetricVisibilitySettings({
   );
   const [hiddenCampaignsByUser, setHiddenCampaignsByUser] = useState<Record<string, string[]>>(
     initialHiddenCampaignsByUser ?? {}
+  );
+  const [adsPerformanceNavItems, setAdsPerformanceNavItems] = useState<AdsPerformanceNavItemKey[]>(
+    initialAdsPerformanceNavItems && initialAdsPerformanceNavItems.length > 0
+      ? initialAdsPerformanceNavItems
+      : [...DEFAULT_ADS_PERFORMANCE_NAV_ITEMS]
   );
 
   const teamProfiles = useMemo(() => {
@@ -130,7 +150,8 @@ export function MetricVisibilitySettings({
           overviewMetrics,
           overrideAllUsers,
           usersWithAllAdsAccess,
-          hiddenCampaignsByUser
+          hiddenCampaignsByUser,
+          adsPerformanceNavItems
         })
       );
       setMessage(
@@ -306,6 +327,169 @@ export function MetricVisibilitySettings({
         <div className="border-b border-border bg-muted/40 p-4">
           <div className="rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">
             <span className="font-semibold text-foreground">Admin permissions:</span> Administrators always have full access to all metrics, team creatives, and campaigns. Settings configured below apply to managers, editors, and creators.
+          </div>
+        </div>
+      </div>
+
+      {/* Section: Ads Performance Side Menu Items */}
+      <div className="panel overflow-hidden">
+        <div className="border-b border-border p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="size-4 text-primary" aria-hidden />
+                <h3 className="text-sm font-semibold text-foreground">Ads performance sidebar sub-menu items</h3>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Select which sub-menu fields appear under &ldquo;Ads performance&rdquo; in the left navigation sidebar.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-accent px-2.5 py-1 text-xs font-medium text-accent-foreground">
+                {adsPerformanceNavItems.length} of {ADS_PERFORMANCE_NAV_ITEMS.length} visible
+              </span>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setAdsPerformanceNavItems([...ADS_PERFORMANCE_NAV_ITEMS])}
+                disabled={isPending}
+                className="h-7 text-xs"
+              >
+                <Eye className="size-3" aria-hidden />
+                Select all
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setAdsPerformanceNavItems([...DEFAULT_ADS_PERFORMANCE_NAV_ITEMS])}
+                disabled={isPending}
+                className="h-7 text-xs"
+              >
+                <RotateCcw className="size-3" aria-hidden />
+                Reset defaults
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-5 space-y-5">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {ADS_PERFORMANCE_NAV_ITEMS.map((key) => {
+              const info = ADS_PERFORMANCE_NAV_INFO[key];
+              const isSelected = adsPerformanceNavItems.includes(key);
+              return (
+                <label
+                  key={`nav-item-${key}`}
+                  className={cn(
+                    "relative flex cursor-pointer flex-col justify-between rounded-xl border p-4 transition select-none",
+                    isSelected
+                      ? "border-primary/50 bg-primary/5 ring-1 ring-primary/20 shadow-xs"
+                      : "border-dashed border-border bg-card/50 opacity-60 hover:opacity-90"
+                  )}
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <span className={cn(
+                          "flex size-7 items-center justify-center rounded-lg text-xs font-semibold",
+                          isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                        )}>
+                          {key === "overview" && <LayoutDashboard className="size-3.5" />}
+                          {key === "active" && <Play className="size-3.5" />}
+                          {key === "testing" && <Target className="size-3.5" />}
+                          {key === "winning" && <Award className="size-3.5" />}
+                          {key === "losing" && <X className="size-3.5" />}
+                          {key === "paused" && <Pause className="size-3.5" />}
+                          {key === "mapping" && <Tags className="size-3.5" />}
+                          {key === "settings" && <Settings className="size-3.5" />}
+                        </span>
+                        <div>
+                          <p className="text-xs font-semibold text-foreground">{info.label}</p>
+                          <code className="text-[10px] text-muted-foreground">{info.href}</code>
+                        </div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {
+                          setAdsPerformanceNavItems((prev) =>
+                            prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+                          );
+                        }}
+                        className="mt-1 size-4 rounded border-border text-primary focus:ring-primary cursor-pointer"
+                      />
+                    </div>
+                    <p className="mt-2.5 text-[11px] leading-4 text-muted-foreground">
+                      {info.description}
+                    </p>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-2.5 text-[10px]">
+                    {info.adminOnly ? (
+                      <span className="rounded bg-warning/15 px-1.5 py-0.5 font-medium text-warning">
+                        Admin only
+                      </span>
+                    ) : info.managerOrAdmin ? (
+                      <span className="rounded bg-accent px-1.5 py-0.5 font-medium text-accent-foreground">
+                        Admin &amp; Manager
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">All team roles</span>
+                    )}
+
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-0.5 font-semibold",
+                        isSelected ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"
+                      )}
+                    >
+                      {isSelected ? "Shown" : "Hidden"}
+                    </span>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+
+          {/* Live Navigation Preview */}
+          <div className="rounded-xl border border-border bg-card/60 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <Trophy className="size-3.5 text-primary" />
+                Live Sidebar Sub-menu Preview
+              </span>
+              <span className="text-[11px] text-muted-foreground">
+                Showing how this expands in the left navigation sidebar
+              </span>
+            </div>
+            <div className="mt-3 max-w-xs rounded-lg border border-border bg-card p-3 shadow-xs">
+              <div className="flex items-center justify-between rounded-md bg-accent/80 px-3 py-2 text-xs font-medium text-accent-foreground">
+                <div className="flex items-center gap-2">
+                  <Trophy className="size-4 text-primary" />
+                  <span>Ads performance</span>
+                </div>
+                <span className="text-[10px] text-muted-foreground">▼</span>
+              </div>
+              <div className="ml-5 mt-1.5 space-y-1 border-l border-border pl-2">
+                {ADS_PERFORMANCE_NAV_ITEMS.filter((k) => adsPerformanceNavItems.includes(k)).length === 0 ? (
+                  <div className="py-2 text-[11px] italic text-muted-foreground">
+                    (No sub-menu items enabled — navigates directly to Ads Performance)
+                  </div>
+                ) : (
+                  ADS_PERFORMANCE_NAV_ITEMS.filter((k) => adsPerformanceNavItems.includes(k)).map((k) => (
+                    <div
+                      key={`preview-${k}`}
+                      className="flex items-center justify-between rounded px-2.5 py-1 text-[11px] text-muted-foreground hover:bg-muted"
+                    >
+                      <span>{ADS_PERFORMANCE_NAV_INFO[k].label}</span>
+                      {ADS_PERFORMANCE_NAV_INFO[k].adminOnly && (
+                        <span className="text-[9px] text-warning">Admin</span>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>

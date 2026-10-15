@@ -65,8 +65,8 @@ const unfreezeEditingSchema = z.object({
 
 export async function saveCreatorItem(payload: z.input<typeof creatorItemSchema>) {
   const profile = await requireProfile();
-  if (profile.role !== "content_creator" && profile.role !== "admin" && profile.role !== "manager") {
-    return { ok: false, message: "Only content creators, managers, and admins can prepare creator work." };
+  if (profile.role !== "content_creator" && profile.role !== "admin" && profile.role !== "manager" && profile.role !== "media_buyer") {
+    return { ok: false, message: "Only content creators, managers, admins, and media buyers can prepare creator work." };
   }
 
   const parsed = creatorItemSchema.safeParse(payload);
@@ -74,13 +74,13 @@ export async function saveCreatorItem(payload: z.input<typeof creatorItemSchema>
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid creator item." };
   }
   const data = parsed.data;
-  if (profile.role === "content_creator" && data.creatorId !== profile.id) {
-    return { ok: false, message: "Content creators can only create work under their own account." };
+  if ((profile.role === "content_creator" || profile.role === "media_buyer") && data.creatorId !== profile.id) {
+    return { ok: false, message: "You can only create work under your own account." };
   }
 
   const admin = createSupabaseAdminClient();
 
-  if (!data.id && (profile.role === "content_creator" || profile.role === "manager" || profile.role === "admin")) {
+  if (!data.id && (profile.role === "content_creator" || profile.role === "manager" || profile.role === "admin" || profile.role === "media_buyer")) {
     const binReady = await isRecycleBinReady();
     const { data: userAds } = await liveOnly(
       admin
@@ -158,7 +158,7 @@ export async function saveCreatorItem(payload: z.input<typeof creatorItemSchema>
     if (!creatorEditableStages.includes(currentAd.production_stage as (typeof creatorEditableStages)[number])) {
       return { ok: false, message: "Creator fields are locked after the editor handoff." };
     }
-    if (profile.role === "content_creator" && currentAd.creator_id !== profile.id) {
+    if ((profile.role === "content_creator" || profile.role === "media_buyer") && currentAd.creator_id !== profile.id) {
       return { ok: false, message: "You do not have permission to edit this creator item." };
     }
   }
@@ -1065,8 +1065,8 @@ export async function resolveCreatorChangeRequest(payload: z.input<typeof creato
   const profile = await requireProfile();
   const parsed = creatorChangeResolutionSchema.safeParse(payload);
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid change request resolution." };
-  if (profile.role !== "content_creator" && profile.role !== "manager" && profile.role !== "admin") {
-    return { ok: false, message: "Only the assigned content creator or manager can resolve creator change requests." };
+  if (profile.role !== "content_creator" && profile.role !== "manager" && profile.role !== "admin" && profile.role !== "media_buyer") {
+    return { ok: false, message: "Only the assigned content creator, manager, or media buyer can resolve creator change requests." };
   }
 
   const data = parsed.data;
@@ -1180,11 +1180,21 @@ export async function resolveCreatorChangeRequest(payload: z.input<typeof creato
 }
 export async function reviewAd(adId: string, decision: "approve" | "request_changes", note: string, target?: "creator" | "editor") {
   const profile = await requireProfile();
-  if (profile.role !== "admin" && profile.role !== "manager") {
-    return { ok: false, message: "Only managers and admins can review ads." };
+  if (profile.role !== "admin" && profile.role !== "manager" && profile.role !== "media_buyer") {
+    return { ok: false, message: "Only managers, admins, and media buyers can review ads." };
   }
   if (decision !== "approve" && decision !== "request_changes") {
     return { ok: false, message: "Choose approve or request changes." };
+  }
+
+  // Admins and managers cannot request changes from media buyers as they are not primary creators
+  if (decision === "request_changes") {
+    if ((target as string) === "media_buyer") {
+      return { ok: false, message: "Changes cannot be requested from media buyers as they are not primary creators. Target must be creator or editor." };
+    }
+    if (target && target !== "creator" && target !== "editor") {
+      return { ok: false, message: "Target must be creator or editor." };
+    }
   }
 
   const validationError = validateReviewInput(decision, note);
@@ -1203,9 +1213,75 @@ export async function reviewAd(adId: string, decision: "approve" | "request_chan
     return { ok: false, message: adError?.message ?? "Ad not found." };
   }
 
+  // Media buyer approving their own requested changes
+  if (profile.role === "media_buyer" && decision === "approve") {
+    // Check if media buyer previously requested changes on this creative
+    const { data: previousChangeRequests } = await admin
+      .from("review_actions")
+      .select("id")
+      .eq("ad_id", parsedAdId.data)
+      .eq("reviewer_id", profile.id)
+      .eq("decision", "request_changes")
+      .limit(1);
+
+    const hasRequestedChanges = Boolean(previousChangeRequests && previousChangeRequests.length > 0);
+    if (!hasRequestedChanges) {
+      return { ok: false, message: "Media buyers cannot make final approvals; they can only approve changes they previously requested." };
+    }
+
+    if (ad.status !== "pending_review" || !["creator_review", "final_review"].includes(ad.production_stage)) {
+      return { ok: false, message: "This video is not waiting for final review." };
+    }
+
+    // Similar to creator review flow: advance stage towards final review (admin/manager approval)
+    const nextStage = ad.production_stage === "creator_review" ? "final_review" : ad.production_stage;
+    const { error: updateError } = await admin.from("ads").update({
+      production_stage: nextStage,
+      status: "pending_review",
+      approval_stage: "admin_final",
+      creator_reviewed_at: ad.creator_reviewed_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      workflow_status_changed_at: new Date().toISOString()
+    }).eq("id", ad.id);
+
+    if (updateError) return { ok: false, message: updateError.message };
+
+    await admin.from("review_actions").insert({
+      ad_id: ad.id,
+      reviewer_id: profile.id,
+      decision: "approve",
+      note: note.trim() || null
+    });
+
+    await admin.from("activity_logs").insert({
+      ad_id: ad.id,
+      actor_id: profile.id,
+      action: "media_buyer_approved_changes",
+      metadata: {
+        note: note.trim() || "",
+        previous_stage: ad.production_stage,
+        production_stage: nextStage
+      }
+    });
+
+    await notifyFinalReviewers(
+      admin,
+      ad,
+      `${profile.name} approved requested changes for ${ad.name}. Final review is ready.`
+    );
+
+    revalidateAdPaths(ad.id);
+    return { ok: true };
+  }
+
+  if (profile.role === "media_buyer" && decision !== "request_changes") {
+    return { ok: false, message: "Media buyers cannot make final approvals; they can only request changes." };
+  }
+
   const isAdminReopen = profile.role === "admin" && decision === "request_changes" && ad.production_stage === "approved";
   const isManagerReopen = profile.role === "manager" && decision === "request_changes" && ad.production_stage === "approved";
-  if (!isAdminReopen && !isManagerReopen && (ad.status !== "pending_review" || !["creator_review", "final_review"].includes(ad.production_stage))) {
+  const isMediaBuyerReopen = profile.role === "media_buyer" && decision === "request_changes" && ad.production_stage === "approved";
+  if (!isAdminReopen && !isManagerReopen && !isMediaBuyerReopen && (ad.status !== "pending_review" || !["creator_review", "final_review"].includes(ad.production_stage))) {
     return { ok: false, message: "This video is not waiting for final review." };
   }
 
@@ -1260,7 +1336,7 @@ export async function reviewAd(adId: string, decision: "approve" | "request_chan
           production_stage: "final_review"
         }
       });
-    } else if (isAdminReopen || isManagerReopen) {
+    } else if (isAdminReopen || isManagerReopen || isMediaBuyerReopen) {
       // Fallback: perform reopen directly if DB RPC has not yet been upgraded
       const nextStage = resolvedTarget === "creator" ? "creator_changes_requested" : "changes_requested";
       const { error: updateError } = await admin.from("ads").update({
