@@ -14,7 +14,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    let body: any = {};
+    let body: {
+      action?: string;
+      sessionId?: string;
+      path?: string;
+      actionLabel?: string;
+      activities?: UserSessionActivity[];
+      endReason?: string;
+    } = {};
     const contentType = req.headers.get("content-type") || "";
     if (contentType.includes("application/json")) {
       body = await req.json();
