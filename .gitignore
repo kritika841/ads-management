@@ -16,3 +16,5 @@ supabase/.temp
 service-account-key.json
 *.cache.json
 storage/
+
+.claude/

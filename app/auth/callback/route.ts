@@ -1,9 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getPublicOrigin } from "@/lib/request-origin";
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
+  const publicOrigin = getPublicOrigin(request);
   const code = requestUrl.searchParams.get("code");
   const token_hash = requestUrl.searchParams.get("token_hash");
   const type = (requestUrl.searchParams.get("type") as EmailOtpType | null) || "recovery";
@@ -17,7 +19,7 @@ export async function GET(request: NextRequest) {
     const targetUrl = isResetPasswordFlow
       ? `/reset-password/update?error=${encodeURIComponent(oauthError)}&error_description=${encodeURIComponent(errorDescription || oauthError)}`
       : `/login?error=oauth_denied`;
-    return NextResponse.redirect(new URL(targetUrl, request.url));
+    return NextResponse.redirect(new URL(targetUrl, publicOrigin));
   }
 
   // 1. Direct OTP token_hash verification (official Supabase PKCE / Server-side email verification)
@@ -33,7 +35,7 @@ export async function GET(request: NextRequest) {
       const targetUrl = isResetPasswordFlow
         ? `/reset-password/update?error=invalid_token&error_description=${encodeURIComponent(error.message)}`
         : `/login?error=auth_verify_failed&error_description=${encodeURIComponent(error.message)}`;
-      return NextResponse.redirect(new URL(targetUrl, request.url));
+      return NextResponse.redirect(new URL(targetUrl, publicOrigin));
     }
 
     if (data?.user && !isResetPasswordFlow) {
@@ -45,12 +47,12 @@ export async function GET(request: NextRequest) {
 
       if (!profile?.active) {
         await supabase.auth.signOut();
-        return NextResponse.redirect(new URL("/login?inactive=1", request.url));
+        return NextResponse.redirect(new URL("/login?inactive=1", publicOrigin));
       }
     }
 
     const destination = next?.startsWith("/") ? next : "/dashboard";
-    return NextResponse.redirect(new URL(destination, request.url));
+    return NextResponse.redirect(new URL(destination, publicOrigin));
   }
 
   // 2. PKCE code exchange
@@ -62,7 +64,7 @@ export async function GET(request: NextRequest) {
       const targetUrl = isResetPasswordFlow
         ? `/reset-password/update?error=oauth_exchange&error_description=${encodeURIComponent(error.message)}`
         : `/login?error=oauth_exchange`;
-      return NextResponse.redirect(new URL(targetUrl, request.url));
+      return NextResponse.redirect(new URL(targetUrl, publicOrigin));
     }
 
     if (data.user && !isResetPasswordFlow) {
@@ -74,12 +76,12 @@ export async function GET(request: NextRequest) {
 
       if (!profile?.active) {
         await supabase.auth.signOut();
-        return NextResponse.redirect(new URL("/login?inactive=1", request.url));
+        return NextResponse.redirect(new URL("/login?inactive=1", publicOrigin));
       }
     }
 
     const destination = next?.startsWith("/") ? next : "/dashboard";
-    return NextResponse.redirect(new URL(destination, request.url));
+    return NextResponse.redirect(new URL(destination, publicOrigin));
   }
 
   // 3. Neither code nor token_hash provided in server query string
@@ -112,5 +114,5 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  return NextResponse.redirect(new URL("/login?error=oauth_missing_code", request.url));
+  return NextResponse.redirect(new URL("/login?error=oauth_missing_code", publicOrigin));
 }

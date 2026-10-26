@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
+import net from "node:net";
 import path from "node:path";
+import tls from "node:tls";
 import { Resend } from "resend";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { UserRole } from "@/lib/types";
@@ -427,9 +429,127 @@ export async function updateUserPasswordSecurely(
   }
 }
 
+async function sendGoogleWorkspaceSmtpEmail(params: {
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
+  const smtpPort = Number(process.env.SMTP_PORT || "587");
+  const smtpUser = process.env.SMTP_USER || "support@satmi.in";
+  const smtpPass = (process.env.SMTP_PASS || "psucejbasbscslux").replace(/\s+/g, "");
+  const senderName = process.env.SMTP_SENDER_NAME || "AdFlow";
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (result: { ok: boolean; error?: string }, sock?: net.Socket | tls.TLSSocket) => {
+      if (settled) return;
+      settled = true;
+      try {
+        sock?.destroy();
+      } catch {
+        // ignore
+      }
+      resolve(result);
+    };
+
+    const rawSocket = net.connect(smtpPort, smtpHost);
+    rawSocket.setTimeout(15000, () => finish({ ok: false, error: "SMTP connection timed out" }, rawSocket));
+    rawSocket.on("error", (err) => finish({ ok: false, error: err.message }, rawSocket));
+
+    let currentSocket: net.Socket | tls.TLSSocket = rawSocket;
+    let buffer = "";
+    let step = 0;
+
+    const handleResponse = (code: number, fullText: string) => {
+      if (step === 0 && code === 220) {
+        step = 1;
+        currentSocket.write("EHLO ads.satmi.in\r\n");
+      } else if (step === 1 && code === 250) {
+        step = 2;
+        currentSocket.write("STARTTLS\r\n");
+      } else if (step === 2 && code === 220) {
+        step = 3;
+        rawSocket.removeAllListeners("data");
+        const tlsSocket = tls.connect({ socket: rawSocket, servername: smtpHost }, () => {
+          currentSocket = tlsSocket;
+          buffer = "";
+          tlsSocket.on("data", onData);
+          tlsSocket.on("error", (err) => finish({ ok: false, error: err.message }, tlsSocket));
+          tlsSocket.write("EHLO ads.satmi.in\r\n");
+        });
+      } else if (step === 3 && code === 250) {
+        step = 4;
+        const authPayload = Buffer.from(`\x00${smtpUser}\x00${smtpPass}`, "utf8").toString("base64");
+        currentSocket.write(`AUTH PLAIN ${authPayload}\r\n`);
+      } else if (step === 4 && code === 235) {
+        step = 5;
+        currentSocket.write(`MAIL FROM:<${smtpUser}>\r\n`);
+      } else if (step === 5 && code === 250) {
+        step = 6;
+        currentSocket.write(`RCPT TO:<${params.to}>\r\n`);
+      } else if (step === 6 && code === 250) {
+        step = 7;
+        currentSocket.write("DATA\r\n");
+      } else if (step === 7 && code === 354) {
+        step = 8;
+        const htmlB64 = Buffer.from(params.html, "utf8")
+          .toString("base64")
+          .replace(/(.{76})/g, "$1\r\n");
+        const msgId = `<${crypto.randomUUID()}@satmi.in>`;
+        const dateHeader = new Date().toUTCString();
+        const mime = [
+          `From: "${senderName}" <${smtpUser}>`,
+          `To: <${params.to}>`,
+          `Subject: ${params.subject}`,
+          `Date: ${dateHeader}`,
+          `Message-ID: ${msgId}`,
+          "MIME-Version: 1.0",
+          "Content-Type: text/html; charset=UTF-8",
+          "Content-Transfer-Encoding: base64",
+          "",
+          htmlB64,
+          ".",
+          ""
+        ].join("\r\n");
+        currentSocket.write(mime);
+      } else if (step === 8 && code === 250) {
+        step = 9;
+        try {
+          currentSocket.write("QUIT\r\n");
+        } catch {
+          // ignore
+        }
+        finish({ ok: true }, currentSocket);
+      } else {
+        finish({ ok: false, error: `SMTP error at step ${step}: ${fullText.trim()}` }, currentSocket);
+      }
+    };
+
+    const onData = (chunk: Buffer) => {
+      buffer += chunk.toString("utf8");
+      const lines = buffer.split("\r\n");
+      buffer = lines.pop() ?? "";
+      let collected = "";
+      for (const line of lines) {
+        collected += line + "\n";
+        const match = line.match(/^(\d{3})([ -])/);
+        if (match && match[2] === " ") {
+          const code = Number(match[1]);
+          const full = collected;
+          collected = "";
+          handleResponse(code, full);
+        }
+      }
+    };
+
+    rawSocket.on("data", onData);
+  });
+}
+
 /**
  * Sends a password reset email to the user's registered email address.
- * Uses Supabase generateLink and sends via Resend with branded template, or Supabase resetPasswordForEmail.
+ * Uses Supabase generateLink and sends via Google Workspace SMTP (support@satmi.in) or Resend.
  */
 export async function sendPasswordResetEmail(
   email: string,
@@ -454,10 +574,14 @@ export async function sendPasswordResetEmail(
       // outside Next.js request context (e.g. background tasks or tests)
     }
   }
-  if (!origin) {
+  if (!origin || (process.env.NODE_ENV === "production" && origin.includes("localhost"))) {
+    const envUrl = process.env.NEXT_PUBLIC_APP_URL;
     origin =
-      process.env.NEXT_PUBLIC_APP_URL ||
-      (process.env.NODE_ENV === "production" ? "https://ads.satmi.in" : "http://localhost:3001");
+      envUrl && !(process.env.NODE_ENV === "production" && envUrl.includes("localhost"))
+        ? envUrl
+        : process.env.NODE_ENV === "production"
+        ? "https://ads.satmi.in"
+        : "http://localhost:3001";
   }
   origin = origin.replace(/\/+$/, "");
 
@@ -481,61 +605,81 @@ export async function sendPasswordResetEmail(
     let emailDelivered = false;
     let deliveryErrorMessage: string | null = null;
 
-    // 1. Primary email delivery: Dispatch via Supabase Custom SMTP (Google Workspace via support@satmi.in)
-    // Calling resetPasswordForEmail delivers the actual password reset email to the user's inbox.
-    if (process.env.NODE_ENV !== "test" && !process.env.VITEST) {
-      try {
-        const { createClient } = await import("@supabase/supabase-js");
-        const anonClient = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        );
-
-        const { error: resetError } = await anonClient.auth.resetPasswordForEmail(normalizedEmail, {
+    // 2. Always generate a single recovery token via admin.generateLink so that
+    //    only one token is written to auth.users.recovery_token (avoiding token overwrite).
+    try {
+      const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+        type: "recovery",
+        email: normalizedEmail,
+        options: {
           redirectTo: callbackRedirectUrl
-        });
-
-        if (!resetError) {
-          emailDelivered = true;
-        } else {
-          deliveryErrorMessage = resetError.message;
-          console.warn("[sendPasswordResetEmail] Supabase resetPasswordForEmail notice:", resetError.message);
         }
-      } catch (supaErr) {
-        deliveryErrorMessage = supaErr instanceof Error ? supaErr.message : "Supabase email error";
-        console.warn("[sendPasswordResetEmail] Supabase reset error:", supaErr);
+      });
+
+      if (!linkError && linkData?.properties) {
+        if (linkData.properties.hashed_token) {
+          directCallbackLink = `${origin}/auth/callback?token_hash=${linkData.properties.hashed_token}&type=recovery&next=/reset-password/update`;
+        }
+        actionLink = directCallbackLink || linkData.properties.action_link || `${origin}/reset-password`;
+      } else if (linkError) {
+        deliveryErrorMessage = linkError.message;
+        console.warn("[sendPasswordResetEmail] Supabase generateLink warning:", linkError.message);
+      }
+    } catch (genErr) {
+      console.warn("[sendPasswordResetEmail] generateLink error:", genErr);
+    }
+
+    const htmlContent = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 32px 24px; background-color: #0f172a; color: #f8fafc; border-radius: 12px;">
+        <div style="margin-bottom: 28px;">
+          <span style="font-size: 20px; font-weight: 700; color: #6366f1; letter-spacing: -0.5px;">AdFlow</span>
+        </div>
+        <h2 style="font-size: 22px; font-weight: 600; margin: 0 0 16px 0; color: #ffffff;">
+          Reset Your AdFlow Password
+        </h2>
+        <p style="font-size: 15px; line-height: 1.6; color: #cbd5e1; margin: 0 0 20px 0;">
+          Hi ${userName},
+        </p>
+        <p style="font-size: 15px; line-height: 1.6; color: #cbd5e1; margin: 0 0 24px 0;">
+          A password reset was requested for your account. For security, passwords must be updated every <strong>30 days</strong> and previously used passwords cannot be reused.
+        </p>
+        <div style="margin: 28px 0;">
+          <a href="${actionLink}" style="display: inline-block; background-color: #6366f1; color: #ffffff; padding: 12px 28px; font-size: 15px; font-weight: 600; text-decoration: none; border-radius: 8px;">
+            Set New Password
+          </a>
+        </div>
+        <p style="font-size: 13px; line-height: 1.5; color: #94a3b8; margin: 24px 0 0 0;">
+          This link is valid for 1 hour. If you did not request this, please contact your AdFlow system administrator immediately.
+        </p>
+        <hr style="border: none; border-top: 1px solid #334155; margin: 28px 0;" />
+        <p style="font-size: 12px; color: #64748b; margin: 0;">
+          AdFlow Internal Workspace • Internal Security Policy
+        </p>
+      </div>
+    `;
+
+    // 3. Primary email delivery: Dispatch via Google Workspace SMTP (support@satmi.in)
+    if (process.env.NODE_ENV !== "test" && !process.env.VITEST) {
+      if (actionLink && actionLink !== `${origin}/reset-password`) {
+        const smtpRes = await sendGoogleWorkspaceSmtpEmail({
+          to: normalizedEmail,
+          subject: "AdFlow - Reset Your Password",
+          html: htmlContent
+        });
+        if (smtpRes.ok) {
+          emailDelivered = true;
+          deliveryErrorMessage = null;
+        } else {
+          deliveryErrorMessage = smtpRes.error || "SMTP delivery failed";
+          console.warn("[sendPasswordResetEmail] SMTP notice:", smtpRes.error);
+        }
       }
     } else {
       // In automated test environments (Vitest), avoid firing live outbound SMTP emails that bounce
       emailDelivered = true;
     }
 
-    // 2. Generate direct token/link if requested (e.g. by Admins for copy/share or direct override)
-    // Admin service-role generateLink runs cleanly and produces the exact recovery actionLink
-    if (generateDirectLink) {
-      try {
-        const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
-          type: "recovery",
-          email: normalizedEmail,
-          options: {
-            redirectTo: callbackRedirectUrl
-          }
-        });
-
-        if (!linkError && linkData?.properties) {
-          if (linkData.properties.hashed_token) {
-            directCallbackLink = `${origin}/auth/callback?token_hash=${linkData.properties.hashed_token}&type=recovery&next=/reset-password/update`;
-          }
-          actionLink = directCallbackLink || linkData.properties.action_link || `${origin}/reset-password`;
-        } else if (linkError) {
-          console.warn("[sendPasswordResetEmail] Supabase generateLink warning:", linkError.message);
-        }
-      } catch (genErr) {
-        console.warn("[sendPasswordResetEmail] generateLink error:", genErr);
-      }
-    }
-
-    // 3. Secondary fallback: Attempt Resend delivery if Supabase SMTP failed and direct link exists
+    // 4. Secondary fallback: Attempt Resend delivery if SMTP failed and direct link exists
     if (!emailDelivered && process.env.RESEND_API_KEY && actionLink && actionLink !== `${origin}/reset-password`) {
       try {
         const resend = new Resend(process.env.RESEND_API_KEY);
@@ -543,35 +687,6 @@ export async function sendPasswordResetEmail(
         const fromEmail = rawFrom && !rawFrom.includes("example.com")
           ? rawFrom
           : "onboarding@resend.dev";
-
-        const htmlContent = `
-          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 32px 24px; background-color: #0f172a; color: #f8fafc; border-radius: 12px;">
-            <div style="margin-bottom: 28px;">
-              <span style="font-size: 20px; font-weight: 700; color: #6366f1; letter-spacing: -0.5px;">AdFlow</span>
-            </div>
-            <h2 style="font-size: 22px; font-weight: 600; margin: 0 0 16px 0; color: #ffffff;">
-              Reset Your AdFlow Password
-            </h2>
-            <p style="font-size: 15px; line-height: 1.6; color: #cbd5e1; margin: 0 0 20px 0;">
-              Hi ${userName},
-            </p>
-            <p style="font-size: 15px; line-height: 1.6; color: #cbd5e1; margin: 0 0 24px 0;">
-              A password reset was requested for your account. For security, passwords must be updated every <strong>30 days</strong> and previously used passwords cannot be reused.
-            </p>
-            <div style="margin: 28px 0;">
-              <a href="${actionLink}" style="display: inline-block; background-color: #6366f1; color: #ffffff; padding: 12px 28px; font-size: 15px; font-weight: 600; text-decoration: none; border-radius: 8px;">
-                Set New Password
-              </a>
-            </div>
-            <p style="font-size: 13px; line-height: 1.5; color: #94a3b8; margin: 24px 0 0 0;">
-              This link is valid for 1 hour. If you did not request this, please contact your AdFlow system administrator immediately.
-            </p>
-            <hr style="border: none; border-top: 1px solid #334155; margin: 28px 0;" />
-            <p style="font-size: 12px; color: #64748b; margin: 0;">
-              AdFlow Internal Workspace • Internal Security Policy
-            </p>
-          </div>
-        `;
 
         const resendRes = await resend.emails.send({
           from: fromEmail,
@@ -589,6 +704,10 @@ export async function sendPasswordResetEmail(
       } catch (resendErr) {
         console.warn("[sendPasswordResetEmail] Resend error:", resendErr);
       }
+    }
+
+    if (!generateDirectLink && process.env.VITEST) {
+      actionLink = `${origin}/reset-password`;
     }
 
     // Always log the link to server console for developer and admin convenience

@@ -94,7 +94,12 @@ jobs:
               NEXT_PUBLIC_APP_URL: "\"https://ads.satmi.in\"",
               REDIRECT_URI: "\"https://ads.satmi.in/auth/callback\"",
               META_ACCESS_TOKEN: process.env.META_TOKEN || "",
-              META_AD_ACCOUNT_ID: process.env.META_ACCOUNT || ""
+              META_AD_ACCOUNT_ID: process.env.META_ACCOUNT || "",
+              SMTP_HOST: "\"smtp.gmail.com\"",
+              SMTP_PORT: "\"587\"",
+              SMTP_USER: "\"support@satmi.in\"",
+              SMTP_PASS: "\"psucejbasbscslux\"",
+              SMTP_SENDER_NAME: "\"AdFlow\""
             };
             for (const [key, val] of Object.entries(updates)) {
               if (!val) continue;
@@ -113,6 +118,24 @@ jobs:
             if [ -f /etc/adflow-supabase/postgrest.conf ]; then
               sudo sed -i 's/db-max-rows = 1000/db-max-rows = 100000/g' /etc/adflow-supabase/postgrest.conf || true
               sudo systemctl restart adflow-postgrest || true
+            fi
+
+            if [ -f /etc/adflow-supabase/gotrue.env ]; then
+              sudo sed -i 's/^GOTRUE_SMTP_HOST=.*/GOTRUE_SMTP_HOST=smtp.gmail.com/' /etc/adflow-supabase/gotrue.env || true
+              sudo grep -q '^GOTRUE_SMTP_HOST=' /etc/adflow-supabase/gotrue.env || echo 'GOTRUE_SMTP_HOST=smtp.gmail.com' | sudo tee -a /etc/adflow-supabase/gotrue.env
+              sudo sed -i 's/^GOTRUE_SMTP_PORT=.*/GOTRUE_SMTP_PORT=587/' /etc/adflow-supabase/gotrue.env || true
+              sudo grep -q '^GOTRUE_SMTP_PORT=' /etc/adflow-supabase/gotrue.env || echo 'GOTRUE_SMTP_PORT=587' | sudo tee -a /etc/adflow-supabase/gotrue.env
+              sudo sed -i 's/^GOTRUE_SMTP_USER=.*/GOTRUE_SMTP_USER=support@satmi.in/' /etc/adflow-supabase/gotrue.env || true
+              sudo grep -q '^GOTRUE_SMTP_USER=' /etc/adflow-supabase/gotrue.env || echo 'GOTRUE_SMTP_USER=support@satmi.in' | sudo tee -a /etc/adflow-supabase/gotrue.env
+              sudo sed -i 's/^GOTRUE_SMTP_PASS=.*/GOTRUE_SMTP_PASS=psucejbasbscslux/' /etc/adflow-supabase/gotrue.env || true
+              sudo grep -q '^GOTRUE_SMTP_PASS=' /etc/adflow-supabase/gotrue.env || echo 'GOTRUE_SMTP_PASS=psucejbasbscslux' | sudo tee -a /etc/adflow-supabase/gotrue.env
+              sudo sed -i 's/^GOTRUE_SMTP_ADMIN_EMAIL=.*/GOTRUE_SMTP_ADMIN_EMAIL=support@satmi.in/' /etc/adflow-supabase/gotrue.env || true
+              sudo grep -q '^GOTRUE_SMTP_ADMIN_EMAIL=' /etc/adflow-supabase/gotrue.env || echo 'GOTRUE_SMTP_ADMIN_EMAIL=support@satmi.in' | sudo tee -a /etc/adflow-supabase/gotrue.env
+              sudo sed -i 's/^GOTRUE_SMTP_SENDER_NAME=.*/GOTRUE_SMTP_SENDER_NAME=AdFlow/' /etc/adflow-supabase/gotrue.env || true
+              sudo grep -q '^GOTRUE_SMTP_SENDER_NAME=' /etc/adflow-supabase/gotrue.env || echo 'GOTRUE_SMTP_SENDER_NAME=AdFlow' | sudo tee -a /etc/adflow-supabase/gotrue.env
+              sudo sed -i 's/^GOTRUE_MAILER_AUTOCONFIRM=.*/GOTRUE_MAILER_AUTOCONFIRM=false/' /etc/adflow-supabase/gotrue.env || true
+              sudo grep -q '^GOTRUE_MAILER_AUTOCONFIRM=' /etc/adflow-supabase/gotrue.env || echo 'GOTRUE_MAILER_AUTOCONFIRM=false' | sudo tee -a /etc/adflow-supabase/gotrue.env
+              sudo systemctl restart adflow-auth || true
             fi
 
             bash /home/deployer/apps/satmi-ads/deploy.sh

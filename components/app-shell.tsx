@@ -295,7 +295,25 @@ function SidebarContent({
               <Settings className="size-4" aria-hidden />
             </Button>
           </Link>
-          <form action="/auth/signout" method="post">
+          <form
+            action="/auth/signout"
+            method="post"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              try {
+                const { createSupabaseBrowserClient } = await import("@/lib/supabase/browser");
+                await createSupabaseBrowserClient().auth.signOut();
+              } catch {
+                // ignore
+              }
+              try {
+                await fetch("/auth/signout", { method: "POST", credentials: "same-origin" });
+              } catch {
+                // ignore
+              }
+              window.location.href = "/login";
+            }}
+          >
             <Button variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-foreground" title="Sign out" type="submit">
               <LogOut className="size-4" aria-hidden />
             </Button>

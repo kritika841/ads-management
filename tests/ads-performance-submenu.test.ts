@@ -14,6 +14,7 @@ describe("Ads Performance Sub-menu Settings", () => {
   it("defines all expected sub-menu items for Ads Performance", () => {
     expect(ADS_PERFORMANCE_NAV_ITEMS).toEqual([
       "overview",
+      "campaigns",
       "active",
       "testing",
       "winning",
