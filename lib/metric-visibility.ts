@@ -54,6 +54,7 @@ export const DEFAULT_HIDDEN_METRICS: Record<ConfigurableMetricRole, PerformanceM
 
 export const ADS_PERFORMANCE_NAV_ITEMS = [
   "overview",
+  "campaigns",
   "active",
   "testing",
   "winning",
@@ -73,6 +74,12 @@ export const ADS_PERFORMANCE_NAV_INFO: Record<
     label: "Overview",
     href: "/incentives#overview",
     description: "High-level performance KPIs and aggregate summaries"
+  },
+  campaigns: {
+    label: "Campaigns",
+    href: "/incentives#campaigns",
+    description: "Manage internal campaigns, assign creatives, and control user visibility",
+    managerOrAdmin: true
   },
   active: {
     label: "Active creatives",
@@ -115,6 +122,7 @@ export const ADS_PERFORMANCE_NAV_INFO: Record<
 
 export const DEFAULT_ADS_PERFORMANCE_NAV_ITEMS: AdsPerformanceNavItemKey[] = [
   "overview",
+  "campaigns",
   "active",
   "testing",
   "winning",
@@ -123,4 +131,46 @@ export const DEFAULT_ADS_PERFORMANCE_NAV_ITEMS: AdsPerformanceNavItemKey[] = [
   "mapping",
   "settings"
 ];
+
+/**
+ * Where an internal campaign's ads are surfaced inside Ads performance.
+ * - campaigns_only: only in the admin/manager Campaigns tab (default)
+ * - submenu: gets its own new sidebar submenu
+ * - existing_tab: pinned inside an existing submenu (Overview, Active, ...)
+ * - with_meta_campaign: pinned wherever a chosen Meta campaign is displayed
+ * - override_all: targeted non-admin users see ONLY this campaign's ads
+ */
+export const CAMPAIGN_PLACEMENT_MODES = [
+  "campaigns_only",
+  "submenu",
+  "existing_tab",
+  "with_meta_campaign",
+  "override_all"
+] as const;
+
+export type CampaignPlacementMode = (typeof CAMPAIGN_PLACEMENT_MODES)[number];
+
+export type CampaignPlacement = {
+  mode: CampaignPlacementMode;
+  /** existing_tab: which submenu to pin into */
+  tab_key?: AdsPerformanceNavItemKey;
+  /** with_meta_campaign: the Meta campaign id to sit alongside */
+  meta_campaign_id?: string;
+  /** submenu: label shown in the sidebar (defaults to campaign name) */
+  submenu_label?: string;
+};
+
+/** Existing submenus an internal campaign can be pinned into. */
+export const PLACEABLE_TABS = ["overview", "active", "testing", "winning", "losing", "paused"] as const;
+
+export function customSubmenuKey(campaignId: string) {
+  return `cmp-${campaignId}`;
+}
+
+/** Which submenu a Meta campaign is shown in, based on its configured destination. */
+export function tabForMetaCampaignDestination(destination?: string | null): AdsPerformanceNavItemKey {
+  if (destination === "testing") return "testing";
+  if (destination === "scaling") return "winning";
+  return "overview";
+}
 

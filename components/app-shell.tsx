@@ -43,11 +43,13 @@ export function AppShell({
   profile,
   notifications,
   adsPerformanceNavItems,
+  customSubmenus = [],
   children
 }: {
   profile: Profile;
   notifications: Notification[];
   adsPerformanceNavItems?: AdsPerformanceNavItemKey[];
+  customSubmenus?: Array<{ href: string; label: string }>;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -59,11 +61,15 @@ export function AppShell({
 
   const adsPerformanceChildren = [
     activeSubmenuKeys.includes("overview") ? { href: "/incentives#overview", label: "Overview" } : null,
+    (profile.role === "admin" || profile.role === "manager") && activeSubmenuKeys.includes("campaigns")
+      ? { href: "/incentives#campaigns", label: "Campaigns" }
+      : null,
     activeSubmenuKeys.includes("active") ? { href: "/incentives#active", label: "Active creatives" } : null,
     activeSubmenuKeys.includes("testing") ? { href: "/incentives#testing", label: "Testing creatives" } : null,
     activeSubmenuKeys.includes("winning") ? { href: "/incentives#winning", label: "Winning creatives" } : null,
     activeSubmenuKeys.includes("losing") ? { href: "/incentives#losing", label: "Losing creatives" } : null,
     activeSubmenuKeys.includes("paused") ? { href: "/incentives#paused", label: "Paused creatives" } : null,
+    ...customSubmenus,
     (profile.role === "admin" || profile.role === "manager") && activeSubmenuKeys.includes("mapping")
       ? { href: "/incentives#mapping", label: "Creative attribution" }
       : null,

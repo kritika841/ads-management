@@ -165,7 +165,11 @@ export function AdPreviewModal({
             <div className="flex items-center justify-between gap-3"><h3 className="section-heading">Script</h3><span className="text-xs text-muted-foreground">{ad.script_text?.split(/\s+/).filter(Boolean).length ?? 0} words</span></div>
             <div
               className="prose-script mt-4 text-sm"
-              dangerouslySetInnerHTML={{ __html: ad.script_html || "<p>No script added.</p>" }}
+              dangerouslySetInnerHTML={{
+                __html:
+                  ad.script_html ||
+                  (ad.script_text ? `<p>${ad.script_text.replace(/\n/g, "<br/>")}</p>` : "<p>No script added.</p>")
+              }}
             />
           </aside>
         </div>

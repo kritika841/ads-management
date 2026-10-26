@@ -19,6 +19,7 @@ export default async function IncentivesPage() {
   ]);
   return (
     <IncentivesDashboard
+      {...dashboard}
       profile={profile}
       products={products}
       hiddenMetricsByRole={settings.hidden_metrics_by_role}
@@ -27,9 +28,12 @@ export default async function IncentivesPage() {
       overrideAllUsers={settings.override_all_users}
       usersWithAllAdsAccess={settings.users_with_all_ads_access}
       hiddenCampaignsByUser={settings.hidden_campaigns_by_user}
+      hiddenCreativesByUser={settings.hidden_creatives_by_user}
+      allowedCreativesByUser={settings.allowed_creatives_by_user}
+      campaignVisibleUsers={settings.campaign_visible_users}
       adsPerformanceNavItems={settings.ads_performance_nav_items}
+      campaignPlacements={settings.campaign_placements}
       allProfiles={allProfiles}
-      {...dashboard}
     />
   );
 }

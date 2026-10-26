@@ -63,7 +63,13 @@ async function fetchAdsWithRetry(fallbackAds: AdWithRelations[] = []): Promise<A
     } catch (secondErr) {
       console.error("[LibraryPage] getAds retry failed, using fallback:", secondErr instanceof Error ? secondErr.message : secondErr);
       if (fallbackAds.length > 0) return fallbackAds;
-      throw secondErr;
+      // Search for any existing cached snapshot in libraryCache before falling back to empty
+      for (const entry of libraryCache.values()) {
+        if (entry.ads && entry.ads.length > 0) {
+          return entry.ads;
+        }
+      }
+      return [];
     }
   }
 }

@@ -7,24 +7,32 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 const campaignSchema = z.object({
   id: z.string().uuid().optional(),
-  name: z.string().trim().min(1).max(120),
-  productId: z.string().uuid(),
-  dailySubmissionTarget: z.number().int().min(1).max(100),
-  targetCpa: z.number().positive().max(10_000_000),
-  gateDays: z.number().int().min(1).max(30),
-  winnerWindowDays: z.number().int().min(1).max(90),
-  evaluationMode: z.enum(["cumulative", "daily"]),
-  creatorIncentiveAmount: z.number().min(0).max(10_000_000),
-  editorIncentiveAmount: z.number().min(0).max(10_000_000),
-  startsOn: z.string().date(),
+  name: z.string().trim().min(1, "Campaign name is required").max(120),
+  productId: z.string().uuid().optional(),
+  dailySubmissionTarget: z.number().int().min(1).max(100).optional().default(1),
+  targetCpa: z.number().positive().max(10_000_000).optional().default(200),
+  gateDays: z.number().int().min(1).max(30).optional().default(3),
+  winnerWindowDays: z.number().int().min(1).max(90).optional().default(30),
+  evaluationMode: z.enum(["cumulative", "daily"]).optional().default("cumulative"),
+  creatorIncentiveAmount: z.number().min(0).max(10_000_000).optional().default(0),
+  editorIncentiveAmount: z.number().min(0).max(10_000_000).optional().default(0),
+  startsOn: z.string().date().optional(),
   endsOn: z.string().date().optional().or(z.literal("")),
-  active: z.boolean(),
-}).refine((value) => value.winnerWindowDays >= value.gateDays, {
+  active: z.boolean().optional().default(true),
+  visibleUserIds: z.array(z.string()).optional(),
+  adIds: z.array(z.string()).optional()
+}).refine((value) => (value.winnerWindowDays ?? 30) >= (value.gateDays ?? 3), {
   message: "The winner window must be at least as long as the initial gate.",
   path: ["winnerWindowDays"]
-}).refine((value) => !value.endsOn || value.endsOn >= value.startsOn, {
+}).refine((value) => !value.endsOn || !value.startsOn || value.endsOn >= value.startsOn, {
   message: "The end date cannot be before the start date.",
   path: ["endsOn"]
+});
+
+const assignCreativesSchema = z.object({
+  campaignId: z.string().uuid(),
+  adIds: z.array(z.string()).min(1, "Select at least one creative."),
+  launchedOn: z.string().date().optional()
 });
 
 const creativeSchema = z.object({
@@ -72,26 +80,76 @@ export async function saveIncentiveCampaign(payload: z.input<typeof campaignSche
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid campaign." };
 
   const value = parsed.data;
+  const admin = createSupabaseAdminClient();
+
+  let productId = value.productId;
+  if (!productId) {
+    const { data: firstProd } = await admin.from("products").select("id").limit(1).maybeSingle();
+    productId = firstProd?.id;
+  }
+  if (!productId) {
+    return { ok: false, message: "No product available in the system." };
+  }
+
   const patch = {
     name: value.name,
-    product_id: value.productId,
-    daily_submission_target: value.dailySubmissionTarget,
-    target_cpa: value.targetCpa,
-    gate_days: value.gateDays,
-    winner_window_days: value.winnerWindowDays,
-    evaluation_mode: value.evaluationMode,
-    creator_incentive_amount: value.creatorIncentiveAmount,
-    editor_incentive_amount: value.editorIncentiveAmount,
-    starts_on: value.startsOn,
+    product_id: productId,
+    daily_submission_target: value.dailySubmissionTarget ?? 1,
+    target_cpa: value.targetCpa ?? 200,
+    gate_days: value.gateDays ?? 3,
+    winner_window_days: value.winnerWindowDays ?? 30,
+    evaluation_mode: value.evaluationMode ?? "cumulative",
+    creator_incentive_amount: value.creatorIncentiveAmount ?? 0,
+    editor_incentive_amount: value.editorIncentiveAmount ?? 0,
+    starts_on: value.startsOn || new Date().toISOString().slice(0, 10),
     ends_on: value.endsOn || null,
-    active: value.active,
+    active: value.active ?? true,
     created_by: profile.id
   };
-  const admin = createSupabaseAdminClient();
+
   const { data, error } = value.id
     ? await admin.from("incentive_campaigns").update(patch).eq("id", value.id).select("id").single()
     : await admin.from("incentive_campaigns").insert(patch).select("id").single();
   if (error) return { ok: false, message: error.message };
+
+  if (value.visibleUserIds !== undefined) {
+    const { updateCampaignUserVisibility } = await import("@/app/actions/admin");
+    const visibilityResult = await updateCampaignUserVisibility({
+      campaignId: data.id,
+      visibleUserIds: value.visibleUserIds
+    });
+    if (!visibilityResult.ok) {
+      return { ok: false, message: `Campaign saved, but user access failed: ${(visibilityResult as { message?: string }).message ?? "unknown error"}` };
+    }
+  }
+
+  // Synchronize assigned ads if adIds is passed
+  if (value.adIds !== undefined) {
+    const campaignId = data.id;
+    const targetAdIds = new Set(value.adIds);
+
+    const { data: existingLinks } = await admin
+      .from("incentive_creatives")
+      .select("id, ad_id, meta_ad_id")
+      .eq("incentive_campaign_id", campaignId);
+
+    const existingByAdId = new Map((existingLinks || []).map((l) => [l.ad_id, l]));
+
+    // 1. Ads to remove
+    const toRemove = (existingLinks || []).filter((l) => !targetAdIds.has(l.ad_id));
+    if (toRemove.length > 0) {
+      await admin.from("incentive_creatives").delete().in("id", toRemove.map((l) => l.id));
+    }
+
+    // 2. Ads to add
+    const toAddAdIds = value.adIds.filter((adId) => !existingByAdId.has(adId));
+    if (toAddAdIds.length > 0) {
+      await assignCreativesToCampaign({
+        campaignId,
+        adIds: toAddAdIds
+      });
+    }
+  }
 
   await admin.from("audit_logs").insert({
     actor_id: profile.id,
@@ -101,7 +159,103 @@ export async function saveIncentiveCampaign(payload: z.input<typeof campaignSche
     metadata: patch
   });
   revalidatePath("/incentives");
-  return { ok: true };
+  return { ok: true, id: data.id };
+}
+
+export async function assignCreativesToCampaign(payload: z.input<typeof assignCreativesSchema>) {
+  const profile = await requireRole(["admin", "manager"]);
+  const parsed = assignCreativesSchema.safeParse(payload);
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid assignment payload." };
+
+  const { campaignId, adIds, launchedOn: customLaunch } = parsed.data;
+  const admin = createSupabaseAdminClient();
+
+  const [{ data: campaign, error: campErr }, { data: ads, error: adsErr }, { data: metaAds, error: metaErr }] = await Promise.all([
+    admin.from("incentive_campaigns").select("id, product_id, starts_on, ends_on, active").eq("id", campaignId).maybeSingle(),
+    admin.from("ads").select("id, name, product_id, creator_id, editor_id, created_at").in("id", adIds),
+    admin.from("meta_ads").select("id, matched_ad_id, detected_tag, created_time")
+  ]);
+
+  if (campErr || !campaign) return { ok: false, message: campErr?.message ?? "Campaign not found." };
+  if (adsErr) return { ok: false, message: adsErr.message };
+
+  const metaByAdId = new Map<string, string>();
+  for (const m of metaAds || []) {
+    if (m.matched_ad_id && !metaByAdId.has(m.matched_ad_id)) {
+      metaByAdId.set(m.matched_ad_id, m.id);
+    }
+  }
+
+  const { data: existingLinks } = await admin
+    .from("incentive_creatives")
+    .select("ad_id, meta_ad_id")
+    .eq("incentive_campaign_id", campaignId);
+  const existingAdIds = new Set((existingLinks || []).map((l) => l.ad_id));
+  const existingMetaIds = new Set((existingLinks || []).map((l) => l.meta_ad_id));
+
+  const rowsToInsert = [];
+  const today = new Date().toISOString().slice(0, 10);
+
+  for (const ad of ads || []) {
+    if (existingAdIds.has(ad.id)) continue;
+    let metaAdId = metaByAdId.get(ad.id);
+    if (!metaAdId || existingMetaIds.has(metaAdId)) {
+      metaAdId = `internal:${ad.id}`;
+    }
+    const launch = customLaunch || campaign.starts_on || ad.created_at?.slice(0, 10) || today;
+    rowsToInsert.push({
+      incentive_campaign_id: campaignId,
+      ad_id: ad.id,
+      meta_ad_id: metaAdId,
+      launched_on: launch,
+      creator_id: ad.creator_id,
+      editor_id: ad.editor_id,
+      attribution_source: "manual" as const,
+      created_by: profile.id
+    });
+    existingAdIds.add(ad.id);
+    existingMetaIds.add(metaAdId);
+  }
+
+  if (rowsToInsert.length === 0) {
+    return { ok: true, count: 0, message: "Selected creatives are already assigned to this campaign." };
+  }
+
+  const { data: inserted, error: insertErr } = await admin
+    .from("incentive_creatives")
+    .insert(rowsToInsert)
+    .select("id, meta_ad_id");
+  if (insertErr) return { ok: false, message: insertErr.message };
+
+  if (inserted?.length) {
+    const realMetaIds = inserted.map((i) => i.meta_ad_id).filter((id) => !id.startsWith("internal:"));
+    if (realMetaIds.length) {
+      const { data: metrics } = await admin
+        .from("meta_ad_daily_metrics")
+        .select("meta_ad_id, metric_date, spend, impressions, reach, clicks, link_clicks, purchases, revenue")
+        .in("meta_ad_id", realMetaIds);
+      if (metrics?.length) {
+        const linkByMeta = new Map(inserted.map((i) => [i.meta_ad_id, i.id]));
+        const metricRows = metrics.map((m) => ({
+          incentive_creative_id: linkByMeta.get(m.meta_ad_id),
+          metric_date: m.metric_date,
+          spend: Number(m.spend),
+          impressions: Number(m.impressions),
+          reach: Number(m.reach),
+          clicks: Number(m.clicks),
+          link_clicks: Number(m.link_clicks),
+          purchases: Number(m.purchases),
+          revenue: Number(m.revenue)
+        })).filter((r) => r.incentive_creative_id);
+        if (metricRows.length) {
+          await admin.from("incentive_daily_metrics").upsert(metricRows, { onConflict: "incentive_creative_id,metric_date" });
+        }
+      }
+    }
+  }
+
+  revalidatePath("/incentives");
+  return { ok: true, count: rowsToInsert.length, message: `Successfully assigned ${rowsToInsert.length} creatives to campaign.` };
 }
 
 export async function deactivateIncentiveCampaign(id: string) {
@@ -124,6 +278,13 @@ export async function deleteIncentiveCampaign(id: string) {
   const { error } = await admin.from("incentive_campaigns").delete().eq("id", parsed.data);
   if (error) return { ok: false, message: error.message };
   await admin.from("audit_logs").insert({ actor_id: profile.id, action: "deleted_incentive_campaign", target_type: "incentive_campaign", target_id: parsed.data, metadata: {} });
+  try {
+    const { updateCampaignPlacement, updateCampaignUserVisibility } = await import("@/app/actions/admin");
+    await updateCampaignPlacement({ campaignId: parsed.data, placement: null });
+    await updateCampaignUserVisibility({ campaignId: parsed.data, visibleUserIds: [] });
+  } catch {
+    // Non-fatal: stale config entries are ignored when the campaign no longer exists.
+  }
   revalidatePath("/incentives");
   return { ok: true };
 }

@@ -677,7 +677,7 @@ function WorkLogDayLightbox({
   isAdmin?: boolean;
   userSessions?: UserTimeSession[];
 }) {
-  const [activeCategory, setActiveCategory] = useState<"all" | "activity" | WorkLogCategory | "time_sessions" | "app_sessions">("all");
+  const [activeCategory, setActiveCategory] = useState<"all" | "activity" | WorkLogCategory | "time_sessions" | "app_sessions">("newly_submitted");
 
   const daySummary = report?.days.find((d) => d.date === date);
   const timeSessions = daySummary?.timeSessions ?? [];
@@ -688,7 +688,7 @@ function WorkLogDayLightbox({
   // Extract all events that occurred on this specific day for this person
   const dayEvents = useMemo(() => {
     if (!report?.creatives) return [];
-    const events: Array<WorkLogEvent & { creativeName: string; currentStage: ProductionStage }> = [];
+    const events: Array<WorkLogEvent & { creativeName: string; currentStage: ProductionStage; roles?: (typeof report.creatives)[number]["roles"] }> = [];
 
     for (const creative of report.creatives) {
       for (const event of creative.events) {
@@ -696,7 +696,8 @@ function WorkLogDayLightbox({
           events.push({
             ...event,
             creativeName: creative.name,
-            currentStage: creative.currentStage
+            currentStage: creative.currentStage,
+            roles: creative.roles
           });
         }
       }
@@ -749,7 +750,24 @@ function WorkLogDayLightbox({
 
   // Group events by category
   const categorized = useMemo(() => {
-    const newlySubmitted = dayEvents.filter((e) => categorizeWorkLogAction(e.action) === "newly_submitted");
+    const isCreator = person.role === "content_creator" || person.role === "creator";
+    const isEditor = person.role === "editor";
+
+    const newlySubmitted = dayEvents.filter((e) => {
+      if (categorizeWorkLogAction(e.action) !== "newly_submitted") return false;
+      if (isCreator) {
+        // Only show new submission of that creator:
+        // Must be creative submission (creator_item_created) of this creator
+        // and NOT editor video submissions or reviewer clip uploads.
+        const isByOrForCreator = e.direction === "by_person" || e.actorId === person.id || (!e.actorId && e.roles?.includes("creator"));
+        return e.action === "creator_item_created" && isByOrForCreator;
+      }
+      if (isEditor) {
+        return e.action === "edited_video_submitted" && (e.direction === "by_person" || e.actorId === person.id);
+      }
+      return e.direction === "by_person" || e.actorId === person.id || e.action === "creator_item_created";
+    });
+
     const resubmitted = dayEvents.filter((e) => categorizeWorkLogAction(e.action) === "resubmitted");
     const revisionRequested = dayEvents.filter((e) => categorizeWorkLogAction(e.action) === "revision_requested");
     const approved = dayEvents.filter((e) => categorizeWorkLogAction(e.action) === "approved");
@@ -763,7 +781,7 @@ function WorkLogDayLightbox({
       approved: approved,
       other: other
     };
-  }, [dayEvents]);
+  }, [dayEvents, person.role, person.id]);
 
   const filteredEvents =
     activeCategory === "all" || activeCategory === "activity" || activeCategory === "time_sessions" || activeCategory === "app_sessions"
@@ -851,8 +869,9 @@ function WorkLogDayLightbox({
           </div>
         ) : null}
 
-        {/* Category Tabs inside Lightbox */}
+        {/* Category Tabs inside Lightbox: 1-all, 2-new, 3-resubmitted, 4-revisions, 5-approved */}
         <div className="border-b border-border bg-muted/30 px-5 pt-2 flex flex-wrap gap-1 text-xs">
+          {/* 1. All */}
           <button
             type="button"
             onClick={() => setActiveCategory("all")}
@@ -865,19 +884,8 @@ function WorkLogDayLightbox({
           >
             All Logs ({totalActivityCount})
           </button>
-          <button
-            type="button"
-            onClick={() => setActiveCategory("activity")}
-            className={cn(
-              "px-3 py-1.5 border-b-2 font-medium transition-colors text-xs flex items-center gap-1.5",
-              activeCategory === "activity"
-                ? "border-primary text-foreground font-semibold"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <Activity className="size-3 text-primary" />
-            Activity ({totalActivityCount})
-          </button>
+
+          {/* 2. New */}
           <button
             type="button"
             onClick={() => setActiveCategory("newly_submitted")}
@@ -890,6 +898,8 @@ function WorkLogDayLightbox({
           >
             New ({categorized.newly_submitted.length})
           </button>
+
+          {/* 3. Resubmitted */}
           <button
             type="button"
             onClick={() => setActiveCategory("resubmitted")}
@@ -902,6 +912,8 @@ function WorkLogDayLightbox({
           >
             Resubmitted ({categorized.resubmitted.length})
           </button>
+
+          {/* 4. Revisions */}
           <button
             type="button"
             onClick={() => setActiveCategory("revision_requested")}
@@ -914,6 +926,8 @@ function WorkLogDayLightbox({
           >
             Revisions ({categorized.revision_requested.length})
           </button>
+
+          {/* 5. Approved */}
           <button
             type="button"
             onClick={() => setActiveCategory("approved")}
@@ -1224,6 +1238,12 @@ function WorkLogDayLightbox({
               <Monitor className="mx-auto size-8 opacity-40 mb-2" />
               <p className="text-sm font-medium text-foreground">No app sessions</p>
               <p className="text-xs mt-1">There were no recorded app sessions on {formatDateOnly(date)}.</p>
+            </div>
+          ) : activeCategory === "newly_submitted" && filteredEvents.length === 0 ? (
+            <div className="py-12 text-center text-muted-foreground">
+              <FilePlus2 className="mx-auto size-8 opacity-40 mb-2" />
+              <p className="text-sm font-medium text-foreground">No new submissions</p>
+              <p className="text-xs mt-1">No new creative submissions were recorded for {person.name} on {formatDateOnly(date)}.</p>
             </div>
           ) : activeCategory !== "all" && activeCategory !== "activity" && activeCategory !== "time_sessions" && activeCategory !== "app_sessions" && filteredEvents.length === 0 ? (
             <div className="py-12 text-center text-muted-foreground">

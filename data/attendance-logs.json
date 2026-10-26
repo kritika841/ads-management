@@ -1,5 +1,16 @@
 [
   {
+    "id": "bcc1b992-b887-4c47-8de3-9f6800240b02",
+    "user_id": "c2d5c47f-b97b-4625-8dce-88c3ac1a20d5",
+    "user_name": "kritika media buyer testing",
+    "user_role": "media_buyer",
+    "date": "2026-10-21",
+    "check_in_at": "2026-10-21T09:18:18.927Z",
+    "check_out_at": "2026-10-21T12:21:16.776Z",
+    "created_at": "2026-10-21T09:18:18.927Z",
+    "updated_at": "2026-10-21T12:21:16.776Z"
+  },
+  {
     "id": "a4d3ad89-da0b-45f3-af8e-fe7595a7129d",
     "user_id": "user-creator-2",
     "user_name": "Charlie",

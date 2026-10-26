@@ -317,7 +317,11 @@ export type AppSettings = {
   override_all_users?: boolean;
   users_with_all_ads_access?: string[];
   hidden_campaigns_by_user?: Record<string, string[]>;
+  hidden_creatives_by_user?: Record<string, string[]>;
+  allowed_creatives_by_user?: Record<string, string[]>;
+  campaign_visible_users?: Record<string, string[]>;
   ads_performance_nav_items?: import("@/lib/metric-visibility").AdsPerformanceNavItemKey[];
+  campaign_placements?: Record<string, import("@/lib/metric-visibility").CampaignPlacement>;
   /** How long export archives stay in Download Logs before they expire (default 3). */
   download_retention_days?: number;
   /** How long deleted campaigns, creatives and scripts stay restorable in the Recycle Bin (default 7). */

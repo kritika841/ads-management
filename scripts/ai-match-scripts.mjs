@@ -263,16 +263,36 @@ async function main() {
       rationale = `No confident match found. Best candidate was ${best.candidate.creative_code} (${(best.sim * 100).toFixed(1)}%), below threshold.`;
     }
 
+    // A creative file name on the video (e.g. "TAM0070_TAM0070.mp4") is stronger evidence than any transcript similarity.
+    let chosen = best.candidate;
+    const labelTokens = new Set(String(item.asset_label || '').toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean));
+    const labelHits = allScripts.filter((sc) => sc.creative_code && labelTokens.has(String(sc.creative_code).toUpperCase()));
+    const labelAdIds = [...new Set(labelHits.map((sc) => sc.ad_id))];
+    if (labelAdIds.length === 1) {
+      const labelCandidate = scriptEmbeddings.find((c) => c.ad_id === labelAdIds[0]);
+      if (labelCandidate) {
+        chosen = labelCandidate;
+        confidence = 'high';
+        matchedAdId = labelCandidate.ad_id;
+        matchedCode = labelCandidate.creative_code;
+        rationale = `Exact creative file name "${item.asset_label}" matches ${labelCandidate.creative_code}. Transcript similarity to it was ${(Number((scored.find((x) => x.candidate.ad_id === labelCandidate.ad_id) || { sim: 0 }).sim) * 100).toFixed(1)}%.`;
+      }
+    }
+
     results.push({
+      mapping_key: item.mapping_key,
+      meta_video_id: item.meta_video_id,
+      asset_label: item.asset_label,
+      video_count: item.video_count,
       meta_ad_id: item.meta_ad_id,
       meta_ad_name: item.meta_ad_name,
       spend: item.spend,
       language: item.language,
       matched_ad_id: matchedAdId,
       matched_creative_code: matchedCode,
-      matched_product: matchedCode ? best.candidate.product : null,
-      matched_creator: matchedCode ? best.candidate.creator : null,
-      matched_editor: matchedCode ? best.candidate.editor : null,
+      matched_product: matchedCode ? chosen.product : null,
+      matched_creator: matchedCode ? chosen.creator : null,
+      matched_editor: matchedCode ? chosen.editor : null,
       match_confidence: confidence,
       similarity_score: best.sim,
       margin: margin,
@@ -283,6 +303,11 @@ async function main() {
       runner_up_score: second ? second.sim : null
     });
   }
+
+  highCount = results.filter((r) => r.match_confidence === 'high').length;
+  mediumCount = results.filter((r) => r.match_confidence === 'medium').length;
+  lowCount = results.filter((r) => r.match_confidence === 'low').length;
+  unmatchedCount = results.filter((r) => r.match_confidence === 'unmatched').length;
 
   // 1. Save JSON
   const matchesJsonPath = path.join(dataDir, 'ai-script-matches.json');
@@ -305,7 +330,7 @@ async function main() {
 
   let mdContent = mdHeader;
   for (const res of results) {
-    mdContent += `### Meta Ad: ${res.meta_ad_name || 'Unnamed'} (ID: ${res.meta_ad_id})\n`;
+    mdContent += `### Meta Ad: ${res.meta_ad_name || 'Unnamed'} (ID: ${res.meta_ad_id}) - video ${res.meta_video_id || 'n/a'}${res.asset_label ? ` (${res.asset_label})` : ''}\n`;
     mdContent += `- **Spend**: ₹${res.spend.toLocaleString('en-IN')}\n`;
     mdContent += `- **Confidence**: \`${res.match_confidence.toUpperCase()}\` | **Similarity Score**: ${(res.similarity_score * 100).toFixed(1)}% (Margin: +${(res.margin * 100).toFixed(1)}%)\n`;
     if (res.matched_creative_code) {
@@ -345,68 +370,71 @@ async function main() {
     const adMap = new Map((dbAds || []).map((a) => [a.id, a]));
     const incentiveByMetaId = new Map((existingIncentives || []).map((i) => [i.meta_ad_id, i]));
 
+    // Attribution is per creative (per video). Only an ad that contains exactly one video may also be attributed at ad level.
+    const { data: reviewedRows } = await supabase.from('meta_ad_transcript_mappings').select('mapping_key, review_status').neq('review_status', 'pending');
+    const reviewedKeys = new Set((reviewedRows || []).map((row) => row.mapping_key));
+    const byAd = new Map();
+    for (const r of results) byAd.set(r.meta_ad_id, [...(byAd.get(r.meta_ad_id) || []), r]);
+
     for (const r of results) {
-      if (r.matched_ad_id) {
-        // Update meta_ad_transcript_mappings
-        const { error: mapErr } = await supabase
-          .from('meta_ad_transcript_mappings')
-          .update({
-            matched_ad_id: r.matched_ad_id,
-            match_score: r.similarity_score,
-            match_confidence: r.match_confidence,
-            transcript_source: 'ai_semantic_match',
-            review_note: r.rationale,
-            reviewed_at: new Date().toISOString()
-          })
-          .eq('meta_ad_id', r.meta_ad_id);
+      if (!r.mapping_key || reviewedKeys.has(r.mapping_key)) continue; // never overwrite a human decision
+      const { error: mapErr } = await supabase
+        .from('meta_ad_transcript_mappings')
+        .update({
+          matched_ad_id: r.matched_ad_id,
+          match_score: r.similarity_score,
+          match_confidence: r.match_confidence,
+          transcript_source: r.matched_ad_id ? 'ai_semantic_match' : 'meta_graph_deepgram',
+          review_note: r.rationale,
+          mapped_at: new Date().toISOString()
+        })
+        .eq('mapping_key', r.mapping_key);
+      if (!mapErr) dbUpdated++;
+    }
 
-        if (!mapErr) dbUpdated++;
+    for (const [metaAdId, rows] of byAd) {
+      const single = rows.length === 1 && (rows[0].video_count ?? 1) === 1;
+      const r = rows[0];
+      if (!single || r.match_confidence !== 'high' || !r.matched_ad_id) {
+        // Multi-creative ad (or no confident match): make sure no ad-level attribution from an earlier run lingers.
+        const { data: cur } = await supabase.from('meta_ads').select('matched_ad_id').eq('id', metaAdId).maybeSingle();
+        if (cur?.matched_ad_id && (rows.length > 1 || !r.matched_ad_id || r.match_confidence !== 'high')) {
+          await supabase.from('meta_ads').update({ matched_ad_id: null, matched_creator_id: null, matched_editor_id: null, auto_matched_at: null }).eq('id', metaAdId);
+        }
+        continue;
+      }
+      const matchedDbAd = adMap.get(r.matched_ad_id);
+      await supabase.from('meta_ads').update({
+        matched_ad_id: r.matched_ad_id,
+        matched_creator_id: matchedDbAd?.creator_id ?? null,
+        matched_editor_id: matchedDbAd?.editor_id ?? null,
+        auto_matched_at: new Date().toISOString()
+      }).eq('id', metaAdId);
 
-        // For high-confidence matches, link attribution to meta_ads and incentive_creatives
-        if (r.match_confidence === 'high') {
-          const matchedDbAd = adMap.get(r.matched_ad_id);
-
-          await supabase
-            .from('meta_ads')
-            .update({
-              matched_ad_id: r.matched_ad_id,
-              matched_creator_id: matchedDbAd?.creator_id ?? null,
-              matched_editor_id: matchedDbAd?.editor_id ?? null,
-              auto_matched_at: new Date().toISOString()
-            })
-            .eq('id', r.meta_ad_id);
-
-          const existingLink = incentiveByMetaId.get(r.meta_ad_id);
-          if (existingLink) {
-            const { error: incErr } = await supabase
-              .from('incentive_creatives')
-              .update({
-                ad_id: r.matched_ad_id,
-                creator_id: matchedDbAd?.creator_id ?? null,
-                editor_id: matchedDbAd?.editor_id ?? null,
-                attribution_source: 'auto',
-                auto_matched_at: new Date().toISOString()
-              })
-              .eq('id', existingLink.id);
-            if (!incErr) incentiveLinked++;
-          } else if (matchedDbAd?.product_id) {
-            const matchingCampaign = (campaigns || []).find((c) => c.product_id === matchedDbAd.product_id);
-            if (matchingCampaign) {
-              const { error: insertErr } = await supabase
-                .from('incentive_creatives')
-                .insert({
-                  incentive_campaign_id: matchingCampaign.id,
-                  ad_id: r.matched_ad_id,
-                  meta_ad_id: r.meta_ad_id,
-                  launched_on: new Date().toISOString().slice(0, 10),
-                  creator_id: matchedDbAd.creator_id,
-                  editor_id: matchedDbAd.editor_id,
-                  attribution_source: 'auto',
-                  auto_matched_at: new Date().toISOString()
-                });
-              if (!insertErr) incentiveLinked++;
-            }
-          }
+      const existingLink = incentiveByMetaId.get(metaAdId);
+      if (existingLink) {
+        const { error: incErr } = await supabase.from('incentive_creatives').update({
+          ad_id: r.matched_ad_id,
+          creator_id: matchedDbAd?.creator_id ?? null,
+          editor_id: matchedDbAd?.editor_id ?? null,
+          attribution_source: 'auto',
+          auto_matched_at: new Date().toISOString()
+        }).eq('id', existingLink.id);
+        if (!incErr) incentiveLinked++;
+      } else if (matchedDbAd?.product_id) {
+        const matchingCampaign = (campaigns || []).find((c) => c.product_id === matchedDbAd.product_id);
+        if (matchingCampaign) {
+          const { error: insertErr } = await supabase.from('incentive_creatives').insert({
+            incentive_campaign_id: matchingCampaign.id,
+            ad_id: r.matched_ad_id,
+            meta_ad_id: metaAdId,
+            launched_on: new Date().toISOString().slice(0, 10),
+            creator_id: matchedDbAd.creator_id,
+            editor_id: matchedDbAd.editor_id,
+            attribution_source: 'auto',
+            auto_matched_at: new Date().toISOString()
+          });
+          if (!insertErr) incentiveLinked++;
         }
       }
     }

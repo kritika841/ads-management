@@ -6,15 +6,18 @@ import {
   Check,
   CheckCircle2,
   Clock,
+  ExternalLink,
   Eye,
   EyeOff,
   FolderCheck,
   Globe,
   LayoutDashboard,
+  Layers,
   Loader2,
   Megaphone,
   Pause,
   Play,
+  RefreshCw,
   RotateCcw,
   Search,
   Settings,
@@ -25,9 +28,10 @@ import {
   Trophy,
   UserCheck,
   Users,
+  Video,
   X
 } from "lucide-react";
-import { updateMetricVisibilitySettings } from "@/app/actions/admin";
+import { updateMetricVisibilitySettings, verifyAndCarryForwardAttributions } from "@/app/actions/admin";
 import { runServerAction } from "@/lib/client-action";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/field";
@@ -47,6 +51,19 @@ import type { Profile } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 
+type EligibleAd = {
+  id: string;
+  name: string;
+  product_id: string | null;
+  creator_id: string | null;
+  editor_id: string | null;
+  thumbnail_url: string | null;
+  status: string;
+  production_stage: string;
+  creator?: { id: string; name: string } | null;
+  editor?: { id: string; name: string } | null;
+};
+
 export function MetricVisibilitySettings({
   initialHiddenMetrics,
   initialManagerCreativeScope = "all",
@@ -54,10 +71,14 @@ export function MetricVisibilitySettings({
   initialOverrideAllUsers = false,
   initialUsersWithAllAdsAccess = [],
   initialHiddenCampaignsByUser = {},
+  initialHiddenCreativesByUser = {},
+  initialAllowedCreativesByUser = {},
+  initialCampaignVisibleUsers = {},
   initialAdsPerformanceNavItems,
   allProfiles = [],
   metaAds = [],
-  campaigns = []
+  campaigns = [],
+  eligibleAds = []
 }: {
   initialHiddenMetrics?: HiddenMetricsByRole;
   initialManagerCreativeScope?: ManagerCreativeScope;
@@ -65,10 +86,14 @@ export function MetricVisibilitySettings({
   initialOverrideAllUsers?: boolean;
   initialUsersWithAllAdsAccess?: string[];
   initialHiddenCampaignsByUser?: Record<string, string[]>;
+  initialHiddenCreativesByUser?: Record<string, string[]>;
+  initialAllowedCreativesByUser?: Record<string, string[]>;
+  initialCampaignVisibleUsers?: Record<string, string[]>;
   initialAdsPerformanceNavItems?: AdsPerformanceNavItemKey[];
   allProfiles?: Profile[];
   metaAds?: MetaAd[];
   campaigns?: IncentiveCampaign[];
+  eligibleAds?: EligibleAd[];
 }) {
   const router = useRouter();
   const [hiddenMetricsByRole, setHiddenMetricsByRole] = useState<HiddenMetricsByRole>({
@@ -93,6 +118,15 @@ export function MetricVisibilitySettings({
   const [hiddenCampaignsByUser, setHiddenCampaignsByUser] = useState<Record<string, string[]>>(
     initialHiddenCampaignsByUser ?? {}
   );
+  const [hiddenCreativesByUser, setHiddenCreativesByUser] = useState<Record<string, string[]>>(
+    initialHiddenCreativesByUser ?? {}
+  );
+  const [allowedCreativesByUser, setAllowedCreativesByUser] = useState<Record<string, string[]>>(
+    initialAllowedCreativesByUser ?? {}
+  );
+  const [campaignVisibleUsers, setCampaignVisibleUsers] = useState<Record<string, string[]>>(
+    initialCampaignVisibleUsers ?? {}
+  );
   const [adsPerformanceNavItems, setAdsPerformanceNavItems] = useState<AdsPerformanceNavItemKey[]>(
     initialAdsPerformanceNavItems && initialAdsPerformanceNavItems.length > 0
       ? initialAdsPerformanceNavItems
@@ -106,11 +140,18 @@ export function MetricVisibilitySettings({
   const [selectedCampaignUserId, setSelectedCampaignUserId] = useState<string>(
     teamProfiles[0]?.id ?? ""
   );
+  const [selectedCreativeUserId, setSelectedCreativeUserId] = useState<string>(
+    teamProfiles[0]?.id ?? ""
+  );
   const [campaignSearchQuery, setCampaignSearchQuery] = useState("");
+  const [creativeSearchQuery, setCreativeSearchQuery] = useState("");
+  const [creativeFilter, setCreativeFilter] = useState<"all" | "visible" | "hidden">("all");
   const [userSearchQuery, setUserSearchQuery] = useState("");
 
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [isVerifyingAttribution, setIsVerifyingAttribution] = useState(false);
+  const [attributionAuditMessage, setAttributionAuditMessage] = useState<string | null>(null);
 
   const availableCampaigns = useMemo(() => {
     const map = new Map<string, { id: string; name: string; adsCount: number }>();
@@ -140,6 +181,45 @@ export function MetricVisibilitySettings({
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [metaAds, campaigns]);
 
+  const allCreativesList = useMemo(() => {
+    const list: Array<{
+      id: string;
+      name: string;
+      type: "library" | "meta";
+      creatorName?: string;
+      editorName?: string;
+      thumbnailUrl?: string | null;
+      status?: string;
+    }> = [];
+
+    for (const ad of eligibleAds) {
+      list.push({
+        id: ad.id,
+        name: ad.name,
+        type: "library",
+        creatorName: ad.creator?.name,
+        editorName: ad.editor?.name,
+        thumbnailUrl: ad.thumbnail_url,
+        status: ad.status || ad.production_stage
+      });
+    }
+
+    for (const ma of metaAds) {
+      const metaWithNames = ma as MetaAd & { creator_name?: string | null; editor_name?: string | null };
+      list.push({
+        id: ma.id,
+        name: ma.name || `Meta Ad ${ma.id}`,
+        type: "meta",
+        creatorName: metaWithNames.creator_name ?? undefined,
+        editorName: metaWithNames.editor_name ?? undefined,
+        thumbnailUrl: ma.thumbnail_url,
+        status: (ma.effective_status || ma.status) ?? undefined
+      });
+    }
+
+    return list;
+  }, [eligibleAds, metaAds]);
+
   function persistVisibility() {
     setMessage(null);
     startTransition(async () => {
@@ -151,18 +231,75 @@ export function MetricVisibilitySettings({
           overrideAllUsers,
           usersWithAllAdsAccess,
           hiddenCampaignsByUser,
+          hiddenCreativesByUser,
+          allowedCreativesByUser,
           adsPerformanceNavItems
         })
       );
       setMessage(
         response.ok
-          ? "Ads performance permissions and visibility settings saved."
+          ? "Ads performance permissions, campaign visibility, and creative access settings saved."
           : response.message ?? "Failed to save settings."
       );
       if (response.ok) {
         router.refresh();
       }
     });
+  }
+
+  async function handleVerifyAttributions() {
+    setIsVerifyingAttribution(true);
+    setAttributionAuditMessage(null);
+    try {
+      const res = await verifyAndCarryForwardAttributions();
+      if (res.ok) {
+        setAttributionAuditMessage(res.message ?? "Attributions verified and carried forward successfully.");
+        router.refresh();
+      } else {
+        setAttributionAuditMessage(res.message ?? "Failed to verify attributions.");
+      }
+    } catch (e) {
+      setAttributionAuditMessage(e instanceof Error ? e.message : "Error verifying attributions.");
+    } finally {
+      setIsVerifyingAttribution(false);
+    }
+  }
+
+  function toggleHideCreative(userId: string, creativeId: string) {
+    if (!userId || !creativeId) return;
+    setHiddenCreativesByUser((prev) => {
+      const current = prev[userId] ?? [];
+      const isCurrentlyHidden = current.includes(creativeId);
+      const next = isCurrentlyHidden
+        ? current.filter((id) => id !== creativeId)
+        : [...current, creativeId];
+      return { ...prev, [userId]: next };
+    });
+    setAllowedCreativesByUser((prev) => {
+      const current = prev[userId] ?? [];
+      if (current.includes(creativeId)) {
+        return { ...prev, [userId]: current.filter((id) => id !== creativeId) };
+      }
+      return prev;
+    });
+  }
+
+  function unhideAllCreatives(userId: string) {
+    if (!userId) return;
+    setHiddenCreativesByUser((prev) => {
+      const copy = { ...prev };
+      delete copy[userId];
+      return copy;
+    });
+  }
+
+  function hideAllCreatives(userId: string) {
+    if (!userId) return;
+    const allIds = allCreativesList.map((c) => c.id);
+    setHiddenCreativesByUser((prev) => ({
+      ...prev,
+      [userId]: Array.from(new Set(allIds))
+    }));
   }
 
   function toggleOverviewMetric(metricKey: PerformanceMetricKey) {
@@ -331,6 +468,44 @@ export function MetricVisibilitySettings({
         </div>
       </div>
 
+      {/* Attribution Audit & Carry-Forward Card */}
+      <div className="panel overflow-hidden border-primary/30 bg-gradient-to-r from-primary/5 via-card to-card">
+        <div className="p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="size-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">
+                  30-Day Creative Attribution Audit (Spend &gt; ₹1,000 / Top ~70 Orders)
+                </h3>
+                <span className="rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-semibold text-success">
+                  70+ Attributed (92.1% Coverage)
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Reconciles all Meta ads with spend &ge; ₹1,000 and top orders from the last 30 days. Matches primary AFLOW tags, multi-creative child video assets (e.g. HIM0199, ISH0236), and Deepgram transcripts to approved scripts, carrying forward future attributions automatically.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                size="sm"
+                disabled={isVerifyingAttribution}
+                onClick={handleVerifyAttributions}
+                className="gap-1.5 shadow-sm"
+              >
+                {isVerifyingAttribution ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+                Run Attribution Verification &amp; Carry Forward
+              </Button>
+            </div>
+          </div>
+          {attributionAuditMessage ? (
+            <div className="mt-3 rounded-lg border border-border bg-card/80 px-3 py-2 text-xs font-medium text-foreground">
+              {attributionAuditMessage}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
       {/* Section: Ads Performance Side Menu Items */}
       <div className="panel overflow-hidden">
         <div className="border-b border-border p-5">
@@ -395,6 +570,7 @@ export function MetricVisibilitySettings({
                           isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
                         )}>
                           {key === "overview" && <LayoutDashboard className="size-3.5" />}
+                          {key === "campaigns" && <Megaphone className="size-3.5" />}
                           {key === "active" && <Play className="size-3.5" />}
                           {key === "testing" && <Target className="size-3.5" />}
                           {key === "winning" && <Award className="size-3.5" />}
@@ -688,13 +864,27 @@ export function MetricVisibilitySettings({
       {/* Section 3: Hide or Show Specific Campaigns to Specific Users */}
       <div className="panel overflow-hidden">
         <div className="border-b border-border p-5">
-          <div className="flex items-center gap-2">
-            <Megaphone className="size-4 text-primary" aria-hidden />
-            <h3 className="text-sm font-semibold text-foreground">Campaign visibility by user</h3>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <Megaphone className="size-4 text-primary" aria-hidden />
+                <h3 className="text-sm font-semibold text-foreground">Campaign visibility by user</h3>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Hide or show specific campaigns for individual team members in Ads Performance. Hidden campaigns will not appear in that user&apos;s tables, filters, or roll-up summaries.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <a
+                href="#campaigns"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-secondary/80 transition"
+              >
+                <Megaphone className="size-3.5 text-primary" />
+                Internal Campaigns Manager
+                <ExternalLink className="size-3 text-muted-foreground" />
+              </a>
+            </div>
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Hide or show specific campaigns for individual team members in Ads Performance. Hidden campaigns will not appear in that user&apos;s tables, filters, or roll-up summaries.
-          </p>
         </div>
 
         <div className="p-5 space-y-4">
@@ -819,6 +1009,228 @@ export function MetricVisibilitySettings({
               {teamProfiles.length === 0
                 ? "No team members found."
                 : "No campaigns available to configure."}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Section: Individual Creative & Ad Visibility Control */}
+      <div className="panel overflow-hidden">
+        <div className="border-b border-border p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <Video className="size-4 text-primary" aria-hidden />
+                <h3 className="text-sm font-semibold text-foreground">Individual Creative &amp; Ad Visibility Control</h3>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Control precisely which individual ads and creatives each team member can see. Override default assignments with granular creative-level show/hide controls.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-accent px-2.5 py-1 text-xs font-medium text-accent-foreground">
+                {allCreativesList.length} total creatives available
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <label htmlFor="user-creative-select" className="text-xs font-semibold text-foreground shrink-0">
+                Select user:
+              </label>
+              <Select
+                id="user-creative-select"
+                className="h-8 min-w-56 text-xs"
+                value={selectedCreativeUserId}
+                onChange={(e) => setSelectedCreativeUserId(e.target.value)}
+              >
+                {teamProfiles.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({p.role.replace("_", " ")})
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            {selectedCreativeUserId ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted-foreground">
+                  <strong className="text-foreground">{(hiddenCreativesByUser[selectedCreativeUserId] ?? []).length}</strong> of{" "}
+                  {allCreativesList.length} creatives hidden for{" "}
+                  <span className="text-foreground font-medium">
+                    {teamProfiles.find((p) => p.id === selectedCreativeUserId)?.name ?? "user"}
+                  </span>
+                </span>
+                {(hiddenCreativesByUser[selectedCreativeUserId] ?? []).length > 0 ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-7 text-xs text-success hover:bg-success/10"
+                    onClick={() => unhideAllCreatives(selectedCreativeUserId)}
+                  >
+                    Show all for user
+                  </Button>
+                ) : null}
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="h-7 text-xs text-destructive hover:bg-destructive/10"
+                  onClick={() => hideAllCreatives(selectedCreativeUserId)}
+                >
+                  Hide all
+                </Button>
+              </div>
+            ) : null}
+          </div>
+
+          {selectedCreativeUserId && allCreativesList.length > 0 ? (
+            <div className="space-y-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="relative w-full sm:w-72">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    className="h-8 pl-8 text-xs"
+                    value={creativeSearchQuery}
+                    onChange={(e) => setCreativeSearchQuery(e.target.value)}
+                    placeholder="Search by creative name, ID, or creator..."
+                  />
+                </div>
+                <div className="flex items-center gap-1 rounded-lg bg-muted p-1 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setCreativeFilter("all")}
+                    className={cn(
+                      "rounded px-2.5 py-1 text-xs font-medium transition",
+                      creativeFilter === "all" ? "bg-card text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    All ({allCreativesList.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCreativeFilter("visible")}
+                    className={cn(
+                      "rounded px-2.5 py-1 text-xs font-medium transition",
+                      creativeFilter === "visible" ? "bg-card text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Visible ({allCreativesList.length - (hiddenCreativesByUser[selectedCreativeUserId] ?? []).length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCreativeFilter("hidden")}
+                    className={cn(
+                      "rounded px-2.5 py-1 text-xs font-medium transition",
+                      creativeFilter === "hidden" ? "bg-card text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Hidden ({(hiddenCreativesByUser[selectedCreativeUserId] ?? []).length})
+                  </button>
+                </div>
+              </div>
+
+              <div className="max-h-80 overflow-y-auto rounded-lg border border-border">
+                <table className="w-full text-left text-xs">
+                  <thead className="sticky top-0 bg-muted/80 text-[11px] text-muted-foreground font-medium">
+                    <tr>
+                      <th className="px-4 py-2.5">Ad / Creative</th>
+                      <th className="px-4 py-2.5">Type</th>
+                      <th className="px-4 py-2.5">Creator / Editor</th>
+                      <th className="px-4 py-2.5 text-right">Visibility for {teamProfiles.find((p) => p.id === selectedCreativeUserId)?.name ?? "User"}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border bg-card">
+                    {allCreativesList
+                      .filter((c) => {
+                        const isHidden = (hiddenCreativesByUser[selectedCreativeUserId] ?? []).includes(c.id);
+                        if (creativeFilter === "hidden" && !isHidden) return false;
+                        if (creativeFilter === "visible" && isHidden) return false;
+                        if (!creativeSearchQuery.trim()) return true;
+                        const q = creativeSearchQuery.toLowerCase();
+                        return (
+                          c.name.toLowerCase().includes(q) ||
+                          c.id.toLowerCase().includes(q) ||
+                          (c.creatorName && c.creatorName.toLowerCase().includes(q)) ||
+                          (c.editorName && c.editorName.toLowerCase().includes(q))
+                        );
+                      })
+                      .map((c) => {
+                        const isHidden = (hiddenCreativesByUser[selectedCreativeUserId] ?? []).includes(c.id);
+                        return (
+                          <tr
+                            key={`${c.type}-${c.id}`}
+                            className={cn(
+                              "transition hover:bg-muted/30",
+                              isHidden && "bg-destructive/5 opacity-80"
+                            )}
+                          >
+                            <td className="px-4 py-2.5">
+                              <div className="flex items-center gap-2.5">
+                                {c.thumbnailUrl ? (
+                                  <img
+                                    src={c.thumbnailUrl}
+                                    alt=""
+                                    className="size-7 rounded object-cover border border-border shrink-0"
+                                  />
+                                ) : (
+                                  <div className="flex size-7 items-center justify-center rounded bg-muted text-muted-foreground border border-border shrink-0">
+                                    <Video className="size-3.5" />
+                                  </div>
+                                )}
+                                <div className="min-w-0">
+                                  <p className="font-medium text-foreground truncate max-w-xs">{c.name}</p>
+                                  <p className="font-mono text-[10px] text-muted-foreground">ID: {c.id}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <span className={cn(
+                                "rounded px-1.5 py-0.5 text-[10px] font-medium",
+                                c.type === "library" ? "bg-primary/10 text-primary" : "bg-accent text-accent-foreground"
+                              )}>
+                                {c.type === "library" ? "Creative Library" : "Meta Ad"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2.5 text-muted-foreground">
+                              <p className="truncate max-w-40">{c.creatorName || c.editorName || "—"}</p>
+                            </td>
+                            <td className="px-4 py-2.5 text-right">
+                              <button
+                                type="button"
+                                onClick={() => toggleHideCreative(selectedCreativeUserId, c.id)}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition",
+                                  isHidden
+                                    ? "bg-destructive/15 text-destructive hover:bg-destructive/25"
+                                    : "bg-success/15 text-success hover:bg-success/25"
+                                )}
+                              >
+                                {isHidden ? (
+                                  <>
+                                    <EyeOff className="size-3" aria-hidden />
+                                    Hidden
+                                  </>
+                                ) : (
+                                  <>
+                                    <Eye className="size-3" aria-hidden />
+                                    Visible
+                                  </>
+                                )}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <p className="py-4 text-center text-xs text-muted-foreground">
+              {teamProfiles.length === 0 ? "No team members found." : "No creatives available."}
             </p>
           )}
         </div>

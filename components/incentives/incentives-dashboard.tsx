@@ -1,8 +1,8 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
-import { Fragment, useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Award, CheckCircle2, CircleDollarSign, Download, Eye, EyeOff, Gauge, Loader2, Megaphone, MousePointerClick, Pencil, Percent, Play, Plus, RefreshCw, Search, Target, Trash2, TrendingUp, Trophy, Users, Video, X } from "lucide-react";
+import { Award, Check, CheckCircle2, CircleDollarSign, Download, Eye, EyeOff, Gauge, Loader2, Megaphone, MousePointerClick, Pencil, Percent, Play, Plus, RefreshCw, Search, Target, Trash2, TrendingUp, Trophy, Users, Video, X } from "lucide-react";
 import { deleteIncentiveCampaign, deactivateIncentiveCampaign, removeIncentiveCreative, saveIncentiveCampaign, updateCampaignDestination } from "@/app/actions/incentives";
 import {
   type IncentiveCampaign,
@@ -16,10 +16,13 @@ import { Field, Input, Select } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
 import { BatchLinkCreativesModal } from "@/components/incentives/batch-link-creatives-modal";
 import { IncentivePerformance, type IncentivesPeriodSummary } from "@/components/incentives/incentive-performance";
+import { InternalCampaignsManager } from "@/components/incentives/internal-campaigns-manager";
+import { PlacedCampaignPanel, pinnedTabForPlacement } from "@/components/incentives/campaign-placement";
 import { MetricVisibilitySettings } from "@/components/incentives/metric-visibility-settings";
 import { ReliableMetaVideo, type LiveMetaVideo } from "@/components/incentives/reliable-meta-video";
 import { runServerAction } from "@/lib/client-action";
-import { PERFORMANCE_METRIC_KEYS, type AdsPerformanceNavItemKey, type HiddenMetricsByRole, type ManagerCreativeScope, type PerformanceMetricKey } from "@/lib/metric-visibility";
+import { verifyAndCarryForwardAttributions } from "@/app/actions/admin";
+import { PERFORMANCE_METRIC_KEYS, type AdsPerformanceNavItemKey, type CampaignPlacement, type HiddenMetricsByRole, type ManagerCreativeScope, type PerformanceMetricKey } from "@/lib/metric-visibility";
 import type { Product, Profile } from "@/lib/types";
 import { cn } from "@/lib/utils";
 type EligibleAd = {
@@ -103,8 +106,13 @@ export function IncentivesDashboard({
     overrideAllUsers = false,
     usersWithAllAdsAccess = [],
     hiddenCampaignsByUser = {},
+    hiddenCreativesByUser = {},
+    allowedCreativesByUser = {},
+    campaignVisibleUsers = {},
     adsPerformanceNavItems,
-    allProfiles = []
+    allProfiles = [],
+    allCampaigns = [],
+    campaignPlacements = {}
 }: {
     campaigns: IncentiveCampaign[];
     creatives: IncentiveCreative[];
@@ -121,14 +129,42 @@ export function IncentivesDashboard({
     overrideAllUsers?: boolean;
     usersWithAllAdsAccess?: string[];
     hiddenCampaignsByUser?: Record<string, string[]>;
+    hiddenCreativesByUser?: Record<string, string[]>;
+    allowedCreativesByUser?: Record<string, string[]>;
+    campaignVisibleUsers?: Record<string, string[]>;
     adsPerformanceNavItems?: AdsPerformanceNavItemKey[];
     allProfiles?: Profile[];
+    allCampaigns?: IncentiveCampaign[];
+    campaignPlacements?: Record<string, CampaignPlacement>;
 }) {
     const router = useRouter();
     const reviewer = profile.role === "admin" || (profile.role === "manager" && managerCreativeScope !== "own");
     const [message, setMessage] = useState<string | null>(null);
     const [syncing, setSyncing] = useState(false);
-    const [section, setSection] = useState<"overview" | "winning" | "losing" | "active" | "paused" | "testing" | "settings" | "mapping" | null>(null);
+    const [section, setSection] = useState<string | null>(null);
+    const panelCampaigns = useMemo(() => {
+        const list = allCampaigns && allCampaigns.length > 0 ? allCampaigns : campaigns;
+        return list.filter((c) => {
+            if (!c.active) return false;
+            if (profile.role === "admin") return true;
+            const hidden = (hiddenCampaignsByUser[profile.id] ?? []).map((h) => h.toLowerCase().trim());
+            if (hidden.includes(c.id.toLowerCase()) || hidden.includes(c.name.toLowerCase().trim())) return false;
+            const allowed = campaignVisibleUsers[c.id] ?? [];
+            return allowed.length === 0 || allowed.includes(profile.id);
+        });
+    }, [allCampaigns, campaigns, campaignVisibleUsers, hiddenCampaignsByUser, profile.id, profile.role]);
+    const submenuCampaignIds = useMemo(
+        () => panelCampaigns.filter((c) => campaignPlacements[c.id]?.mode === "submenu").map((c) => c.id),
+        [panelCampaigns, campaignPlacements]
+    );
+    const pinnedFor = (tab: string) =>
+        panelCampaigns.filter((c) => {
+            const p = campaignPlacements[c.id];
+            return p && pinnedTabForPlacement(p, campaignDestinations ?? {}) === tab;
+        });
+    const renderPlaced = (c: IncentiveCampaign, label?: string) => (
+        <PlacedCampaignPanel key={c.id} campaign={c} label={label} creatives={creatives.filter((cr) => cr.incentive_campaign_id === c.id)} metaAds={metaAds} />
+    );
     const [overviewPeriod, setOverviewPeriod] = useState<IncentivesPeriodSummary>({
         from: dashboardToday(),
         to: dashboardToday(),
@@ -156,21 +192,43 @@ export function IncentivesDashboard({
         return metrics.filter((key) => !roleHiddenMetrics.includes(key));
     }, [overviewMetrics, roleHiddenMetrics]);
     const activeNavKeys = adsPerformanceNavItems && adsPerformanceNavItems.length > 0 ? adsPerformanceNavItems : ["overview"];
+    // Keep the latest values in refs so that data refreshes (router.refresh after saving/deleting)
+    // never re-run the hash sync and bounce the user to a different section.
+    const navKeysRef = useRef<string[]>(activeNavKeys);
+    const submenuIdsRef = useRef<string[]>(submenuCampaignIds);
+    navKeysRef.current = activeNavKeys;
+    submenuIdsRef.current = submenuCampaignIds;
     useEffect(() => {
         const applyHash = () => {
-            const raw = window.location.hash.replace(/^#/, "").toLowerCase();
-            const valid = ["overview", "winning", "losing", "active", "paused", "testing", "settings", "mapping"] as const;
-            if ((valid as readonly string[]).includes(raw)) {
-                setSection(raw as (typeof valid)[number]);
+            const rawCase = window.location.hash.replace(/^#/, "");
+            const raw = rawCase.toLowerCase();
+            const valid = ["overview", "campaigns", "winning", "losing", "active", "paused", "testing", "settings", "mapping"] as const;
+            if (rawCase.startsWith("cmp-") && submenuIdsRef.current.includes(rawCase.slice(4))) {
+                setSection(rawCase);
+            } else if ((valid as readonly string[]).includes(raw)) {
+                setSection(raw);
             } else {
-                const firstAllowed = activeNavKeys.find((k) => (valid as readonly string[]).includes(k as (typeof valid)[number])) ?? "overview";
-                setSection(firstAllowed as (typeof valid)[number]);
+                // No usable hash (e.g. dropped by a refresh): keep the current section, and only
+                // fall back to the first allowed section on initial load.
+                setSection((current) => {
+                    if (current) {
+                        window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${current}`);
+                        return current;
+                    }
+                    return navKeysRef.current.find((k) => (valid as readonly string[]).includes(k)) ?? "overview";
+                });
             }
         };
         applyHash();
         window.addEventListener("hashchange", applyHash);
         return () => window.removeEventListener("hashchange", applyHash);
-    }, [activeNavKeys]);
+    }, []);
+    // Submenu campaigns load with the data; resolve a cmp-* hash once they are known.
+    const submenuKey = submenuCampaignIds.join(",");
+    useEffect(() => {
+        const rawCase = window.location.hash.replace(/^#/, "");
+        if (rawCase.startsWith("cmp-") && submenuIdsRef.current.includes(rawCase.slice(4))) setSection(rawCase);
+    }, [submenuKey]);
     const updateOverviewPeriod = useCallback((summary: IncentivesPeriodSummary) => {
         setOverviewPeriod((current) => {
             if (
@@ -352,7 +410,33 @@ export function IncentivesDashboard({
         </section>
       ) : null}
 
-      {section === "overview" || section === "winning" || section === "losing" || section === "active" || section === "paused" || section === "testing" ? <IncentivePerformance profile={profile} hiddenMetricsByRole={hiddenMetricsByRole} creatives={creatives} metaAds={metaAds} libraryAds={eligibleAds} products={products.map((product) => ({ id: product.id, name: product.name }))} reviewer={reviewer} mode={section === "overview" ? "all" : section === "winning" ? "winner" : section === "losing" ? "loser" : section} campaignDestinations={campaignDestinations} onPeriodChange={section === "overview" ? updateOverviewPeriod : undefined}/> : null}
+      {section && section.startsWith("cmp-") ? (
+        <div className="mt-1">
+          {panelCampaigns
+            .filter((c) => `cmp-${c.id}` === section)
+            .map((c) => renderPlaced(c, campaignPlacements[c.id]?.submenu_label || undefined))}
+        </div>
+      ) : null}
+      {section === "overview" || section === "winning" || section === "losing" || section === "active" || section === "paused" || section === "testing" ? pinnedFor(section).map((c) => renderPlaced(c)) : null}
+      {section === "overview" || section === "winning" || section === "losing" || section === "active" || section === "paused" || section === "testing" ? <IncentivePerformance profile={profile} hiddenMetricsByRole={hiddenMetricsByRole} creatives={creatives} metaAds={metaAds} libraryAds={eligibleAds} products={products.map((product) => ({ id: product.id, name: product.name }))} reviewer={reviewer} mode={section === "overview" ? "all" : section === "winning" ? "winner" : section === "losing" ? "loser" : (section as "active" | "paused" | "testing")} campaignDestinations={campaignDestinations} onPeriodChange={section === "overview" ? updateOverviewPeriod : undefined}/> : null}
+      {section === "campaigns" ? (
+        <div className="mt-6">
+          <InternalCampaignsManager
+            campaigns={allCampaigns && allCampaigns.length > 0 ? allCampaigns : campaigns}
+            creatives={creatives}
+            eligibleAds={eligibleAds}
+            metaAds={metaAds}
+            products={products}
+            profile={profile}
+            allProfiles={allProfiles}
+            campaignVisibleUsers={campaignVisibleUsers}
+            hiddenCampaignsByUser={hiddenCampaignsByUser}
+            hiddenCreativesByUser={hiddenCreativesByUser}
+            allowedCreativesByUser={allowedCreativesByUser}
+            campaignPlacements={campaignPlacements}
+          />
+        </div>
+      ) : null}
       {section === "settings" ? (
         reviewer && profile.role === "admin" ? (
           <div className="mt-6 space-y-6">
@@ -363,10 +447,14 @@ export function IncentivesDashboard({
               initialOverrideAllUsers={overrideAllUsers}
               initialUsersWithAllAdsAccess={usersWithAllAdsAccess}
               initialHiddenCampaignsByUser={hiddenCampaignsByUser}
+              initialHiddenCreativesByUser={hiddenCreativesByUser}
+              initialAllowedCreativesByUser={allowedCreativesByUser}
+              initialCampaignVisibleUsers={campaignVisibleUsers}
               initialAdsPerformanceNavItems={adsPerformanceNavItems}
               allProfiles={allProfiles}
               metaAds={metaAds}
-              campaigns={campaigns}
+              campaigns={allCampaigns && allCampaigns.length > 0 ? allCampaigns : campaigns}
+              eligibleAds={eligibleAds}
             />
             <CampaignSettingsView metaAds={metaAds} initialDestinations={campaignDestinations} />
           </div>
@@ -386,26 +474,97 @@ function TranscriptMappingView({ mappings, metaAds, reviewer }: {
 }) {
     const [filter, setFilter] = useState<"all" | "mapped" | "unmapped">("all");
     const [rematching, setRematching] = useState(false);
+    const [verifying, setVerifying] = useState(false);
     const [message, setMessage] = useState<string | null>(null);
     const router = useRouter();
     const metaById = useMemo(() => new Map(metaAds.map((ad) => [ad.id, ad])), [metaAds]);
     const visible = mappings.filter((mapping) => filter === "all" || (filter === "mapped" ? Boolean(mapping.matched_ad_id) : !mapping.matched_ad_id));
     if (!reviewer)
         return <section className="panel mt-5 p-6 text-sm text-muted-foreground">Transcript mapping is available to admins and managers.</section>;
-    return <><div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-4"><p className="text-xs text-muted-foreground">Only approved Creative Library scripts are considered. A link is created only for a high-confidence, clearly separated transcript match.</p><Button size="sm" variant="secondary" disabled={rematching} onClick={async () => { setRematching(true); setMessage(null); try {
-        const response = await fetch("/api/incentives/transcript-mapping/rematch", { method: "POST" });
-        const payload = await response.json();
-        if (!response.ok)
-            throw new Error(payload.error ?? "Rematch failed.");
-        setMessage(`Checked ${payload.reviewed} transcripts against ${payload.approvedScripts} approved scripts; linked ${payload.matched}.`);
-        router.refresh();
+
+    async function handleVerifyAndCarryForward() {
+        setVerifying(true);
+        setMessage(null);
+        try {
+            const res = await verifyAndCarryForwardAttributions();
+            if (res.ok) {
+                setMessage(res.message ?? "Creative attributions verified and carried forward successfully.");
+                router.refresh();
+            } else {
+                setMessage(res.message ?? "Attribution verification encountered an issue.");
+            }
+        } catch (e) {
+            setMessage(e instanceof Error ? e.message : "Attribution verification failed.");
+        } finally {
+            setVerifying(false);
+        }
     }
-    catch (cause) {
-        setMessage(cause instanceof Error ? cause.message : "Rematch failed.");
-    }
-    finally {
-        setRematching(false);
-    } }}>{rematching ? <Loader2 className="size-4 animate-spin"/> : <RefreshCw className="size-4"/>}Rematch approved scripts</Button>{message ? <p className="w-full text-xs text-muted-foreground">{message}</p> : null}</div><DetailedTranscriptMappingTable mappings={visible} metaAds={metaAds} filter={filter} onFilter={setFilter}/></>;
+
+    return (
+      <>
+        {/* Attribution Health & Carry Forward Banner */}
+        <div className="mt-5 rounded-xl border border-primary/25 bg-gradient-to-r from-primary/10 via-card to-card p-5 shadow-xs">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="size-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">
+                  30-Day Creative Attribution Health &amp; Carry-Forward
+                </h3>
+                <span className="rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-semibold text-success">
+                  Active &amp; Monitored
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+                Checks Meta ads with spend &gt; ₹1,000 or top ~70 orders. Reconciles exact AFLOW codes, child video asset tags, and AI transcript semantic matches, carrying forward attributions automatically.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                onClick={handleVerifyAndCarryForward}
+                disabled={verifying || rematching}
+                className="gap-1.5 shadow-sm"
+              >
+                {verifying ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+                Run verification &amp; carry forward
+              </Button>
+            </div>
+          </div>
+          {message ? (
+            <div className="mt-3 rounded-lg border border-border bg-card/80 px-3 py-2 text-xs font-medium text-foreground">
+              {message}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-4">
+          <p className="text-xs text-muted-foreground">Only approved Creative Library scripts are considered. A link is created only for a high-confidence, clearly separated transcript match.</p>
+          <Button size="sm" variant="secondary" disabled={rematching || verifying} onClick={async () => {
+            setRematching(true);
+            setMessage(null);
+            try {
+              const response = await fetch("/api/incentives/transcript-mapping/rematch", { method: "POST" });
+              const payload = await response.json();
+              if (!response.ok)
+                throw new Error(payload.error ?? "Rematch failed.");
+              setMessage(`Checked ${payload.reviewed} transcripts against ${payload.approvedScripts} approved scripts; linked ${payload.matched}.`);
+              router.refresh();
+            }
+            catch (cause) {
+              setMessage(cause instanceof Error ? cause.message : "Rematch failed.");
+            }
+            finally {
+              setRematching(false);
+            }
+          }}>
+            {rematching ? <Loader2 className="size-4 animate-spin"/> : <RefreshCw className="size-4"/>}
+            Rematch approved scripts
+          </Button>
+        </div>
+        <DetailedTranscriptMappingTable mappings={visible} metaAds={metaAds} filter={filter} onFilter={setFilter}/>
+      </>
+    );
 }
 function DetailedTranscriptMappingTable({ mappings, metaAds, filter, onFilter }: {
     mappings: TranscriptMapping[];
@@ -415,16 +574,40 @@ function DetailedTranscriptMappingTable({ mappings, metaAds, filter, onFilter }:
 }) {
     const [expanded, setExpanded] = useState<string | null>(null);
     const [preview, setPreview] = useState<MappingMediaTarget | null>(null);
+    const [visibleCount, setVisibleCount] = useState(25);
     const metaById = useMemo(() => new Map(metaAds.map((ad) => [ad.id, ad])), [metaAds]);
     const reason = (mapping: TranscriptMapping) => mapping.transcript_source === "exact_creative_id" ? "Exact creative ID" : mapping.review_status === "confirmed_unmatched" ? "Confirmed unmatched" : mapping.review_status === "confirmed_match" ? "Reviewed match" : mapping.transcript_source === "ai_semantic_match" ? (mapping.match_confidence === "high" ? `AI match (${((mapping.match_score ?? 0) * 100).toFixed(0)}%)` : `AI review (${((mapping.match_score ?? 0) * 100).toFixed(0)}%)`) : mapping.matched_ad_id ? "High-confidence approved script" : mapping.transcript_status !== "available" ? "No usable transcript" : (mapping.match_score ?? 0) < 0.28 ? "Below 28% threshold" : mapping.matched_tokens < 3 ? "Fewer than 3 shared tokens" : "Needs review";
-    return <><section className="panel mt-5 overflow-hidden"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4"><div><h2 className="section-heading">Creative mapping audit</h2><p className="mt-1 text-xs text-muted-foreground">Verbatim transcript matched against the approved Creative Library script. Click either thumbnail to play or inspect the source creative.</p></div><div className="flex gap-1 rounded-lg bg-muted p-1">{([['all', 'All'], ['mapped', 'Mapped'], ['unmapped', 'Unmapped']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => onFilter(value)} className={cn("rounded-md px-3 py-1.5 text-xs font-medium", filter === value ? "bg-card text-foreground shadow-sm" : "text-muted-foreground")}>{label}</button>)}</div></div>{mappings.length ? <div className="overflow-x-auto"><table className="min-w-[1650px] w-full text-left text-sm"><thead className="bg-muted/70 text-xs text-muted-foreground"><tr><th className="px-4 py-3">Meta ad / creative</th><th className="px-4 py-3">Creative Library result / ID</th><th className="px-4 py-3">Shared tokens</th><th className="px-4 py-3">Decision</th><th className="px-4 py-3">Transcript status</th><th className="px-4 py-3"/></tr></thead><tbody className="divide-y divide-border">{mappings.map((mapping, index) => { const meta = metaById.get(mapping.meta_ad_id); const libraryAd = Array.isArray(mapping.ad) ? mapping.ad[0] : mapping.ad; const product = Array.isArray(libraryAd?.product) ? libraryAd.product[0] : libraryAd?.product; const key = mapping.mapping_key || `${mapping.meta_ad_id}:${index}`; const isOpen = expanded === key;
-            const metaTarget: MappingMediaTarget = { kind: "meta", adId: mapping.meta_ad_id, name: meta?.name ?? `Meta ad ${mapping.meta_ad_id}`, thumbnailUrl: meta?.thumbnail_url, creativeId: mapping.meta_creative_id ?? meta?.creative_id, videoId: mapping.meta_video_id };
-            const libraryTarget: MappingMediaTarget | null = libraryAd ? { kind: "library", adId: libraryAd.id, name: libraryAd.name, thumbnailUrl: libraryAd.drive_file_id ? `/api/ads/${libraryAd.id}/thumbnail` : libraryAd.thumbnail_url, thumbnailFallbackUrl: libraryAd.drive_file_id ? libraryAd.thumbnail_url : null, previewUrl: libraryAd.preview_url ?? libraryAd.resolved_video_url ?? libraryAd.drive_url, driveFileId: libraryAd.drive_file_id, creativeId: libraryAd.id } : null; return <Fragment key={key}><tr className="bg-card align-top"><td className="px-4 py-3"><button type="button" className="flex items-center gap-3 text-left" onClick={() => setPreview(metaTarget)}><MediaThumb src={metaTarget.thumbnailUrl}/><div><p className="max-w-64 truncate font-medium">{metaTarget.name}</p><p className="font-mono text-[10px] text-muted-foreground">Ad {mapping.meta_ad_id}</p><p className="font-mono text-[10px] text-muted-foreground">Creative {metaTarget.creativeId ?? "—"}</p><span className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary"><Play className="size-3"/>Open preview</span></div></button></td><td className="px-4 py-3">{libraryTarget ? <button type="button" className="flex items-center gap-3 text-left" onClick={() => setPreview(libraryTarget)}><MediaThumb src={libraryTarget.thumbnailUrl} fallbackSrc={libraryTarget.thumbnailFallbackUrl}/><div><p className="max-w-64 truncate font-medium text-success">{libraryTarget.name}</p><p className="text-xs text-muted-foreground">{product?.name ?? "Creative Library"}</p><p className="font-mono text-[10px] text-muted-foreground">Matched creative ID {libraryTarget.adId}</p><span className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary"><Play className="size-3"/>Open preview</span></div></button> : <span className="text-muted-foreground">No automatic match</span>}</td><td className="px-4 py-3 tabular-nums"><p>{mapping.matched_tokens} shared</p><p className="text-xs text-muted-foreground">{mapping.transcript_token_count} transcript · {mapping.script_token_count} script</p></td><td className="px-4 py-3"><span className={cn("rounded-full px-2 py-1 text-xs font-medium", mapping.matched_ad_id ? "bg-success/15 text-success" : "bg-muted text-muted-foreground")}>{reason(mapping)}</span></td><td className="px-4 py-3 text-xs text-muted-foreground">{mapping.transcript_status === "available" ? `Available${mapping.transcript_language ? ` · ${mapping.transcript_language}` : ""}` : mapping.transcript_error ?? mapping.transcript_status}</td><td className="px-4 py-3"><Button size="sm" variant="secondary" onClick={() => setExpanded(isOpen ? null : key)}>{isOpen ? "Hide" : "Details"}</Button></td></tr>{isOpen ? <tr className="bg-muted/20"><td colSpan={6} className="px-4 py-4">{mapping.review_note ? <div className="mb-3 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-foreground"><p className="font-medium text-primary mb-1">AI Match Verification &amp; Rationale</p><p className="leading-5">{mapping.review_note}</p></div> : null}<div className="grid gap-4 lg:grid-cols-2"><div><p className="text-xs font-medium text-muted-foreground">Verbatim multilingual transcript{mapping.transcript_language ? ` · ${mapping.transcript_language}` : ""}</p><p className="mt-1 whitespace-pre-wrap rounded-md border border-border bg-card p-3 text-xs leading-5">{mapping.transcript || "No transcript stored."}</p></div><div><p className="text-xs font-medium text-muted-foreground">Creative Library script · matched ad ID {libraryAd?.id ?? "—"}</p><p className="mt-1 whitespace-pre-wrap rounded-md border border-border bg-card p-3 text-xs leading-5">{libraryAd?.script_text || "No approved script passed the matching threshold."}</p></div></div></td></tr> : null}</Fragment>; })}</tbody></table></div> : <div className="px-5 py-10 text-center text-sm text-muted-foreground">No creative mapping records match this filter.</div>}</section>{preview ? <MappingMediaPreview target={preview} onClose={() => setPreview(null)}/> : null}</>;
+    return <><section className="panel mt-5 overflow-hidden"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4"><div><h2 className="section-heading">Creative mapping audit</h2><p className="mt-1 text-xs text-muted-foreground">Verbatim transcript matched against the approved Creative Library script. Click either thumbnail to play or inspect the source creative.</p></div><div className="flex gap-1 rounded-lg bg-muted p-1">{([['all', 'All'], ['mapped', 'Mapped'], ['unmapped', 'Unmapped']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => onFilter(value)} className={cn("rounded-md px-3 py-1.5 text-xs font-medium", filter === value ? "bg-card text-foreground shadow-sm" : "text-muted-foreground")}>{label}</button>)}</div></div>{mappings.length ? <div className="overflow-x-auto"><table className="min-w-[2300px] w-full text-left text-sm"><thead className="bg-muted/70 text-xs text-muted-foreground"><tr><th className="px-4 py-3">Meta ad / creative</th><th className="px-4 py-3">Creative Library result / ID</th><th className="px-4 py-3">Shared tokens</th><th className="px-4 py-3 min-w-[320px]">AI transcript</th><th className="px-4 py-3 min-w-[320px]">Script match</th><th className="px-4 py-3">Review</th><th className="px-4 py-3">Decision</th><th className="px-4 py-3">Transcript status</th><th className="px-4 py-3"/></tr></thead><tbody className="divide-y divide-border">{mappings.slice(0, visibleCount).map((mapping, index) => { const meta = metaById.get(mapping.meta_ad_id); const libraryAd = Array.isArray(mapping.ad) ? mapping.ad[0] : mapping.ad; const product = Array.isArray(libraryAd?.product) ? libraryAd.product[0] : libraryAd?.product; const key = mapping.mapping_key || `${mapping.meta_ad_id}:${index}`; const isOpen = expanded === key;
+            const metaTarget: MappingMediaTarget = { kind: "meta", adId: mapping.meta_ad_id, name: meta?.name ?? `Meta ad ${mapping.meta_ad_id}`, thumbnailUrl: mapping.meta_video_id ? `/api/incentives/meta-video-thumbnail?videoId=${mapping.meta_video_id}` : meta?.thumbnail_url, thumbnailFallbackUrl: meta?.thumbnail_url, creativeId: mapping.meta_creative_id ?? meta?.creative_id, videoId: mapping.meta_video_id };
+            const libraryTarget: MappingMediaTarget | null = libraryAd ? { kind: "library", adId: libraryAd.id, name: libraryAd.name, thumbnailUrl: `/api/ads/${libraryAd.id}/thumbnail`, thumbnailFallbackUrl: libraryAd.thumbnail_url, previewUrl: libraryAd.preview_url ?? libraryAd.resolved_video_url ?? libraryAd.drive_url, driveFileId: libraryAd.drive_file_id, creativeId: libraryAd.id } : null; return <Fragment key={key}><tr className="bg-card align-top"><td className="px-4 py-3"><button type="button" className="flex items-center gap-3 text-left" onClick={() => setPreview(metaTarget)}><MediaThumb src={metaTarget.thumbnailUrl} fallbackSrc={metaTarget.thumbnailFallbackUrl}/><div><p className="max-w-64 truncate font-medium">{metaTarget.name}</p><p className="font-mono text-[10px] text-muted-foreground">Ad {mapping.meta_ad_id}</p><p className="font-mono text-[10px] text-muted-foreground">Creative {metaTarget.creativeId ?? "—"}</p><p className="font-mono text-[10px] text-muted-foreground">Video {mapping.meta_video_id ?? "—"}</p><span className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary"><Play className="size-3"/>Open preview</span></div></button></td><td className="px-4 py-3">{libraryTarget ? <button type="button" className="flex items-center gap-3 text-left" onClick={() => setPreview(libraryTarget)}><MediaThumb src={libraryTarget.thumbnailUrl} fallbackSrc={libraryTarget.thumbnailFallbackUrl}/><div><p className="max-w-64 truncate font-medium text-success">{libraryTarget.name}</p><p className="text-xs text-muted-foreground">{product?.name ?? "Creative Library"}</p><p className="font-mono text-[10px] text-muted-foreground">Matched creative ID {libraryTarget.adId}</p><span className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary"><Play className="size-3"/>Open preview</span></div></button> : <span className="text-muted-foreground">No automatic match</span>}</td><td className="px-4 py-3 tabular-nums"><p>{mapping.matched_tokens} shared</p><p className="text-xs text-muted-foreground">{mapping.transcript_token_count} transcript · {mapping.script_token_count} script</p></td><td className="px-4 py-3 align-top"><p className="max-h-32 w-80 overflow-y-auto whitespace-pre-wrap rounded-md border border-border bg-muted/30 p-2 text-xs leading-5">{mapping.transcript || "No transcript stored."}</p></td><td className="px-4 py-3 align-top"><p className="max-h-32 w-80 overflow-y-auto whitespace-pre-wrap rounded-md border border-border bg-muted/30 p-2 text-xs leading-5">{libraryAd?.script_text || "No script matched."}</p></td><td className="px-4 py-3 align-top"><ReviewActions mapping={mapping}/></td><td className="px-4 py-3"><span className={cn("rounded-full px-2 py-1 text-xs font-medium", mapping.matched_ad_id ? "bg-success/15 text-success" : "bg-muted text-muted-foreground")}>{reason(mapping)}</span></td><td className="px-4 py-3 text-xs text-muted-foreground">{mapping.transcript_status === "available" ? `Available${mapping.transcript_language ? ` · ${mapping.transcript_language}` : ""}` : mapping.transcript_error ?? mapping.transcript_status}</td><td className="px-4 py-3"><Button size="sm" variant="secondary" onClick={() => setExpanded(isOpen ? null : key)}>{isOpen ? "Hide" : "Details"}</Button></td></tr>{isOpen ? <tr className="bg-muted/20"><td colSpan={9} className="px-4 py-4">{mapping.review_note ? <div className="mb-3 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-foreground"><p className="font-medium text-primary mb-1">AI Match Verification &amp; Rationale</p><p className="leading-5">{mapping.review_note}</p></div> : null}<div className="grid gap-4 lg:grid-cols-2"><div><p className="text-xs font-medium text-muted-foreground">Verbatim multilingual transcript{mapping.transcript_language ? ` · ${mapping.transcript_language}` : ""}</p><p className="mt-1 whitespace-pre-wrap rounded-md border border-border bg-card p-3 text-xs leading-5">{mapping.transcript || "No transcript stored."}</p></div><div><p className="text-xs font-medium text-muted-foreground">Creative Library script · matched ad ID {libraryAd?.id ?? "—"}</p><p className="mt-1 whitespace-pre-wrap rounded-md border border-border bg-card p-3 text-xs leading-5">{libraryAd?.script_text || "No approved script passed the matching threshold."}</p></div></div></td></tr> : null}</Fragment>; })}</tbody></table>{mappings.length > visibleCount ? <div className="flex items-center justify-center gap-3 border-t border-border p-3 text-xs text-muted-foreground"><span>Showing {visibleCount} of {mappings.length}</span><Button size="sm" variant="secondary" onClick={() => setVisibleCount((count) => count + 25)}>Show 25 more</Button></div> : null}</div> : <div className="px-5 py-10 text-center text-sm text-muted-foreground">No creative mapping records match this filter.</div>}</section>{preview ? <MappingMediaPreview target={preview} onClose={() => setPreview(null)}/> : null}</>;
+}
+function ReviewActions({ mapping }: {
+    mapping: TranscriptMapping;
+}) {
+    const router = useRouter();
+    const [pending, setPending] = useState<"approve" | "reject" | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const submit = async (action: "approve" | "reject") => { setPending(action); setError(null); try {
+        const response = await fetch("/api/incentives/transcript-mapping/review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mappingKey: mapping.mapping_key, action }) });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error ?? "Review failed.");
+        router.refresh();
+    }
+    catch (cause) {
+        setError(cause instanceof Error ? cause.message : "Review failed.");
+    }
+    finally {
+        setPending(null);
+    } };
+    if (mapping.transcript_source === "exact_creative_id") return <span className="text-xs text-muted-foreground">Exact ID</span>;
+    if (mapping.review_status === "confirmed_match") return <span className="rounded-full bg-success/15 px-2 py-1 text-xs font-medium text-success">Approved</span>;
+    if (mapping.review_status === "confirmed_unmatched") return <span className="rounded-full bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">Rejected</span>;
+    return <div className="flex flex-col gap-1.5"><Button size="sm" disabled={!mapping.matched_ad_id || pending !== null} onClick={() => submit("approve")}>{pending === "approve" ? <Loader2 className="size-4 animate-spin"/> : <Check className="size-4"/>}Approve</Button>{mapping.matched_ad_id ? <Button size="sm" variant="secondary" disabled={pending !== null} onClick={() => submit("reject")}>Reject</Button> : null}{error ? <p className="max-w-40 text-[11px] text-destructive">{error}</p> : null}</div>;
 }
 function MediaThumb({ src, fallbackSrc }: {
     src?: string | null;
     fallbackSrc?: string | null;
-}) { const [failed, setFailed] = useState(false); const displayed = failed ? fallbackSrc : src; return <span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-muted">{displayed ? <img src={displayed} alt="" className="size-full object-cover" onError={() => { if (!failed && fallbackSrc) setFailed(true); }}/> : <Video className="size-4 text-muted-foreground"/>}</span>; }
+}) { const [failed, setFailed] = useState(false); const displayed = failed ? fallbackSrc : src; return <span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-muted">{displayed ? <img src={displayed} alt="" loading="lazy" decoding="async" className="size-full object-cover" onError={() => { if (!failed && fallbackSrc) setFailed(true); }}/> : <Video className="size-4 text-muted-foreground"/>}</span>; }
 function MappingMediaPreview({ target, onClose }: {
     target: MappingMediaTarget;
     onClose: () => void;

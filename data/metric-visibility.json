@@ -25,9 +25,26 @@
   "hidden_campaigns_by_user": {
     "360a1a7a-258a-4591-aee1-7bce60eaee4b": []
   },
+  "hidden_creatives_by_user": {
+    "360a1a7a-258a-4591-aee1-7bce60eaee4b": [
+      "c004ceeb-e743-4d20-a755-fb9a5dce60b8"
+    ]
+  },
+  "allowed_creatives_by_user": {
+    "360a1a7a-258a-4591-aee1-7bce60eaee4b": []
+  },
+  "campaign_visible_users": {
+    "69fcc185-563e-49ea-b04c-2311b524905c": []
+  },
   "ads_performance_nav_items": [
     "overview",
     "settings",
+    "campaigns",
     "mapping"
-  ]
+  ],
+  "campaign_placements": {
+    "69fcc185-563e-49ea-b04c-2311b524905c": {
+      "mode": "override_all"
+    }
+  }
 }

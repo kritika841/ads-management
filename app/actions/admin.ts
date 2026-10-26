@@ -521,6 +521,9 @@ export async function updateMetricVisibilitySettings(payload: {
   overrideAllUsers?: boolean;
   usersWithAllAdsAccess?: string[];
   hiddenCampaignsByUser?: Record<string, string[]>;
+  hiddenCreativesByUser?: Record<string, string[]>;
+  allowedCreativesByUser?: Record<string, string[]>;
+  campaignVisibleUsers?: Record<string, string[]>;
   adsPerformanceNavItems?: AdsPerformanceNavItemKey[];
 }) {
   const adminProfile = await requireRole(["admin"]);
@@ -535,6 +538,9 @@ export async function updateMetricVisibilitySettings(payload: {
     override_all_users: payload.overrideAllUsers,
     users_with_all_ads_access: payload.usersWithAllAdsAccess,
     hidden_campaigns_by_user: payload.hiddenCampaignsByUser,
+    hidden_creatives_by_user: payload.hiddenCreativesByUser,
+    allowed_creatives_by_user: payload.allowedCreativesByUser,
+    campaign_visible_users: payload.campaignVisibleUsers,
     ads_performance_nav_items: payload.adsPerformanceNavItems
   });
 
@@ -568,12 +574,302 @@ export async function updateMetricVisibilitySettings(payload: {
     overrideAllUsers: payload.overrideAllUsers,
     usersWithAllAdsAccess: payload.usersWithAllAdsAccess,
     hiddenCampaignsByUser: payload.hiddenCampaignsByUser,
+    hiddenCreativesByUser: payload.hiddenCreativesByUser,
+    allowedCreativesByUser: payload.allowedCreativesByUser,
+    campaignVisibleUsers: payload.campaignVisibleUsers,
     adsPerformanceNavItems: payload.adsPerformanceNavItems
   });
   revalidatePath("/", "layout");
   revalidatePath("/incentives");
   revalidatePath("/admin/settings");
   return { ok: true, message: "Ads performance settings saved." };
+}
+
+export async function updateUserCreativeVisibility(payload: {
+  userId: string;
+  creativeId: string;
+  action: "hide" | "show" | "reset";
+}) {
+  await requireRole(["admin"]);
+  const { readMetricVisibilityFile, writeMetricVisibilityFile } = await import("@/lib/metric-visibility-server");
+  const config = await readMetricVisibilityFile();
+
+  const hidden = { ...(config.hidden_creatives_by_user ?? {}) };
+  const allowed = { ...(config.allowed_creatives_by_user ?? {}) };
+
+  const userHidden = new Set(hidden[payload.userId] ?? []);
+  const userAllowed = new Set(allowed[payload.userId] ?? []);
+
+  if (payload.action === "hide") {
+    userHidden.add(payload.creativeId);
+    userAllowed.delete(payload.creativeId);
+  } else if (payload.action === "show") {
+    userHidden.delete(payload.creativeId);
+    userAllowed.add(payload.creativeId);
+  } else {
+    userHidden.delete(payload.creativeId);
+    userAllowed.delete(payload.creativeId);
+  }
+
+  hidden[payload.userId] = [...userHidden];
+  allowed[payload.userId] = [...userAllowed];
+
+  await writeMetricVisibilityFile(config, config.manager_creative_scope, config.bulk_add_to_campaign_roles, {
+    overview_metrics: config.overview_metrics,
+    override_all_users: config.override_all_users,
+    users_with_all_ads_access: config.users_with_all_ads_access,
+    hidden_campaigns_by_user: config.hidden_campaigns_by_user,
+    hidden_creatives_by_user: hidden,
+    allowed_creatives_by_user: allowed,
+    campaign_visible_users: config.campaign_visible_users,
+    ads_performance_nav_items: config.ads_performance_nav_items
+  });
+
+  revalidatePath("/incentives");
+  return { ok: true, hiddenCount: userHidden.size, allowedCount: userAllowed.size };
+}
+
+export async function bulkUpdateUserCreativeVisibility(payload: {
+  userId: string;
+  creativeIds: string[];
+  action: "hide_all" | "show_all";
+}) {
+  await requireRole(["admin"]);
+  const { readMetricVisibilityFile, writeMetricVisibilityFile } = await import("@/lib/metric-visibility-server");
+  const config = await readMetricVisibilityFile();
+
+  const hidden = { ...(config.hidden_creatives_by_user ?? {}) };
+  const allowed = { ...(config.allowed_creatives_by_user ?? {}) };
+
+  if (payload.action === "show_all") {
+    hidden[payload.userId] = [];
+    allowed[payload.userId] = [...payload.creativeIds];
+  } else {
+    hidden[payload.userId] = [...payload.creativeIds];
+    allowed[payload.userId] = [];
+  }
+
+  await writeMetricVisibilityFile(config, config.manager_creative_scope, config.bulk_add_to_campaign_roles, {
+    overview_metrics: config.overview_metrics,
+    override_all_users: config.override_all_users,
+    users_with_all_ads_access: config.users_with_all_ads_access,
+    hidden_campaigns_by_user: config.hidden_campaigns_by_user,
+    hidden_creatives_by_user: hidden,
+    allowed_creatives_by_user: allowed,
+    campaign_visible_users: config.campaign_visible_users,
+    ads_performance_nav_items: config.ads_performance_nav_items
+  });
+
+  revalidatePath("/incentives");
+  return { ok: true };
+}
+
+export async function updateCampaignUserVisibility(payload: {
+  campaignId: string;
+  visibleUserIds: string[];
+}) {
+  await requireRole(["admin"]);
+  const { readMetricVisibilityFile, writeMetricVisibilityFile } = await import("@/lib/metric-visibility-server");
+  const config = await readMetricVisibilityFile();
+
+  const campaignUsers = { ...(config.campaign_visible_users ?? {}) };
+  campaignUsers[payload.campaignId] = payload.visibleUserIds;
+
+  try {
+    await writeMetricVisibilityFile(config, config.manager_creative_scope, config.bulk_add_to_campaign_roles, {
+      overview_metrics: config.overview_metrics,
+      override_all_users: config.override_all_users,
+      users_with_all_ads_access: config.users_with_all_ads_access,
+      hidden_campaigns_by_user: config.hidden_campaigns_by_user,
+      hidden_creatives_by_user: config.hidden_creatives_by_user,
+      allowed_creatives_by_user: config.allowed_creatives_by_user,
+      campaign_visible_users: campaignUsers,
+      ads_performance_nav_items: config.ads_performance_nav_items
+    }, { strict: true });
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Could not save campaign access." };
+  }
+
+  revalidatePath("/incentives");
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+export async function updateCampaignPlacement(payload: {
+  campaignId: string;
+  placement: import("@/lib/metric-visibility").CampaignPlacement | null;
+}) {
+  await requireRole(["admin"]);
+  const { readMetricVisibilityFile, writeMetricVisibilityFile, sanitizePlacement } = await import("@/lib/metric-visibility-server");
+  const config = await readMetricVisibilityFile();
+
+  const placements = { ...(config.campaign_placements ?? {}) };
+  const clean = payload.placement ? sanitizePlacement(payload.placement) : null;
+  if (payload.placement && payload.placement.mode !== "campaigns_only" && !clean) {
+    return { ok: false, message: "Choose a valid destination for this campaign." };
+  }
+  if (clean) placements[payload.campaignId] = clean;
+  else delete placements[payload.campaignId];
+
+  try {
+    await writeMetricVisibilityFile(config, config.manager_creative_scope, config.bulk_add_to_campaign_roles, {
+      campaign_placements: placements
+    }, { strict: true });
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Could not save placement." };
+  }
+
+  revalidatePath("/incentives");
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+export async function verifyAndCarryForwardAttributions() {
+  await requireRole(["admin", "manager"]);
+  const admin = createSupabaseAdminClient();
+  const now = new Date().toISOString();
+
+  // 1. Fetch library ads with tags
+  const { data: ads, error: adsError } = await admin
+    .from("ads")
+    .select("id, name, product_id, creator_id, editor_id");
+  if (adsError) return { ok: false, message: adsError.message };
+
+  const adByName = new Map<string, typeof ads[0]>();
+  for (const a of ads || []) {
+    const tag = (a.name || "").trim().toUpperCase();
+    if (tag.length >= 4 && /[A-Z]/.test(tag) && /\d/.test(tag) && !/[^A-Z0-9]/.test(tag)) {
+      adByName.set(tag, a);
+    }
+  }
+
+  // 2. Fetch all meta_ad_assets
+  const { data: assets, error: assetsError } = await admin
+    .from("meta_ad_assets")
+    .select("id, meta_ad_id, asset_label, video_id, creative_id");
+  if (assetsError) return { ok: false, message: assetsError.message };
+
+  const assetMappingRows: Array<Record<string, unknown>> = [];
+  for (const asset of assets || []) {
+    if (!asset.video_id) continue;
+    const label = (asset.asset_label || "").toUpperCase();
+    for (const [tag, ad] of adByName.entries()) {
+      if (label.includes(tag)) {
+        const mappingKey = ["meta", asset.meta_ad_id, "creative", asset.creative_id || "primary", "video", asset.video_id].join(":");
+        assetMappingRows.push({
+          mapping_key: mappingKey,
+          meta_ad_id: asset.meta_ad_id,
+          meta_creative_id: asset.creative_id || null,
+          meta_video_id: asset.video_id,
+          transcript_source: "exact_creative_id",
+          transcript_status: "available",
+          matched_ad_id: ad.id,
+          match_score: 1.0,
+          match_confidence: "high",
+          matched_tokens: 1,
+          transcript_token_count: 0,
+          script_token_count: 0,
+          review_status: "confirmed_match",
+          review_note: `Deterministic asset tag match: ${tag} in ${asset.asset_label}`,
+          reviewed_at: now,
+          mapped_at: now
+        });
+        break;
+      }
+    }
+  }
+
+  if (assetMappingRows.length) {
+    for (let i = 0; i < assetMappingRows.length; i += 50) {
+      await admin.from("meta_ad_transcript_mappings").upsert(assetMappingRows.slice(i, i + 50), { onConflict: "mapping_key" });
+    }
+  }
+
+  // 3. Scan meta_ads that have spend >= 1000 or top orders and check attribution
+  const { data: topAds } = await admin
+    .from("meta_ads")
+    .select("id, name, creative_name, spend, purchases, matched_ad_id, detected_tag")
+    .gte("spend", 1000)
+    .order("spend", { ascending: false });
+
+  let updatedAdLevel = 0;
+  for (const ma of topAds || []) {
+    if (ma.matched_ad_id) continue;
+    const tokens = new Set(`${ma.name || ""} ${ma.creative_name || ""}`.toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean));
+    for (const [tag, ad] of adByName.entries()) {
+      if (tokens.has(tag)) {
+        await admin
+          .from("meta_ads")
+          .update({
+            matched_ad_id: ad.id,
+            matched_creator_id: ad.creator_id,
+            matched_editor_id: ad.editor_id,
+            detected_tag: tag,
+            auto_matched_at: now
+          })
+          .eq("id", ma.id);
+        updatedAdLevel++;
+        break;
+      }
+    }
+  }
+
+  // 4. Check active campaigns and auto-link eligible attributed ads
+  const { data: activeCampaigns } = await admin
+    .from("incentive_campaigns")
+    .select("id, product_id, starts_on, ends_on")
+    .eq("active", true);
+
+  let newIncentiveLinks = 0;
+  if (activeCampaigns && activeCampaigns.length > 0) {
+    const { data: existingLinks } = await admin.from("incentive_creatives").select("meta_ad_id, ad_id");
+    const linkedMeta = new Set((existingLinks || []).map((l) => l.meta_ad_id));
+
+    const { data: allReadyAds } = await admin
+      .from("meta_ads")
+      .select("id, matched_ad_id, created_time")
+      .not("matched_ad_id", "is", null);
+
+    const adLookup = new Map((ads || []).map((a) => [a.id, a]));
+
+    const linksToCreate = [];
+    for (const ma of allReadyAds || []) {
+      if (linkedMeta.has(ma.id)) continue;
+      const dbAd = adLookup.get(ma.matched_ad_id);
+      if (!dbAd) continue;
+      const camp = activeCampaigns.find((c) => c.product_id === dbAd.product_id) || activeCampaigns[0];
+      if (camp) {
+        linksToCreate.push({
+          incentive_campaign_id: camp.id,
+          ad_id: dbAd.id,
+          meta_ad_id: ma.id,
+          launched_on: (ma.created_time || now).slice(0, 10),
+          creator_id: dbAd.creator_id,
+          editor_id: dbAd.editor_id,
+          attribution_source: "auto",
+          auto_matched_at: now
+        });
+        linkedMeta.add(ma.id);
+      }
+    }
+
+    if (linksToCreate.length) {
+      const { data: inserted, error: linkErr } = await admin
+        .from("incentive_creatives")
+        .insert(linksToCreate)
+        .select("id");
+      if (!linkErr && inserted) newIncentiveLinks = inserted.length;
+    }
+  }
+
+  revalidatePath("/incentives");
+  return {
+    ok: true,
+    deterministicAssetMappings: assetMappingRows.length,
+    updatedAdLevel,
+    newIncentiveLinks,
+    message: `Verified and carried forward attributions: ${assetMappingRows.length} video assets mapped, ${updatedAdLevel} ads tagged, ${newIncentiveLinks} creatives linked.`
+  };
 }
 
 export async function updateAnalyticsSlaTargets(payload: z.infer<typeof analyticsSlaSchema>) {

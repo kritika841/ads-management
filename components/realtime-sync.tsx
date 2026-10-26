@@ -11,6 +11,16 @@ import { cn } from "@/lib/utils";
 
 type ConnectionState = "connecting" | "live" | "updated" | "fallback" | "offline";
 
+// Load-shedding constants. Every open tab runs this loop, so these values multiply by the
+// number of concurrent users — keep them conservative. (Previously: fixed 5s poll + an RPC and
+// a full server re-render for EVERY realtime event, which saturated the database mid-day.)
+const POLL_WHEN_LIVE_MS = 60_000; // realtime pushes changes; polling is only a safety net
+const POLL_FALLBACK_MS = 15_000; // realtime down → poll, but not aggressively
+const MAX_BACKOFF_MS = 120_000; // cap for exponential backoff after failures
+const EVENT_COALESCE_MS = 800; // bursts of realtime events → one sync check
+const MIN_REFRESH_GAP_MS = 3_000; // never re-render server components more often than this
+const jitter = (ms: number) => ms + Math.floor(Math.random() * Math.min(ms * 0.3, 5_000));
+
 export function RealtimeSync({ userId, role }: { userId: string; role: UserRole }) {
   const router = useRouter();
   const lastSyncState = useRef<UserSyncState | null>(null);
@@ -25,10 +35,45 @@ export function RealtimeSync({ userId, role }: { userId: string; role: UserRole 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
     let active = true;
+    let failures = 0;
+    let pollTimer: ReturnType<typeof setTimeout> | null = null;
+    let coalesceTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastRefreshAt = 0;
+    let refreshPendingWhileHidden = false;
 
     const queueRefresh = () => {
+      // Hidden tabs don't need fresh server HTML; defer until the user comes back.
+      if (document.visibilityState !== "visible") {
+        refreshPendingWhileHidden = true;
+        return;
+      }
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
-      refreshTimer.current = setTimeout(() => startTransition(() => router.refresh()), 250);
+      const wait = Math.max(250, lastRefreshAt + MIN_REFRESH_GAP_MS - Date.now());
+      refreshTimer.current = setTimeout(() => {
+        if (!active) return;
+        lastRefreshAt = Date.now();
+        refreshPendingWhileHidden = false;
+        startTransition(() => router.refresh());
+      }, wait);
+    };
+
+    const scheduleNextPoll = () => {
+      if (!active) return;
+      if (pollTimer) clearTimeout(pollTimer);
+      const base = realtimeConnected.current ? POLL_WHEN_LIVE_MS : POLL_FALLBACK_MS;
+      const delay = failures > 0 ? Math.min(MAX_BACKOFF_MS, POLL_FALLBACK_MS * 2 ** failures) : base;
+      pollTimer = setTimeout(() => void checkForUpdates(), jitter(delay));
+    };
+
+    // Collapse many realtime events (one user action touches ads + activity_logs + notifications)
+    // into a single sync check, spread out with jitter so all tabs don't hit the DB at once.
+    const queueCheck = () => {
+      if (!active) return;
+      if (coalesceTimer) return;
+      coalesceTimer = setTimeout(() => {
+        coalesceTimer = null;
+        void checkForUpdates(true);
+      }, jitter(EVENT_COALESCE_MS));
     };
 
     const markUpdated = () => {
@@ -38,80 +83,84 @@ export function RealtimeSync({ userId, role }: { userId: string; role: UserRole 
     };
     const refreshDailyTargets = () => { if (!active) return; markUpdated(); queueRefresh(); };
 
-    const checkForUpdates = async (eventOrForce?: unknown) => {
-      if (!active || checking.current || !navigator.onLine) return;
-      const isForced = !!eventOrForce;
-      if (!isForced && document.visibilityState !== "visible") return;
+    const checkForUpdates = async (fromEvent = false) => {
+      if (!active) return;
+      if (checking.current || !navigator.onLine || document.visibilityState !== "visible") {
+        // Hidden/offline tabs do no DB work; visibility/online handlers trigger a catch-up check.
+        scheduleNextPoll();
+        return;
+      }
       checking.current = true;
       try {
         const { data, error } = await supabase.rpc("get_user_sync_state");
         if (error) throw error;
         const current = parseUserSyncState(data);
         if (!current) throw new Error("Invalid sync state.");
+        failures = 0;
 
         const comparison = compareUserSyncStates(lastSyncState.current, current, role);
         lastSyncState.current = current;
         if (comparison.newAssignmentCount > 0) {
           setAssignmentToastCount((count) => count + comparison.newAssignmentCount);
         }
-        if (comparison.changed) {
+        if (comparison.changed || (fromEvent && refreshPendingWhileHidden)) {
           markUpdated();
           queueRefresh();
         } else {
           setState(realtimeConnected.current ? "live" : "fallback");
         }
       } catch {
+        // Back off exponentially so a struggling database is given room to recover instead of
+        // being hammered by every open tab at once.
+        failures = Math.min(failures + 1, 6);
         if (active) setState(navigator.onLine ? "fallback" : "offline");
       } finally {
         checking.current = false;
+        scheduleNextPoll();
       }
+    };
+
+    const onAnnouncementChange = () => {
+      if (!active) return;
+      markUpdated();
+      queueRefresh();
+      window.dispatchEvent(new CustomEvent("adflow:announcement-updated"));
     };
 
     const channel = supabase
       .channel(`adflow-live-${userId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "ads" }, checkForUpdates)
-      .on("postgres_changes", { event: "*", schema: "public", table: "comments" }, checkForUpdates)
-      .on("postgres_changes", { event: "*", schema: "public", table: "review_actions" }, checkForUpdates)
-      .on("postgres_changes", { event: "*", schema: "public", table: "annotations" }, checkForUpdates)
-      .on("postgres_changes", { event: "*", schema: "public", table: "activity_logs" }, checkForUpdates)
+      .on("postgres_changes", { event: "*", schema: "public", table: "ads" }, queueCheck)
+      .on("postgres_changes", { event: "*", schema: "public", table: "comments" }, queueCheck)
+      .on("postgres_changes", { event: "*", schema: "public", table: "review_actions" }, queueCheck)
+      .on("postgres_changes", { event: "*", schema: "public", table: "annotations" }, queueCheck)
+      .on("postgres_changes", { event: "*", schema: "public", table: "activity_logs" }, queueCheck)
       .on("postgres_changes", { event: "*", schema: "public", table: "daily_team_targets" }, refreshDailyTargets)
-      .on("postgres_changes", { event: "*", schema: "public", table: "announcements" }, () => {
-        if (!active) return;
-        markUpdated();
-        queueRefresh();
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent("adflow:announcement-updated"));
-        }
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "announcement_acknowledgements" }, () => {
-        if (!active) return;
-        markUpdated();
-        queueRefresh();
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent("adflow:announcement-updated"));
-        }
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` }, checkForUpdates)
+      .on("postgres_changes", { event: "*", schema: "public", table: "announcements" }, onAnnouncementChange)
+      .on("postgres_changes", { event: "*", schema: "public", table: "announcement_acknowledgements" }, onAnnouncementChange)
+      .on("postgres_changes", { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` }, queueCheck)
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
           realtimeConnected.current = true;
           setState("live");
-          void checkForUpdates();
+          queueCheck();
         }
         if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
           realtimeConnected.current = false;
-          setState(navigator.onLine ? "fallback" : "offline");
+          if (active) setState(navigator.onLine ? "fallback" : "offline");
+          scheduleNextPoll(); // switch to the faster fallback cadence
         }
       });
 
-    const interval = window.setInterval(() => void checkForUpdates(), 5_000);
     const checkVisible = () => {
-      if (document.visibilityState === "visible") void checkForUpdates();
+      if (document.visibilityState !== "visible") return;
+      if (refreshPendingWhileHidden) queueRefresh();
+      queueCheck();
     };
-    const checkFocused = () => void checkForUpdates();
+    const checkFocused = () => queueCheck();
     const checkOnline = () => {
       setState("connecting");
-      void checkForUpdates();
+      failures = 0;
+      queueCheck();
     };
     const markOffline = () => setState("offline");
 
@@ -123,7 +172,8 @@ export function RealtimeSync({ userId, role }: { userId: string; role: UserRole 
 
     return () => {
       active = false;
-      window.clearInterval(interval);
+      if (pollTimer) clearTimeout(pollTimer);
+      if (coalesceTimer) clearTimeout(coalesceTimer);
       document.removeEventListener("visibilitychange", checkVisible);
       window.removeEventListener("focus", checkFocused);
       window.removeEventListener("online", checkOnline);
@@ -156,7 +206,7 @@ export function RealtimeSync({ userId, role }: { userId: string; role: UserRole 
           "hidden h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium sm:inline-flex",
           state === "offline" ? "bg-destructive/10 text-destructive" : state === "updated" ? "bg-accent text-accent-foreground" : "text-muted-foreground"
         )}
-        title={state === "fallback" ? "Realtime unavailable; checking every five seconds" : "Dashboard updates automatically"}
+        title={state === "fallback" ? "Realtime unavailable; checking periodically" : "Dashboard updates automatically"}
       >
         <Radio className={cn("size-3.5", state === "live" && "text-success")} aria-hidden />
         {label}

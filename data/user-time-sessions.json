@@ -1,171 +1,107 @@
 [
   {
-    "id": "81c08635-4fbd-4641-95ca-d8e6664d41ba",
+    "id": "df094ee0-1219-4a51-98e7-a269e445bda9",
     "user_id": "4a206a68-c5a4-4d12-be76-90468ea3df44",
     "user_name": "Kritika",
     "user_role": "admin",
-    "date": "2026-10-15",
-    "session_started_at": "2026-10-15T09:28:19.926Z",
-    "session_ended_at": "2026-10-15T09:33:24.868Z",
-    "last_active_at": "2026-10-15T09:33:24.868Z",
-    "duration_seconds": 305,
+    "date": "2026-10-21",
+    "session_started_at": "2026-10-21T12:08:06.086Z",
+    "session_ended_at": "2026-10-21T12:13:14.685Z",
+    "last_active_at": "2026-10-21T12:13:14.685Z",
+    "duration_seconds": 309,
     "end_reason": "idle_5m",
     "activities": [
       {
-        "timestamp": "2026-10-15T09:28:19.926Z",
+        "timestamp": "2026-10-21T12:08:06.086Z",
         "type": "page_view",
         "description": "Resumed activity after idle",
         "path": "/incentives"
       },
       {
-        "timestamp": "2026-10-15T09:33:24.868Z",
-        "type": "idle",
-        "description": "Idle on dashboard for 5 minutes — Auto-checked out"
-      }
-    ],
-    "created_at": "2026-10-15T09:28:19.926Z",
-    "updated_at": "2026-10-15T09:33:24.868Z"
-  },
-  {
-    "id": "e9a42a52-03c3-4740-a328-92e828260b70",
-    "user_id": "4a206a68-c5a4-4d12-be76-90468ea3df44",
-    "user_name": "Kritika",
-    "user_role": "admin",
-    "date": "2026-10-15",
-    "session_started_at": "2026-10-15T08:58:54.786Z",
-    "session_ended_at": "2026-10-15T09:23:44.818Z",
-    "last_active_at": "2026-10-15T09:23:44.818Z",
-    "duration_seconds": 1490,
-    "end_reason": "idle_5m",
-    "activities": [
-      {
-        "timestamp": "2026-10-15T08:58:54.786Z",
-        "type": "page_view",
-        "description": "Opened Dashboard",
-        "path": "/dashboard"
-      },
-      {
-        "timestamp": "2026-10-15T08:59:06.998Z",
-        "type": "page_view",
-        "description": "Navigated to Team Work Log",
-        "path": "/work-log"
-      },
-      {
-        "timestamp": "2026-10-15T09:12:04.382Z",
+        "timestamp": "2026-10-21T12:08:14.118Z",
         "type": "page_view",
         "description": "Active on Ads Performance",
         "path": "/incentives"
       },
       {
-        "timestamp": "2026-10-15T09:23:44.818Z",
+        "timestamp": "2026-10-21T12:13:14.685Z",
         "type": "idle",
         "description": "Idle on dashboard for 5 minutes — Auto-checked out"
       }
     ],
-    "created_at": "2026-10-15T08:58:54.786Z",
-    "updated_at": "2026-10-15T09:23:44.818Z"
+    "created_at": "2026-10-21T12:08:06.086Z",
+    "updated_at": "2026-10-21T12:13:14.685Z"
   },
   {
-    "id": "c0ed7451-4014-472b-bc96-736660899c2b",
+    "id": "bcee20c1-7b3f-4c60-a0c0-9ec0c0179e48",
     "user_id": "4a206a68-c5a4-4d12-be76-90468ea3df44",
     "user_name": "Kritika",
     "user_role": "admin",
-    "date": "2026-10-15",
-    "session_started_at": "2026-10-15T04:58:15.047Z",
-    "session_ended_at": null,
-    "last_active_at": "2026-10-15T05:04:04.723Z",
-    "duration_seconds": 350,
-    "end_reason": "active",
-    "activities": [
-      {
-        "timestamp": "2026-10-15T04:58:15.047Z",
-        "type": "page_view",
-        "description": "Resumed activity after idle",
-        "path": "/admin/settings"
-      },
-      {
-        "timestamp": "2026-10-15T04:59:02.529Z",
-        "type": "page_view",
-        "description": "Navigated to User Management",
-        "path": "/admin/users"
-      },
-      {
-        "timestamp": "2026-10-15T04:59:49.601Z",
-        "type": "page_view",
-        "description": "Active on User Management",
-        "path": "/admin/users"
-      },
-      {
-        "timestamp": "2026-10-15T05:01:11.191Z",
-        "type": "page_view",
-        "description": "Active on User Management",
-        "path": "/admin/users"
-      },
-      {
-        "timestamp": "2026-10-15T05:02:02.369Z",
-        "type": "page_view",
-        "description": "Active on User Management",
-        "path": "/admin/users"
-      },
-      {
-        "timestamp": "2026-10-15T05:02:25.079Z",
-        "type": "page_view",
-        "description": "Active on User Management",
-        "path": "/admin/users"
-      },
-      {
-        "timestamp": "2026-10-15T05:03:21.556Z",
-        "type": "page_view",
-        "description": "Active on User Management",
-        "path": "/admin/users"
-      }
-    ],
-    "created_at": "2026-10-15T04:58:15.047Z",
-    "updated_at": "2026-10-15T05:04:04.723Z"
-  },
-  {
-    "id": "f613a28d-34b8-4a2e-adae-5492403fa240",
-    "user_id": "4a206a68-c5a4-4d12-be76-90468ea3df44",
-    "user_name": "Kritika",
-    "user_role": "admin",
-    "date": "2026-10-15",
-    "session_started_at": "2026-10-15T02:47:53.364Z",
-    "session_ended_at": "2026-10-15T03:08:39.353Z",
-    "last_active_at": "2026-10-15T03:08:39.353Z",
-    "duration_seconds": 1246,
+    "date": "2026-10-21",
+    "session_started_at": "2026-10-21T11:49:20.906+00:00",
+    "session_ended_at": "2026-10-21T12:04:10.622Z",
+    "last_active_at": "2026-10-21T12:04:10.622Z",
+    "duration_seconds": 890,
     "end_reason": "idle_5m",
     "activities": [
       {
-        "timestamp": "2026-10-15T02:47:53.364Z",
+        "path": "/incentives",
         "type": "page_view",
-        "description": "Opened Dashboard",
-        "path": "/dashboard"
+        "timestamp": "2026-10-21T11:49:20.906Z",
+        "description": "Resumed activity after idle"
       },
       {
-        "timestamp": "2026-10-15T02:48:28.757Z",
+        "path": "/incentives",
         "type": "page_view",
-        "description": "Navigated to Admin Settings",
-        "path": "/admin/settings"
+        "timestamp": "2026-10-21T11:49:25.528Z",
+        "description": "Active on Ads Performance"
       },
       {
-        "timestamp": "2026-10-15T02:50:54.631Z",
-        "type": "page_view",
-        "description": "Active on Admin Settings",
-        "path": "/admin/settings"
-      },
-      {
-        "timestamp": "2026-10-15T02:51:52.285Z",
-        "type": "page_view",
-        "description": "Active on Admin Settings",
-        "path": "/admin/settings"
-      },
-      {
-        "timestamp": "2026-10-15T03:08:39.353Z",
+        "timestamp": "2026-10-21T12:04:10.622Z",
         "type": "idle",
         "description": "Idle on dashboard for 5 minutes — Auto-checked out"
       }
     ],
-    "created_at": "2026-10-15T02:47:53.364Z",
-    "updated_at": "2026-10-15T03:08:39.353Z"
+    "created_at": "2026-10-21T11:49:20.906+00:00",
+    "updated_at": "2026-10-21T12:04:10.622Z"
+  },
+  {
+    "id": "acb28f3b-bb29-49bb-b597-0b45115b06be",
+    "user_id": "c2d5c47f-b97b-4625-8dce-88c3ac1a20d5",
+    "user_name": "kritika media buyer testing",
+    "user_role": "media_buyer",
+    "date": "2026-10-21",
+    "session_started_at": "2026-10-21T11:51:11.528+00:00",
+    "session_ended_at": "2026-10-21T12:03:47.318Z",
+    "last_active_at": "2026-10-21T12:03:47.318Z",
+    "duration_seconds": 756,
+    "end_reason": "idle_5m",
+    "activities": [
+      {
+        "path": "/dashboard",
+        "type": "page_view",
+        "timestamp": "2026-10-21T11:51:11.528Z",
+        "description": "Opened Dashboard"
+      },
+      {
+        "path": "/incentives",
+        "type": "page_view",
+        "timestamp": "2026-10-21T11:51:20.882Z",
+        "description": "Active on Ads Performance"
+      },
+      {
+        "path": "/incentives",
+        "type": "page_view",
+        "timestamp": "2026-10-21T11:52:39.248Z",
+        "description": "Active on Ads Performance"
+      },
+      {
+        "timestamp": "2026-10-21T12:03:47.318Z",
+        "type": "idle",
+        "description": "Idle on dashboard for 5 minutes — Auto-checked out"
+      }
+    ],
+    "created_at": "2026-10-21T11:51:11.528+00:00",
+    "updated_at": "2026-10-21T12:03:47.318Z"
   }
 ]

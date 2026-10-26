@@ -57,7 +57,7 @@ export function NotificationBell({
   function playChime() {
     const audio = chimeAudioRef.current;
     if (!audio) {
-      console.warn("[AdFlow] playChime: audio not unlocked yet (no user gesture has happened)");
+      console.debug("[AdFlow] playChime: audio not unlocked yet (no user gesture has happened)");
       return;
     }
     audio.currentTime = 0;

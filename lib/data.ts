@@ -277,7 +277,11 @@ export async function getAppSettings() {
       override_all_users: Boolean(fileMetrics.override_all_users),
       users_with_all_ads_access: fileMetrics.users_with_all_ads_access ?? [],
       hidden_campaigns_by_user: fileMetrics.hidden_campaigns_by_user ?? {},
+      hidden_creatives_by_user: fileMetrics.hidden_creatives_by_user ?? {},
+      allowed_creatives_by_user: fileMetrics.allowed_creatives_by_user ?? {},
+      campaign_visible_users: fileMetrics.campaign_visible_users ?? {},
       ads_performance_nav_items: fileMetrics.ads_performance_nav_items ?? DEFAULT_ADS_PERFORMANCE_NAV_ITEMS,
+      campaign_placements: fileMetrics.campaign_placements ?? {},
       download_retention_days: normalizeRetentionDays(record.download_retention_days, DEFAULT_DOWNLOAD_RETENTION_DAYS),
       recycle_bin_retention_days: normalizeRetentionDays(record.recycle_bin_retention_days, DEFAULT_RECYCLE_BIN_RETENTION_DAYS)
     } as AppSettings;
@@ -324,7 +328,7 @@ export async function getAds() {
       .from("ads")
       .select(`
         id, name, campaign_id, editor_id, creator_id, status, approval_stage, production_stage,
-        drive_url, drive_file_id, preview_url, thumbnail_url, script_html, script_text,
+        drive_url, drive_file_id, preview_url, thumbnail_url, script_text,
         ad_type, platforms, deadline, notes, live_url, submitted_at, approved_at, published_at,
         created_at, updated_at, deleted_at, raw_footage_url, script_ready_at, shoot_completed_at,
         raw_footage_shared_at, editing_started_at, creator_reviewed_at, final_approved_at,
@@ -340,7 +344,8 @@ export async function getAds() {
       .from("review_actions")
       .select("id,ad_id,decision,note,created_at,reviewer:profiles!review_actions_reviewer_id_fkey(id,name,role)")
       .eq("decision", "request_changes")
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .limit(300),
     supabase
       .from("activity_logs")
       .select("id,ad_id,actor_id,action,metadata,created_at")
@@ -352,7 +357,8 @@ export async function getAds() {
         "creator_requested_changes",
         "final_changes_requested"
       ])
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .limit(300),
     getEditingFreezeMap()
   ]);
 
@@ -392,6 +398,7 @@ export async function getAds() {
 
   const adsWithNested = (adsResult.data ?? []).map((ad) => ({
     ...ad,
+    script_html: (ad as { script_html?: string | null }).script_html ?? null,
     editing_freeze: freezeMap.get(ad.id) ?? null,
     review_actions: reviewMap.get(ad.id) ?? [],
     activity_logs: activityMap.get(ad.id) ?? []

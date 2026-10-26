@@ -26,9 +26,7 @@ export async function getIncentiveDashboard(profile: Profile) {
     (visibilityConfig.hidden_campaigns_by_user?.[profile.id] ?? []).map((c) => c.toLowerCase().trim()).filter(Boolean)
   );
 
-  let creativesQuery = admin
-    .from("incentive_creatives")
-    .select(`
+  const CREATIVE_SELECT = `
       *,
       campaign:incentive_campaigns(*,product:products(id,name,sku)),
       creator:profiles!incentive_creatives_creator_id_fkey(id,name),
@@ -37,7 +35,10 @@ export async function getIncentiveDashboard(profile: Profile) {
         creator:profiles!ads_creator_id_fkey(id,name),
         editor:profiles!ads_editor_id_fkey(id,name)),
       metrics:incentive_daily_metrics(*)
-    `)
+    `;
+  let creativesQuery = admin
+    .from("incentive_creatives")
+    .select(CREATIVE_SELECT)
     .order("created_at", { ascending: false });
 
   let userAds: Array<{
@@ -59,7 +60,7 @@ export async function getIncentiveDashboard(profile: Profile) {
   if (isScoped) {
     let userAdsQuery = liveOnly(admin
       .from("ads")
-      .select("id,name,product_id,creator_id,editor_id,thumbnail_url,drive_file_id,preview_url,resolved_video_url,status,production_stage,creator:profiles!ads_creator_id_fkey(id,name),editor:profiles!ads_editor_id_fkey(id,name)"), binReady);
+      .select("id,name,product_id,creator_id,editor_id,thumbnail_url,drive_file_id,preview_url,resolved_video_url,status,production_stage,created_at,creator:profiles!ads_creator_id_fkey(id,name),editor:profiles!ads_editor_id_fkey(id,name)"), binReady);
 
     if (profile.role === "content_creator") {
       userAdsQuery = userAdsQuery.eq("creator_id", profile.id);
@@ -102,7 +103,7 @@ export async function getIncentiveDashboard(profile: Profile) {
   const [campaignResult, creativeResult, allAdsResult, metaAdsResult, transcriptMappingsResult] = await Promise.all([
     admin.from("incentive_campaigns").select("*,product:products(id,name,sku)").order("created_at", { ascending: false }),
     creativesQuery,
-    liveOnly(admin.from("ads").select("id,name,product_id,creator_id,editor_id,thumbnail_url,drive_file_id,preview_url,resolved_video_url,status,production_stage,creator:profiles!ads_creator_id_fkey(id,name),editor:profiles!ads_editor_id_fkey(id,name)").order("created_at", { ascending: false }), binReady),
+    liveOnly(admin.from("ads").select("id,name,product_id,creator_id,editor_id,thumbnail_url,drive_file_id,preview_url,resolved_video_url,status,production_stage,created_at,creator:profiles!ads_creator_id_fkey(id,name),editor:profiles!ads_editor_id_fkey(id,name)").order("created_at", { ascending: false }), binReady),
     loadMetaAds(admin),
     admin.from("meta_ad_transcript_mappings").select("mapping_key,meta_ad_id,meta_creative_id,meta_video_id,transcript,transcript_language,transcript_language_confidence,transcript_source,transcript_status,transcript_error,review_status,reviewed_at,review_note,matched_ad_id,match_score,match_confidence,matched_tokens,transcript_token_count,script_token_count,mapped_at,ad:ads!meta_ad_transcript_mappings_matched_ad_id_fkey(id,name,creator_id,editor_id,script_text,thumbnail_url,preview_url,drive_file_id,drive_url,resolved_video_url,product:products(name))").order("mapped_at", { ascending: false })
   ]);
@@ -211,26 +212,139 @@ export async function getIncentiveDashboard(profile: Profile) {
           return false;
         });
 
+  const userHiddenCreatives = new Set(
+    (visibilityConfig.hidden_creatives_by_user?.[profile.id] ?? []).map((c) => c.toLowerCase().trim()).filter(Boolean)
+  );
+  const userAllowedCreatives = new Set(
+    (visibilityConfig.allowed_creatives_by_user?.[profile.id] ?? []).map((c) => c.toLowerCase().trim()).filter(Boolean)
+  );
+  const campaignVisibleUsers = visibilityConfig.campaign_visible_users ?? {};
+
+  function isCampaignPermittedForUser(campaignId: string) {
+    if (profile.role === "admin") return true;
+    const permitted = campaignVisibleUsers[campaignId];
+    if (permitted && permitted.length > 0) {
+      return permitted.includes(profile.id);
+    }
+    return true;
+  }
+
   let visibleMetaAds = metaAds;
-  if (profile.role !== "admin" && userHiddenCampaigns.size > 0) {
+  if (profile.role !== "admin") {
     visibleMetaAds = metaAds.filter((ad) => {
-      const cId = (ad.campaign_id ?? "").toLowerCase();
-      const cName = (ad.campaign_name ?? "").toLowerCase().trim();
-      return !userHiddenCampaigns.has(cId) && (!cName || !userHiddenCampaigns.has(cName));
+      const adId = (ad.id ?? "").toLowerCase();
+      const matchedAdId = (ad.matched_ad_id ?? "").toLowerCase();
+      if (userHiddenCreatives.has(adId) || (matchedAdId && userHiddenCreatives.has(matchedAdId))) {
+        return false;
+      }
+      if (userAllowedCreatives.has(adId) || (matchedAdId && userAllowedCreatives.has(matchedAdId))) {
+        return true;
+      }
+      if (userHiddenCampaigns.size > 0) {
+        const cId = (ad.campaign_id ?? "").toLowerCase();
+        const cName = (ad.campaign_name ?? "").toLowerCase().trim();
+        if (userHiddenCampaigns.has(cId) || (cName && userHiddenCampaigns.has(cName))) {
+          return false;
+        }
+      }
+      return true;
     });
   }
+
+  // ── Internal campaign funneling ─────────────────────────────────────────
+  // 1. A user who can see a campaign sees EVERY ad in it (not only their own) when the admin
+  //    either listed them explicitly or gave the campaign a placement (submenu / tab / Meta
+  //    campaign / override). Placement-less campaigns keep the normal per-user ad scope.
+  // 2. A campaign placed as "override_all" replaces everything else for the
+  //    non-admin users who can see it. Admins are never restricted.
+  const placements = visibilityConfig.campaign_placements ?? {};
+  const grantedCampaignIds = new Set<string>();
+  const overrideCampaignIds = new Set<string>();
+  if (profile.role !== "admin") {
+    for (const c of campaignResult.data ?? []) {
+      if (!c.active) continue;
+      const cid = String(c.id);
+      if (!isCampaignPermittedForUser(cid)) continue;
+      if (userHiddenCampaigns.has(cid.toLowerCase()) || userHiddenCampaigns.has(String(c.name ?? "").toLowerCase().trim())) continue;
+      const explicit = campaignVisibleUsers[cid];
+      const isListed = Boolean(explicit && explicit.length > 0 && explicit.includes(profile.id));
+      const placement = placements[cid];
+      if (isListed || (placement && placement.mode !== "campaigns_only")) grantedCampaignIds.add(cid);
+      if (placement?.mode === "override_all") overrideCampaignIds.add(cid);
+    }
+  }
+
+  let extraCreativeRows: NonNullable<typeof creativeResult.data> = [];
+  const extraCampaignIds = [...new Set([...grantedCampaignIds, ...overrideCampaignIds])];
+  if (extraCampaignIds.length > 0) {
+    const { data: extra, error: extraError } = await admin
+      .from("incentive_creatives")
+      .select(CREATIVE_SELECT)
+      .in("incentive_campaign_id", extraCampaignIds);
+    if (extraError) throw extraError;
+    extraCreativeRows = extra ?? [];
+  }
+
+  const metaAdsForCreatives = (rows: typeof extraCreativeRows) => {
+    const adIds = new Set(rows.map((r) => r.ad_id));
+    const metaIds = new Set(rows.map((r) => r.meta_ad_id).filter((id: string) => id && !id.startsWith("internal:")));
+    return rawMetaAds.filter((ad) => metaIds.has(ad.id) || (ad.matched_ad_id && adIds.has(ad.matched_ad_id)));
+  };
+  const isNotHiddenForUser = (ad: MetaAd) =>
+    !userHiddenCreatives.has((ad.id ?? "").toLowerCase()) &&
+    !(ad.matched_ad_id && userHiddenCreatives.has(ad.matched_ad_id.toLowerCase()));
+
+  if (grantedCampaignIds.size > 0) {
+    const have = new Set(visibleMetaAds.map((ad) => ad.id));
+    const grantedAds = metaAdsForCreatives(extraCreativeRows.filter((r) => grantedCampaignIds.has(r.incentive_campaign_id)))
+      .filter((ad) => !have.has(ad.id) && isNotHiddenForUser(ad));
+    visibleMetaAds = [...visibleMetaAds, ...grantedAds];
+  }
+  if (overrideCampaignIds.size > 0) {
+    visibleMetaAds = metaAdsForCreatives(extraCreativeRows.filter((r) => overrideCampaignIds.has(r.incentive_campaign_id)))
+      .filter(isNotHiddenForUser);
+  }
+  const allCreativeRows = [...new Map([...(creativeResult.data ?? []), ...extraCreativeRows].map((row) => [row.id, row])).values()];
 
   const campaignDestinations = getCampaignDestinations();
   const matchedMetaAdIds = new Set(visibleMetaAds.map((ad) => ad.id));
 
-  const userCreativeList = (creativeResult.data ?? []).filter((creative) => {
-    if (profile.role !== "admin" && userHiddenCampaigns.size > 0) {
-      const cId = (creative.campaign_id ?? "").toLowerCase();
-      const cName = (Array.isArray(creative.campaign) ? creative.campaign[0]?.name : creative.campaign?.name)?.toLowerCase()?.trim();
-      if (userHiddenCampaigns.has(cId) || (cName && userHiddenCampaigns.has(cName))) {
-        return false;
-      }
+  const allCampaigns = (campaignResult.data ?? []).map(normalizeCampaign);
+  const visibleCampaigns = profile.role === "admin"
+    ? allCampaigns
+    : allCampaigns.filter((c) => {
+        if (!isCampaignPermittedForUser(c.id)) return false;
+        if (userHiddenCampaigns.has(c.id.toLowerCase()) || userHiddenCampaigns.has(c.name.toLowerCase().trim())) {
+          return false;
+        }
+        return true;
+      });
+  const visibleCampaignIds = new Set(visibleCampaigns.map((c) => c.id.toLowerCase()));
+
+  const userCreativeList = allCreativeRows.filter((creative) => {
+    const creativeId = (creative.id ?? "").toLowerCase();
+    const adId = (creative.ad_id ?? "").toLowerCase();
+    const metaAdId = (creative.meta_ad_id ?? "").toLowerCase();
+
+    // Creative-level exclusion: Admin explicitly hid this creative from this individual
+    if (profile.role !== "admin" && (userHiddenCreatives.has(creativeId) || userHiddenCreatives.has(adId) || userHiddenCreatives.has(metaAdId))) {
+      return false;
     }
+
+    // Creative-level inclusion: Admin explicitly granted this creative to this individual
+    const isExplicitlyAllowed = profile.role !== "admin" && (userAllowedCreatives.has(creativeId) || userAllowedCreatives.has(adId) || userAllowedCreatives.has(metaAdId));
+
+    // Campaign-level exclusion:
+    const cId = (creative.incentive_campaign_id ?? creative.campaign_id ?? "").toLowerCase();
+    const cName = (Array.isArray(creative.campaign) ? creative.campaign[0]?.name : creative.campaign?.name)?.toLowerCase()?.trim();
+    if (profile.role !== "admin") {
+      if (overrideCampaignIds.size > 0 && !overrideCampaignIds.has(creative.incentive_campaign_id)) return false;
+      if (cId && !visibleCampaignIds.has(cId)) return false;
+      if (userHiddenCampaigns.has(cId) || (cName && userHiddenCampaigns.has(cName))) return false;
+    }
+
+    if (isExplicitlyAllowed) return true;
+    if (grantedCampaignIds.has(creative.incentive_campaign_id)) return true;
     if (!isScoped) return true;
     if (creative.meta_ad_id && matchedMetaAdIds.has(creative.meta_ad_id)) return true;
     if (profile.role === "content_creator") {
@@ -258,13 +372,9 @@ export async function getIncentiveDashboard(profile: Profile) {
     return false;
   });
 
-  const allCampaigns = (campaignResult.data ?? []).map(normalizeCampaign);
-  const visibleCampaigns = profile.role === "admin" || userHiddenCampaigns.size === 0
-    ? allCampaigns
-    : allCampaigns.filter((c) => !userHiddenCampaigns.has(c.id.toLowerCase()) && !userHiddenCampaigns.has(c.name.toLowerCase().trim()));
-
   return {
     campaigns: visibleCampaigns,
+    allCampaigns: reviewer ? allCampaigns : visibleCampaigns,
     creatives: userCreativeList.map((creative) => ({
       ...creative,
       decision_status: creative.decision_status ?? (creative.evaluation_status === "winner" ? "winner" : "unreviewed"),
@@ -285,7 +395,11 @@ export async function getIncentiveDashboard(profile: Profile) {
     metaAds: visibleMetaAds,
     syncRuns: reviewer ? await loadSyncRuns(admin) : [],
     transcriptMappings: transcriptMappingsResult.data ?? [],
-    campaignDestinations
+    campaignDestinations,
+    hiddenCreativesByUser: visibilityConfig.hidden_creatives_by_user ?? {},
+    allowedCreativesByUser: visibilityConfig.allowed_creatives_by_user ?? {},
+    campaignVisibleUsers,
+    hiddenCampaignsByUser: visibilityConfig.hidden_campaigns_by_user ?? {}
   };
 }
 
