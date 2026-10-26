@@ -67,23 +67,32 @@ jobs:
             set -e
             APP_DIR="/home/deployer/apps/satmi-ads"
             ENV_FILE="$APP_DIR/.env"
-            
-            if [ -n "$PROD_ENV_B64" ]; then
-              echo "$PROD_ENV_B64" | base64 -d > "$ENV_FILE"
-              echo "Synced complete production .env from secret."
-            else
-              touch "$ENV_FILE"
-            fi
+            touch "$ENV_FILE"
 
-            # Double check Meta and VPS Supabase credentials are in place
+            # Merge PROD_ENV_B64 without removing any existing keys in .env, and ensure VPS Supabase + Meta credentials are set
             node -e '
             const fs = require("fs");
             const envPath = "'"$ENV_FILE"'";
             let content = fs.existsSync(envPath) ? fs.readFileSync(envPath, "utf8") : "";
+            const b64 = process.env.PROD_ENV_B64 || "";
+            if (b64) {
+              const decoded = Buffer.from(b64, "base64").toString("utf8");
+              for (const line of decoded.split(/\r?\n/)) {
+                const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
+                if (!m) continue;
+                const [, k, v] = m;
+                const regex = new RegExp(`^${k}=.*$`, "m");
+                if (!regex.test(content)) {
+                  content = (content.endsWith("\n") || content.length === 0 ? content : content + "\n") + `${k}=${v}\n`;
+                }
+              }
+            }
             const updates = {
-              NEXT_PUBLIC_SUPABASE_URL: "https://ads.satmi.in",
-              NEXT_PUBLIC_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkZmxvdy12cHMiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc4MzU4NTI5MSwiZXhwIjoyMDk5MTYxMjkxfQ.PNmYQFpq0Yu7QwCq08JAivVQ9WCS3rWzT09CwPs8xZg",
-              SUPABASE_SERVICE_ROLE_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkZmxvdy12cHMiLCJyb2xlIjoic2VydmljZV9yb2xlIiwiaWF0IjoxNzgzNTg1MjkxLCJleHAiOjIwOTkxNjEyOTF9.kcaaZgkR7f_65dSnvynjZ22cqdU451Q934r0JwvnU-8",
+              NEXT_PUBLIC_SUPABASE_URL: "\"https://ads.satmi.in\"",
+              NEXT_PUBLIC_SUPABASE_ANON_KEY: "\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkZmxvdy12cHMiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc4MzU4NTI5MSwiZXhwIjoyMDk5MTYxMjkxfQ.PNmYQFpq0Yu7QwCq08JAivVQ9WCS3rWzT09CwPs8xZg\"",
+              SUPABASE_SERVICE_ROLE_KEY: "\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkZmxvdy12cHMiLCJyb2xlIjoic2VydmljZV9yb2xlIiwiaWF0IjoxNzgzNTg1MjkxLCJleHAiOjIwOTkxNjEyOTF9.kcaaZgkR7f_65dSnvynjZ22cqdU451Q934r0JwvnU-8\"",
+              NEXT_PUBLIC_APP_URL: "\"https://ads.satmi.in\"",
+              REDIRECT_URI: "\"https://ads.satmi.in/auth/callback\"",
               META_ACCESS_TOKEN: process.env.META_TOKEN || "",
               META_AD_ACCOUNT_ID: process.env.META_ACCOUNT || ""
             };
@@ -97,7 +106,14 @@ jobs:
               }
             }
             fs.writeFileSync(envPath, content, "utf8");
+            const keys = content.split(/\r?\n/).map(l => l.match(/^([A-Z0-9_]+)=(.+)$/)).filter(Boolean).map(m => m[1]);
+            console.log("Verified .env keys on VPS (" + keys.length + "):", keys.join(", "));
             '
+
+            if [ -f /etc/adflow-supabase/postgrest.conf ]; then
+              sudo sed -i 's/db-max-rows = 1000/db-max-rows = 100000/g' /etc/adflow-supabase/postgrest.conf || true
+              sudo systemctl restart adflow-postgrest || true
+            fi
 
             bash /home/deployer/apps/satmi-ads/deploy.sh
 

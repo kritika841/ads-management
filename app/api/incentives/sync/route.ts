@@ -98,12 +98,12 @@ async function syncMetaIncentives(actorId: string | null) {
   const { data: syncRun } = await admin.from("meta_sync_runs").insert({ actor_id: actorId }).select("id").maybeSingle();
   const syncRunId = syncRun?.id as string | undefined;
   const today = new Date().toISOString().slice(0, 10);
-  const catalogStart = addDays(today, -1); // Narrowed to 2 days (yesterday & today); historical data is already preserved in DB
+  const catalogStart = addDays(today, -3); // Sync recent 4 days to self-heal any missed days while preserving historical DB rows
   const breakdownStart = addDays(today, -(BREAKDOWN_LOOKBACK_DAYS - 1));
   const accountId = rawAccountId.replace(/^act_/, "");
   const accountBase = `https://graph.facebook.com/${GRAPH_VERSION}/act_${accountId}`;
   const adsUrl = graphUrl(`${accountBase}/ads`, token, {
-    limit: "100",
+    limit: "25",
     filtering: JSON.stringify([{ field: "effective_status", operator: "IN", value: ["ACTIVE", "IN_PROCESS", "PENDING_REVIEW"] }]),
     fields: "id,name,status,effective_status,created_time,campaign{id,name},adset{id,name},creative{id,name,thumbnail_url,image_url,video_id,object_story_spec,asset_feed_spec}"
   });
@@ -695,12 +695,20 @@ async function graphPages<T>(initialUrl: URL) {
   const rows: T[] = [];
   let next: string | undefined = initialUrl.toString();
   let pageCount = 0;
-  while (next && pageCount < 20) {
-    pageCount++;
+  let retries = 0;
+  while (next && pageCount < 100) {
     let response: Response;
     try {
-      response = await fetch(next, { cache: "no-store", signal: AbortSignal.timeout(25000) });
+      response = await fetch(next, { cache: "no-store", signal: AbortSignal.timeout(30000) });
     } catch (err) {
+      if (retries < 2) {
+        retries++;
+        const retryUrl = new URL(next);
+        const curLimit = Number(retryUrl.searchParams.get("limit") || "25");
+        if (curLimit > 5) retryUrl.searchParams.set("limit", String(Math.max(5, Math.floor(curLimit / 2))));
+        next = retryUrl.toString();
+        continue;
+      }
       throw new Error(`Meta API request timed out: ${err instanceof Error ? err.message : String(err)}`);
     }
 
@@ -714,7 +722,21 @@ async function graphPages<T>(initialUrl: URL) {
       throw new Error(`Meta returned HTTP ${response.status}: ${cleanError || "Non-JSON response"}`);
     }
 
-    if (!response.ok || payload.error) throw new Error(payload.error?.message ?? `Meta returned HTTP ${response.status}.`);
+    if (!response.ok || payload.error) {
+      const errMsg = payload.error?.message ?? `Meta returned HTTP ${response.status}.`;
+      if (retries < 3 && (errMsg.toLowerCase().includes("reduce the amount of data") || response.status >= 500)) {
+        retries++;
+        const retryUrl = new URL(next);
+        const curLimit = Number(retryUrl.searchParams.get("limit") || "25");
+        retryUrl.searchParams.set("limit", String(Math.max(5, Math.floor(curLimit / 2))));
+        next = retryUrl.toString();
+        continue;
+      }
+      throw new Error(errMsg);
+    }
+
+    retries = 0;
+    pageCount++;
     rows.push(...(payload.data ?? []));
     next = payload.paging?.next;
   }
