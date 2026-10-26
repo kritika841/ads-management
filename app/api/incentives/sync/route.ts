@@ -703,7 +703,7 @@ async function graphPages<T>(initialUrl: URL) {
     } catch (err) {
       if (retries < 2) {
         retries++;
-        const retryUrl = new URL(next);
+        const retryUrl: URL = new URL(next);
         const curLimit = Number(retryUrl.searchParams.get("limit") || "25");
         if (curLimit > 5) retryUrl.searchParams.set("limit", String(Math.max(5, Math.floor(curLimit / 2))));
         next = retryUrl.toString();
@@ -726,7 +726,7 @@ async function graphPages<T>(initialUrl: URL) {
       const errMsg = payload.error?.message ?? `Meta returned HTTP ${response.status}.`;
       if (retries < 3 && (errMsg.toLowerCase().includes("reduce the amount of data") || response.status >= 500)) {
         retries++;
-        const retryUrl = new URL(next);
+        const retryUrl: URL = new URL(next);
         const curLimit = Number(retryUrl.searchParams.get("limit") || "25");
         retryUrl.searchParams.set("limit", String(Math.max(5, Math.floor(curLimit / 2))));
         next = retryUrl.toString();
