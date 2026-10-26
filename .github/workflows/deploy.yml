@@ -23,9 +23,9 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: "https://ads.satmi.in"
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkZmxvdy12cHMiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc4MzU4NTI5MSwiZXhwIjoyMDk5MTYxMjkxfQ.PNmYQFpq0Yu7QwCq08JAivVQ9WCS3rWzT09CwPs8xZg"
+          SUPABASE_SERVICE_ROLE_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkZmxvdy12cHMiLCJyb2xlIjoic2VydmljZV9yb2xlIiwiaWF0IjoxNzgzNTg1MjkxLCJleHAiOjIwOTkxNjEyOTF9.kcaaZgkR7f_65dSnvynjZ22cqdU451Q934r0JwvnU-8"
 
       - name: Package build output
         run: |
@@ -75,12 +75,15 @@ jobs:
               touch "$ENV_FILE"
             fi
 
-            # Double check Meta credentials are in place
+            # Double check Meta and VPS Supabase credentials are in place
             node -e '
             const fs = require("fs");
             const envPath = "'"$ENV_FILE"'";
             let content = fs.existsSync(envPath) ? fs.readFileSync(envPath, "utf8") : "";
             const updates = {
+              NEXT_PUBLIC_SUPABASE_URL: "https://ads.satmi.in",
+              NEXT_PUBLIC_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkZmxvdy12cHMiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc4MzU4NTI5MSwiZXhwIjoyMDk5MTYxMjkxfQ.PNmYQFpq0Yu7QwCq08JAivVQ9WCS3rWzT09CwPs8xZg",
+              SUPABASE_SERVICE_ROLE_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkZmxvdy12cHMiLCJyb2xlIjoic2VydmljZV9yb2xlIiwiaWF0IjoxNzgzNTg1MjkxLCJleHAiOjIwOTkxNjEyOTF9.kcaaZgkR7f_65dSnvynjZ22cqdU451Q934r0JwvnU-8",
               META_ACCESS_TOKEN: process.env.META_TOKEN || "",
               META_AD_ACCOUNT_ID: process.env.META_ACCOUNT || ""
             };
