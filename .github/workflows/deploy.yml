@@ -142,12 +142,7 @@ jobs:
             bash /home/deployer/apps/satmi-ads/deploy.sh
 
             if [ -f /home/deployer/apps/satmi-ads/supabase/migrations/20261029120000_fix_creator_changes_and_collaborator_rls.sql ]; then
-              for db in $(sudo -u postgres psql -tAc "SELECT datname FROM pg_database WHERE datistemplate = false"); do
-                if sudo -u postgres psql -d "$db" -tAc "SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='ads'" | grep -q 1; then
-                  echo "Applying migration to database: $db"
-                  sudo -u postgres psql -d "$db" -f /home/deployer/apps/satmi-ads/supabase/migrations/20261029120000_fix_creator_changes_and_collaborator_rls.sql || true
-                fi
-              done
+              sudo -u postgres psql -p 5433 -d postgres -v ON_ERROR_STOP=1 -f /home/deployer/apps/satmi-ads/supabase/migrations/20261029120000_fix_creator_changes_and_collaborator_rls.sql
               sudo systemctl restart adflow-postgrest || true
             fi
 
