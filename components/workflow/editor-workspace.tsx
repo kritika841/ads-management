@@ -78,7 +78,16 @@ export function EditorWorkspace({ ad, feedback, inProgressCount, maxConcurrentEd
       <div className="grid gap-5 p-5 lg:grid-cols-2">
         <div>
           <p className="text-xs font-semibold uppercase text-muted-foreground">Script</p>
-          <div className="prose prose-sm mt-2 max-h-80 max-w-none overflow-y-auto rounded-md border border-border bg-muted p-4" dangerouslySetInnerHTML={{ __html: ad.script_html ?? "<p>No script provided.</p>" }} />
+          <div
+            className="prose prose-sm mt-2 max-h-80 max-w-none overflow-y-auto rounded-md border border-border bg-muted p-4"
+            dangerouslySetInnerHTML={{
+              __html:
+                ad.script_html ||
+                (ad.script_text
+                  ? `<p>${ad.script_text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br/>")}</p>`
+                  : "<p>No script provided.</p>")
+            }}
+          />
         </div>
         <div className="space-y-4">
           <div><p className="text-xs font-semibold uppercase text-muted-foreground">Raw footage</p>{ad.production_stage === "ready_for_edit" ? <p className="mt-2 text-sm text-muted-foreground">The raw footage link unlocks once you start editing.</p> : ad.raw_footage_url ? <a href={ad.raw_footage_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">Open Drive folder <ExternalLink className="size-4" aria-hidden /></a> : <p className="mt-2 text-sm text-destructive">Raw footage link is missing.</p>}</div>

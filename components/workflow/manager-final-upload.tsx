@@ -22,7 +22,22 @@ export function ManagerFinalUpload({
   const [driveUrl, setDriveUrl] = useState("");
   const [driveUrlError, setDriveUrlError] = useState<string | null>(null);
   const [rawFootageUrl, setRawFootageUrl] = useState(ad.raw_footage_url ?? "");
-  const [scriptHtml, setScriptHtml] = useState(ad.script_html ?? "");
+  const [scriptHtml, setScriptHtml] = useState(() => {
+    if (ad.script_html && ad.script_html.replace(/<[^>]+>/g, "").trim()) {
+      return ad.script_html;
+    }
+    if (ad.script_text?.trim()) {
+      return ad.script_text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .trim()
+        .split(/\n{2,}/)
+        .map((p) => `<p>${p.trim().replace(/\n/g, "<br />")}</p>`)
+        .join("");
+    }
+    return "";
+  });
   const [scriptText, setScriptText] = useState(ad.script_text ?? "");
   const [reviewerNotes, setReviewerNotes] = useState("");
   const [message, setMessage] = useState<string | null>(null);

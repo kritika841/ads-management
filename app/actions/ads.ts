@@ -22,7 +22,7 @@ import { getDriveMetadata } from "@/lib/drive";
 import { parseGoogleDriveVideoFileUrl } from "@/lib/drive-urls";
 import { extractMentions, profileMentionHandles } from "@/lib/mentions";
 import { createNotification } from "@/lib/notifications";
-import { sanitizeScriptHtml } from "@/lib/sanitize";
+import { resolveScriptHtml, sanitizeScriptHtml } from "@/lib/sanitize";
 import { validateReviewInput } from "@/lib/workflow";
 import { isRecycleBinReady, liveOnly, softDeleteAd } from "@/lib/recycle-bin";
 import { planEditorAssignment, reassignableEditorStages, type EditorAssignmentKind } from "@/lib/editor-assignment";
@@ -201,7 +201,7 @@ export async function saveCreatorItem(payload: z.input<typeof creatorItemSchema>
     assigned_at: assignedAt,
     production_stage: data.stage,
     raw_footage_url: rawFootageUrl,
-    script_html: sanitizeScriptHtml(data.scriptHtml) || null,
+    script_html: resolveScriptHtml(data.scriptHtml, data.scriptText) || null,
     script_text: data.scriptText,
     ad_type: "video" as const,
     platforms: data.platforms,
@@ -317,7 +317,7 @@ export async function adminOverrideCreativeEdit(payload: z.input<typeof adminOve
     assigned_at: assignedAt,
     production_stage: data.stage,
     raw_footage_url: data.rawFootageUrl?.trim() || currentAd.raw_footage_url,
-    script_html: sanitizeScriptHtml(data.scriptHtml) || null,
+    script_html: resolveScriptHtml(data.scriptHtml, data.scriptText) || null,
     script_text: data.scriptText,
     platforms: data.platforms,
     deadline: data.deadline || null,
@@ -356,8 +356,8 @@ export async function adminOverrideCreativeEdit(payload: z.input<typeof adminOve
       drive_url: data.driveUrl!.trim(),
       drive_file_id: drivePreview.fileId,
       preview_url: drivePreview.previewUrl,
-      thumbnail_url: driveThumbnail,
-      notes: data.notes || null,
+      script_html: saved.script_html,
+      script_text: saved.script_text,
       created_by: profile.id
     });
   }
@@ -546,7 +546,10 @@ export async function submitFinalClipByReviewer(payload: z.input<typeof reviewer
     preview_url: drivePreview.previewUrl,
     thumbnail_url: drivePreview.thumbnailUrl || metadata?.thumbnailLink || ad.thumbnail_url,
     raw_footage_url: rawFootageUrl,
-    script_html: data.scriptHtml != null ? (sanitizeScriptHtml(data.scriptHtml) || ad.script_html) : ad.script_html,
+    script_html:
+      data.scriptHtml != null || data.scriptText != null
+        ? resolveScriptHtml(data.scriptHtml, data.scriptText) || ad.script_html
+        : ad.script_html,
     script_text: data.scriptText?.trim() || ad.script_text,
     editor_notes: data.reviewerNotes || null,
     production_stage: "approved" as const,
@@ -1111,6 +1114,7 @@ export async function resolveCreatorChangeRequest(payload: z.input<typeof creato
     campaign_id: data.campaignId,
     product_id: data.productId,
     script_text: data.scriptText,
+    script_html: resolveScriptHtml(null, data.scriptText) || ad.script_html || null,
     raw_footage_url: rawFootageUrl,
     platforms: data.platforms
   };

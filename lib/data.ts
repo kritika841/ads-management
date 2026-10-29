@@ -1,7 +1,7 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { activeEditorStages, inProgressEditingStages } from "@/lib/production-workflow";
-import { sanitizeScriptHtml } from "@/lib/sanitize";
+import { resolveScriptHtml } from "@/lib/sanitize";
 import { DEFAULT_ADS_PERFORMANCE_NAV_ITEMS, DEFAULT_HIDDEN_METRICS, type HiddenMetricsByRole } from "@/lib/metric-visibility";
 import { readMetricVisibilityFile } from "@/lib/metric-visibility-server";
 import { readCampaignGoals } from "@/lib/campaign-goals";
@@ -328,7 +328,7 @@ export async function getAds() {
       .from("ads")
       .select(`
         id, name, campaign_id, editor_id, creator_id, status, approval_stage, production_stage,
-        drive_url, drive_file_id, preview_url, thumbnail_url, script_text,
+        drive_url, drive_file_id, preview_url, thumbnail_url, script_text, script_html,
         ad_type, platforms, deadline, notes, live_url, submitted_at, approved_at, published_at,
         created_at, updated_at, deleted_at, raw_footage_url, script_ready_at, shoot_completed_at,
         raw_footage_shared_at, editing_started_at, creator_reviewed_at, final_approved_at,
@@ -510,7 +510,7 @@ export async function getAdDetail(adId: string) {
     ad: normalizedAd,
     versions: (versionsResult.data ?? []).map((version) => ({
       ...(version as AdVersion),
-      script_html: sanitizeScriptHtml(version.script_html) || null
+      script_html: resolveScriptHtml(version.script_html, version.script_text) || null
     })),
     comments: (commentsResult.data ?? []) as Comment[],
     annotations: (annotationsResult.data ?? []) as Annotation[],
@@ -616,7 +616,7 @@ function normalizeAds(rows: unknown[]) {
 
     return {
       ...record,
-      script_html: sanitizeScriptHtml(record.script_html) || null,
+      script_html: resolveScriptHtml(record.script_html, record.script_text) || null,
       version_count: record.ad_versions?.length ?? record.version_count,
       latest_change_request: latestChange ? {
         ...latestChange,

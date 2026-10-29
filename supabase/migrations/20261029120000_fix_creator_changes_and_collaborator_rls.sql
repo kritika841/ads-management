@@ -235,4 +235,17 @@ create policy "editors view assigned ads" on public.ads
     )
   );
 
+-- 5. Restore script_html from script_text for any creative or version where script_html was cleared
+update public.ads
+set script_html = '<p>' || replace(replace(replace(replace(btrim(script_text), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), E'\n', '<br />') || '</p>'
+where (script_html is null or btrim(script_html) = '' or btrim(script_html) = '<p></p>')
+  and script_text is not null
+  and btrim(script_text) <> '';
+
+update public.ad_versions
+set script_html = '<p>' || replace(replace(replace(replace(btrim(script_text), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), E'\n', '<br />') || '</p>'
+where (script_html is null or btrim(script_html) = '' or btrim(script_html) = '<p></p>')
+  and script_text is not null
+  and btrim(script_text) <> '';
+
 commit;

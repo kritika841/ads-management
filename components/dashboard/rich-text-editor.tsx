@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Placeholder from "@tiptap/extension-placeholder";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -27,6 +28,13 @@ export function RichTextEditor({
       onChange(editor.getHTML(), editor.getText());
     }
   });
+
+  useEffect(() => {
+    if (!editor || !value) return;
+    if (editor.isEmpty && value.replace(/<[^>]+>/g, "").trim()) {
+      editor.commands.setContent(value, false);
+    }
+  }, [editor, value]);
 
   return (
     <div className="overflow-hidden rounded-lg border border-input bg-card transition-[border-color,box-shadow] duration-150 focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">

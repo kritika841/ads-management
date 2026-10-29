@@ -18,6 +18,7 @@ type PreviewItem = {
   previewUrl: string | null;
   thumbnailUrl: string | null;
   scriptHtml: string | null;
+  scriptText: string | null;
 };
 
 export function AdVersionPreview({
@@ -39,7 +40,8 @@ export function AdVersionPreview({
         driveFileId: ad.drive_file_id,
         previewUrl: ad.preview_url,
         thumbnailUrl: ad.thumbnail_url,
-        scriptHtml: ad.script_html
+        scriptHtml: ad.script_html,
+        scriptText: ad.script_text ?? null
       },
       ...sortedVersions.map((version) => ({
         key: version.id,
@@ -49,7 +51,8 @@ export function AdVersionPreview({
         driveFileId: version.drive_file_id,
         previewUrl: version.preview_url,
         thumbnailUrl: null,
-        scriptHtml: version.script_html
+        scriptHtml: version.script_html,
+        scriptText: version.script_text ?? null
       }))
     ];
   }, [ad, versions]);
@@ -172,7 +175,13 @@ export function AdVersionPreview({
           </div>
           <div
             className="prose-script mt-5 text-sm"
-            dangerouslySetInnerHTML={{ __html: selected?.scriptHtml || "<p>No script added.</p>" }}
+            dangerouslySetInnerHTML={{
+              __html:
+                selected?.scriptHtml ||
+                (selected?.scriptText
+                  ? `<p>${selected.scriptText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br/>")}</p>`
+                  : "<p>No script added.</p>")
+            }}
           />
         </aside>
       </div>

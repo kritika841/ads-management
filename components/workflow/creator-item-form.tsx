@@ -64,7 +64,22 @@ export function CreatorItemForm({
   const [campaignId, setCampaignId] = useState(initialAd?.campaign_id ?? defaultCampaignId ?? campaigns[0]?.id ?? "");
   const [productId, setProductId] = useState(initialAd?.product_id ?? "");
   const [creatorId, setCreatorId] = useState(defaultCreatorId);
-  const [scriptHtml, setScriptHtml] = useState(initialAd?.script_html ?? "");
+  const [scriptHtml, setScriptHtml] = useState(() => {
+    if (initialAd?.script_html && initialAd.script_html.replace(/<[^>]+>/g, "").trim()) {
+      return initialAd.script_html;
+    }
+    if (initialAd?.script_text?.trim()) {
+      return initialAd.script_text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .trim()
+        .split(/\n{2,}/)
+        .map((p) => `<p>${p.trim().replace(/\n/g, "<br />")}</p>`)
+        .join("");
+    }
+    return "";
+  });
   const [scriptText, setScriptText] = useState(initialAd?.script_text ?? "");
   const [stage, setStage] = useState<string>(initialStage);
   const [editorId, setEditorId] = useState(initialAd?.editor_id ?? "");
@@ -238,7 +253,7 @@ export function CreatorItemForm({
         )}
       </div>
 
-      <Field label="Script / copy" hint="Required for every status."><RichTextEditor value={scriptHtml} onChange={(html, text) => { setScriptHtml(html); setScriptText(text); }} /></Field>
+      <Field label="Script / copy" hint="Required for every status."><RichTextEditor key={initialAd?.id ?? "new"} value={scriptHtml} onChange={(html, text) => { setScriptHtml(html); setScriptText(text); }} /></Field>
 
       {requiresRawFootage ? (
         <section className="rounded-xl border border-primary/30 bg-accent/60 p-4">

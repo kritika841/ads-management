@@ -168,6 +168,37 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
             {editorHasTask ? <EditorWorkspace ad={ad} feedback={resubmissionFeedback} inProgressCount={editorInProgressCount} maxConcurrentEdits={settings.max_concurrent_edits} timeLogs={timeLogs} /> : null}
             {creatorNeedsReview ? <CreatorReviewActions adId={ad.id} /> : null}
             {creatorNeedsChanges ? <CreatorChangeRequestActions ad={ad} editors={editors} workloads={editorWorkloads} campaigns={campaigns.filter((item) => item.active)} products={products.filter((item) => item.active)} availableTags={tags} /> : null}
+            {!(mediaVisible && ad.drive_file_id) && !creatorCanEdit && !editorHasTask && !creatorNeedsChanges ? (
+              <section className="panel overflow-hidden">
+                <div className="flex items-center justify-between gap-3 border-b border-border p-5">
+                  <div>
+                    <h2 className="section-heading">Script</h2>
+                    <p className="mt-1 text-xs text-muted-foreground">Creative script and production notes.</p>
+                  </div>
+                  <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                    {ad.script_text?.split(/\s+/).filter(Boolean).length ?? 0} words
+                  </span>
+                </div>
+                <div className="p-5">
+                  <div
+                    className="prose-script text-sm"
+                    dangerouslySetInnerHTML={{
+                      __html:
+                        ad.script_html ||
+                        (ad.script_text
+                          ? `<p>${ad.script_text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br/>")}</p>`
+                          : "<p>No script added.</p>")
+                    }}
+                  />
+                  {ad.notes ? (
+                    <div className="mt-5 border-t border-border pt-4">
+                      <h3 className="text-xs font-semibold uppercase text-muted-foreground">Notes</h3>
+                      <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">{ad.notes}</p>
+                    </div>
+                  ) : null}
+                </div>
+              </section>
+            ) : null}
             <VersionHistory versions={versions} />
           </section>
 
