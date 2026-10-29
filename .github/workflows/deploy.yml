@@ -117,7 +117,7 @@ jobs:
             '
 
             if [ -f /etc/adflow-supabase/postgrest.conf ]; then
-              sudo sed -i 's/db-max-rows = 1000/db-max-rows = 100000/g' /etc/adflow-supabase/postgrest.conf || true
+              sudo sed -i 's/^db-max-rows = .*/db-max-rows = 100000/g' /etc/adflow-supabase/postgrest.conf || true
               sudo systemctl restart adflow-postgrest || true
             fi
 
