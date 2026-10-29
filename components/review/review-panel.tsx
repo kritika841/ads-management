@@ -27,8 +27,12 @@ export function ReviewPanel({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const defaultTarget: "creator" | "editor" =
+    ad.review_submission_type === "creator_resubmission" || ad.production_stage === "creator_changes_requested" || !ad.editor_id
+      ? "creator"
+      : "editor";
   const [note, setNote] = useState("");
-  const [changeTarget, setChangeTarget] = useState<"creator" | "editor" | "">("");
+  const [changeTarget, setChangeTarget] = useState<"creator" | "editor">(defaultTarget);
   const [approvalQueued, setApprovalQueued] = useState(false);
   const [isPending, startTransition] = useTransition();
   const isReviewer = profile.role === "admin" || profile.role === "manager";
@@ -41,7 +45,8 @@ export function ReviewPanel({
     reviews.some((r) => r.reviewer_id === profile.id && r.decision === "request_changes")
   );
   const managerApprovedPendingAdmin = !allowManagerFinalApproval && isManager && ad.approval_stage === "admin_final";
-  const canReviewNow = hasReviewAccess && ad.status === "pending_review" && (ad.production_stage === "creator_review" || ad.production_stage === "final_review");
+  const canApproveNow = hasReviewAccess && (ad.production_stage === "creator_review" || ad.production_stage === "final_review");
+  const canReviewNow = hasReviewAccess && (ad.production_stage === "creator_review" || ad.production_stage === "final_review" || ad.production_stage === "changes_requested" || ad.production_stage === "creator_changes_requested");
   const canReopenApproved = (isAdmin || isManager || isMediaBuyer) && ad.production_stage === "approved";
   const canChooseChangeTarget = hasReviewAccess && (canReviewNow || canReopenApproved);
   const permissionMessage = hasReviewAccess && !canReviewNow && !canReopenApproved
@@ -73,7 +78,8 @@ export function ReviewPanel({
 
   function saveDecision(decision: "approve" | "request_changes") {
     startTransition(async () => {
-      const response = await runServerAction(() => reviewAd(ad.id, decision, note, changeTarget || undefined));
+      const resolvedTarget = changeTarget || defaultTarget;
+      const response = await runServerAction(() => reviewAd(ad.id, decision, note, resolvedTarget));
       setApprovalQueued(false);
       const isIntermediate = !allowManagerFinalApproval && isManager;
       toast({
@@ -93,13 +99,13 @@ export function ReviewPanel({
               : isIntermediate
               ? "Forwarded to Administrator for final approval."
               : "Final approval is complete.")
-            : changeTarget === "creator" ? "The creative was returned to the creator." : "The creative was returned to the editor.")
+            : resolvedTarget === "creator" ? "The creative was returned to the creator." : "The creative was returned to the editor.")
           : response.message ?? "Unable to review.",
         tone: response.ok ? "success" : "error"
       });
       if (response.ok) {
         setNote("");
-        setChangeTarget("");
+        setChangeTarget(defaultTarget);
         router.refresh();
       }
     });
@@ -175,11 +181,10 @@ export function ReviewPanel({
               >
                 <Select
                   value={changeTarget}
-                  onChange={(event) => setChangeTarget(event.target.value as "creator" | "editor" | "")}
+                  onChange={(event) => setChangeTarget(event.target.value as "creator" | "editor")}
                 >
-                  <option value="">Choose target (required for changes)</option>
-                  <option value="creator">Creator</option>
-                  <option value="editor">Editor</option>
+                  <option value="creator">Creator ({ad.creator?.name ?? "Creator"})</option>
+                  <option value="editor">Editor ({ad.editor?.name ?? "Editor"})</option>
                 </Select>
               </Field>
 
@@ -193,7 +198,7 @@ export function ReviewPanel({
                   <CheckCircle2 className="size-3.5 text-primary shrink-0" aria-hidden />
                   Manager review completed. Awaiting your final administrator approval.
                 </p>
-              ) : !allowManagerFinalApproval && isManager ? (
+              ) : !allowManagerFinalApproval && isManager && canApproveNow ? (
                 <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
                   Your approval will forward this creative to an administrator for final approval.
                 </p>
@@ -201,7 +206,7 @@ export function ReviewPanel({
 
               <div className="grid gap-2">
                 {isMediaBuyer ? (
-                  hasMediaBuyerRequestedChanges ? (
+                  hasMediaBuyerRequestedChanges && canApproveNow ? (
                     <>
                       <Button disabled={isPending || approvalQueued} onClick={() => decide("approve")}>
                         {isPending || approvalQueued ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" aria-hidden />}
@@ -209,9 +214,9 @@ export function ReviewPanel({
                       </Button>
                       <Button
                         variant="secondary"
-                        disabled={isPending || approvalQueued || !note.trim() || !changeTarget}
+                        disabled={isPending || approvalQueued || !note.trim()}
                         onClick={() => decide("request_changes")}
-                        title={!note.trim() || !changeTarget ? "Add a review note and choose a change target to request changes" : undefined}
+                        title={!note.trim() ? "Add a review note to request changes" : undefined}
                       >
                         <Send className="size-4" aria-hidden />
                         Request changes
@@ -220,34 +225,47 @@ export function ReviewPanel({
                   ) : (
                     <Button
                       variant="secondary"
-                      disabled={isPending || approvalQueued || !note.trim() || !changeTarget}
+                      disabled={isPending || approvalQueued || !note.trim()}
                       onClick={() => decide("request_changes")}
-                      title={!note.trim() || !changeTarget ? "Add a review note and choose a change target to request changes" : undefined}
+                      title={!note.trim() ? "Add a review note to request changes" : undefined}
                     >
                       <Send className="size-4" aria-hidden />
                       Request changes
                     </Button>
                   )
-                ) : managerApprovedPendingAdmin ? (
-                  <Button disabled variant="secondary" className="gap-1.5">
-                    <Check className="size-4 text-primary" aria-hidden />
-                    Approved · Waiting for Admin
-                  </Button>
-                ) : (
+                ) : managerApprovedPendingAdmin && canApproveNow ? (
                   <>
-                    <Button disabled={isPending || approvalQueued} onClick={() => decide("approve")}>
-                      {isPending || approvalQueued ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" aria-hidden />}
-                      {!allowManagerFinalApproval && isManager
-                        ? "Approve & Submit to Admin"
-                        : isAdmin && !allowManagerFinalApproval && ad.approval_stage === "admin_final"
-                        ? "Grant final approval"
-                        : "Final approve"}
+                    <Button disabled variant="secondary" className="gap-1.5">
+                      <Check className="size-4 text-primary" aria-hidden />
+                      Approved · Waiting for Admin
                     </Button>
                     <Button
                       variant="secondary"
-                      disabled={isPending || approvalQueued || !note.trim() || !changeTarget}
+                      disabled={isPending || approvalQueued || !note.trim()}
                       onClick={() => decide("request_changes")}
-                      title={!note.trim() || !changeTarget ? "Add a review note and choose a change target to request changes" : undefined}
+                      title={!note.trim() ? "Add a review note to request changes" : undefined}
+                    >
+                      <Send className="size-4" aria-hidden />
+                      Request changes
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    {canApproveNow ? (
+                      <Button disabled={isPending || approvalQueued} onClick={() => decide("approve")}>
+                        {isPending || approvalQueued ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" aria-hidden />}
+                        {!allowManagerFinalApproval && isManager
+                          ? "Approve & Submit to Admin"
+                          : isAdmin && !allowManagerFinalApproval && ad.approval_stage === "admin_final"
+                          ? "Grant final approval"
+                          : "Final approve"}
+                      </Button>
+                    ) : null}
+                    <Button
+                      variant="secondary"
+                      disabled={isPending || approvalQueued || !note.trim()}
+                      onClick={() => decide("request_changes")}
+                      title={!note.trim() ? "Add a review note to request changes" : undefined}
                     >
                       <Send className="size-4" aria-hidden />
                       Request changes
@@ -270,9 +288,8 @@ export function ReviewPanel({
               <Field label="Return to" hint="Select who should receive this creative to make changes.">
                 <Select
                   value={changeTarget}
-                  onChange={(event) => setChangeTarget(event.target.value as "creator" | "editor" | "")}
+                  onChange={(event) => setChangeTarget(event.target.value as "creator" | "editor")}
                 >
-                  <option value="">Choose target</option>
                   <option value="creator">Creator ({ad.creator?.name ?? "Creator"})</option>
                   <option value="editor">Editor ({ad.editor?.name ?? "Editor"})</option>
                 </Select>
@@ -287,7 +304,7 @@ export function ReviewPanel({
               </Field>
               <Button
                 variant="secondary"
-                disabled={isPending || !note.trim() || !changeTarget}
+                disabled={isPending || !note.trim()}
                 onClick={() => decide("request_changes")}
                 className="w-full"
               >

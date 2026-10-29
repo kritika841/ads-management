@@ -480,6 +480,16 @@ export function DashboardClient({
     rememberLibraryTab(LIBRARY_QUEUE_COOKIE, nextQueue);
   }
 
+  function openCancelModal(ad: AdWithRelations, target?: "creator" | "editor") {
+    const defaultTarget: "creator" | "editor" =
+      target ??
+      (ad.review_submission_type === "creator_resubmission" || ad.production_stage === "creator_changes_requested" || !ad.editor_id
+        ? "creator"
+        : "editor");
+    setCancelTarget(defaultTarget);
+    setCancelAd(ad);
+  }
+
   function decide(ad: AdWithRelations, decision: "approve" | "request_changes", note = "") {
     if (decision === "approve") {
       setActingAdId(ad.id);
@@ -502,26 +512,33 @@ export function DashboardClient({
 
   function saveDecision(ad: AdWithRelations, decision: "approve" | "request_changes", note = "") {
     startTransition(async () => {
-      const target = cancelTarget || undefined;
-      const response = await runServerAction(() => reviewAd(ad.id, decision, note, target));
-      if (!response.ok) {
-        toast({ title: "Review not saved", description: response.message ?? "Unable to save review.", tone: "error" });
-      } else {
-        const resolvedTarget = target ?? "editor";
-        const isIntermediate = decision === "approve" && profile.role === "manager" && !allowManagerFinalApproval;
-        const isReopen = decision === "request_changes" && ad.production_stage === "approved";
-        toast({
-          title: decision === "approve" ? `${ad.name} approved` : isReopen ? "Creative reopened" : "Changes requested",
-          description: decision === "approve"
-            ? (isIntermediate ? "Forwarded to Administrator for final approval." : "The creative is now approved.")
-            : resolvedTarget === "creator"
-              ? `${ad.name} was returned to the creator.`
-              : `${ad.name} was returned to the editor.`,
-          tone: "success"
-        });
-        setCancelAd(null); setCancelReason(""); setCancelTarget(""); router.refresh();
+      try {
+        const defaultTarget: "creator" | "editor" =
+          ad.review_submission_type === "creator_resubmission" || ad.production_stage === "creator_changes_requested" || !ad.editor_id
+            ? "creator"
+            : "editor";
+        const target = cancelTarget || defaultTarget;
+        const response = await runServerAction(() => reviewAd(ad.id, decision, note, target));
+        if (!response.ok) {
+          toast({ title: "Review not saved", description: response.message ?? "Unable to save review.", tone: "error" });
+        } else {
+          const resolvedTarget = target ?? "editor";
+          const isIntermediate = decision === "approve" && profile.role === "manager" && !allowManagerFinalApproval;
+          const isReopen = decision === "request_changes" && ad.production_stage === "approved";
+          toast({
+            title: decision === "approve" ? `${ad.name} approved` : isReopen ? "Creative reopened" : "Changes requested",
+            description: decision === "approve"
+              ? (isIntermediate ? "Forwarded to Administrator for final approval." : "The creative is now approved.")
+              : resolvedTarget === "creator"
+                ? `${ad.name} was returned to the creator.`
+                : `${ad.name} was returned to the editor.`,
+            tone: "success"
+          });
+          setCancelAd(null); setCancelReason(""); setCancelTarget(""); router.refresh();
+        }
+      } finally {
+        setActingAdId(null);
       }
-      setActingAdId(null);
     });
   }
 
@@ -897,7 +914,7 @@ export function DashboardClient({
         }}
       />
     ) : null}
-    {filteredAds.length ? view === "grid" ? <><section className="mt-3 grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">{visibleGridAds.map((ad) => <WorkflowCard key={ad.id} ad={ad} mediaToken={mediaTokens[ad.id]} profile={profile} canApprove={canApprove} allowManagerFinalApproval={allowManagerFinalApproval} editors={editors} editorWorkloads={editorWorkloads} pending={actingAdId === ad.id} playing={playingAdIds.has(ad.id)} selected={selectedIds.has(ad.id)} downloading={downloadingIds.has(ad.id)} downloadProgress={downloadProgress[ad.id]} onToggleSelect={() => toggleSelect(ad.id)} onPlay={() => playVideo(ad)} onFreezeChange={handleFreezeChange} onPlaybackError={() => { stopVideo(ad.id); toast({ title: "Video unavailable", description: `${ad.name} could not be played.`, tone: "error" }); }} onQuickPreview={() => setPreviewAd(ad)} onOpenDrive={() => { if (ad.drive_url) window.open(ad.drive_url, "_blank", "noopener,noreferrer"); }} onDownload={() => downloadOne(ad)} onEdit={() => openCreatorForm(ad)} onApprove={() => decide(ad, "approve")} onRequestChanges={() => setCancelAd(ad)} onReopen={(target) => { setCancelTarget(target); setCancelAd(ad); }} onAssignEditor={(editorId, deadline) => assign(ad, editorId, deadline)} onDeleted={handleDeleted} />)}</section>{hasMoreGridAds ? <div ref={loadMoreRef} className="flex h-20 items-center justify-center" role="status" aria-label="Loading more creatives"><Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden /><span className="sr-only">Loading more creatives</span></div> : null}</> : <WorkflowTable ads={filteredAds} profile={profile} canApprove={canApprove} allowManagerFinalApproval={allowManagerFinalApproval} pendingId={actingAdId} selectedIds={selectedIds} downloadingIds={downloadingIds} downloadProgress={downloadProgress} onToggleSelect={toggleSelect} onApprove={(ad) => decide(ad, "approve")} onRequestChanges={setCancelAd} onDownload={downloadOne} onFreezeChange={handleFreezeChange} onQuickPreview={setPreviewAd} onDeleted={handleDeleted} /> : <EmptyQueue canCreate={canCreate} createBlocked={createBlocked} onCreate={handleCreateClick} queue={queue} onClearFilters={() => clearFilters(true)} />}
+    {filteredAds.length ? view === "grid" ? <><section className="mt-3 grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">{visibleGridAds.map((ad) => <WorkflowCard key={ad.id} ad={ad} mediaToken={mediaTokens[ad.id]} profile={profile} canApprove={canApprove} allowManagerFinalApproval={allowManagerFinalApproval} editors={editors} editorWorkloads={editorWorkloads} pending={actingAdId === ad.id} playing={playingAdIds.has(ad.id)} selected={selectedIds.has(ad.id)} downloading={downloadingIds.has(ad.id)} downloadProgress={downloadProgress[ad.id]} onToggleSelect={() => toggleSelect(ad.id)} onPlay={() => playVideo(ad)} onFreezeChange={handleFreezeChange} onPlaybackError={() => { stopVideo(ad.id); toast({ title: "Video unavailable", description: `${ad.name} could not be played.`, tone: "error" }); }} onQuickPreview={() => setPreviewAd(ad)} onOpenDrive={() => { if (ad.drive_url) window.open(ad.drive_url, "_blank", "noopener,noreferrer"); }} onDownload={() => downloadOne(ad)} onEdit={() => openCreatorForm(ad)} onApprove={() => decide(ad, "approve")} onRequestChanges={() => openCancelModal(ad)} onReopen={(target) => openCancelModal(ad, target)} onAssignEditor={(editorId, deadline) => assign(ad, editorId, deadline)} onDeleted={handleDeleted} />)}</section>{hasMoreGridAds ? <div ref={loadMoreRef} className="flex h-20 items-center justify-center" role="status" aria-label="Loading more creatives"><Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden /><span className="sr-only">Loading more creatives</span></div> : null}</> : <WorkflowTable ads={filteredAds} profile={profile} canApprove={canApprove} allowManagerFinalApproval={allowManagerFinalApproval} pendingId={actingAdId} selectedIds={selectedIds} downloadingIds={downloadingIds} downloadProgress={downloadProgress} onToggleSelect={toggleSelect} onApprove={(ad) => decide(ad, "approve")} onRequestChanges={(ad) => openCancelModal(ad)} onDownload={downloadOne} onFreezeChange={handleFreezeChange} onQuickPreview={setPreviewAd} onDeleted={handleDeleted} /> : <EmptyQueue canCreate={canCreate} createBlocked={createBlocked} onCreate={handleCreateClick} queue={queue} onClearFilters={() => clearFilters(true)} />}
 
     {formOpen ? <Modal open labelledBy="creator-form-title" onClose={() => { setFormOpen(false); setEditingAd(null); }} className="p-0 sm:p-6"><section className="mx-auto min-h-full w-full bg-card shadow-float sm:min-h-0 sm:max-w-5xl sm:rounded-xl"><div className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-border bg-card px-5 sm:rounded-t-lg"><div><h2 id="creator-form-title" className="text-lg font-semibold text-foreground">{editingAd ? (editingAd && !creatorEditableStages.includes(editingAd.production_stage as (typeof creatorEditableStages)[number]) && (profile.role === "admin" || profile.role === "manager") ? "Override edit creative" : "Update creative") : "Add creative"}</h2><p className="text-xs text-muted-foreground">{editingAd && !creatorEditableStages.includes(editingAd.production_stage as (typeof creatorEditableStages)[number]) && (profile.role === "admin" || profile.role === "manager") ? "Admin/manager override — all fields editable." : "Set the current preparation status and save."}</p></div><Button size="icon" variant="ghost" title="Close" onClick={() => { setFormOpen(false); setEditingAd(null); }}><X className="size-5" aria-hidden /></Button></div><div className="p-5"><CreatorItemForm profile={profile} creators={creators} editors={editors} campaigns={campaigns.filter((item) => item.active)} products={products.filter((item) => item.active)} initialAd={editingAd} availableTags={availableTags} editorWorkloads={editorWorkloads} overrideMode={Boolean(editingAd && !creatorEditableStages.includes(editingAd.production_stage as (typeof creatorEditableStages)[number]) && (profile.role === "admin" || profile.role === "manager"))} onSaved={() => { setFormOpen(false); setEditingAd(null); router.refresh(); }} /></div></section></Modal> : null}
 
@@ -938,10 +955,9 @@ export function DashboardClient({
               </label>
               <Select
                 id="changes-target-select"
-                value={cancelTarget}
-                onChange={(event) => setCancelTarget(event.target.value as "creator" | "editor" | "")}
+                value={cancelTarget || (cancelAd.editor_id ? "editor" : "creator")}
+                onChange={(event) => setCancelTarget(event.target.value as "creator" | "editor")}
               >
-                <option value="">Choose target (Creator or Editor)</option>
                 <option value="editor">Editor ({cancelAd.editor?.name ?? "Editor"})</option>
                 <option value="creator">Creator ({cancelAd.creator?.name ?? "Creator"})</option>
               </Select>
@@ -953,11 +969,11 @@ export function DashboardClient({
             </Button>
             <Button
               variant="danger"
-              disabled={isPending || !cancelReason.trim() || !cancelTarget}
+              disabled={actingAdId === cancelAd.id || !cancelReason.trim()}
               onClick={() => decide(cancelAd, "request_changes", cancelReason.trim())}
               className="gap-1.5"
             >
-              {isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <RotateCcw className="size-4" aria-hidden />}
+              {actingAdId === cancelAd.id ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <RotateCcw className="size-4" aria-hidden />}
               {cancelAd.production_stage === "approved" ? "Reopen & send changes" : "Send changes"}
             </Button>
           </div>

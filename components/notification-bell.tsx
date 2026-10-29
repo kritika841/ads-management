@@ -346,11 +346,13 @@ function relativeTime(value: string) {
 }
 
 function updateFaviconBadge(count: number) {
-  if (typeof window === "undefined") return;
-  const existingLinks = document.querySelectorAll("link[rel*='icon']");
-  existingLinks.forEach(link => link.remove());
-  const link = document.createElement("link");
-  link.rel = "icon";
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  let link = document.querySelector<HTMLLinkElement>("link[rel*='icon']");
+  if (!link) {
+    link = document.createElement("link");
+    link.rel = "icon";
+    document.head.appendChild(link);
+  }
   if (count === 0) {
     link.type = "image/x-icon";
     link.href = "/favicon.ico";
@@ -360,5 +362,4 @@ function updateFaviconBadge(count: number) {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#0f172a"/><path d="M11 16h10M16 11v10" stroke="#64748b" stroke-width="3" stroke-linecap="round"/><circle cx="26" cy="6" r="8" fill="#ef4444"/><text x="26" y="10" font-family="sans-serif" font-weight="bold" font-size="12" fill="#ffffff" text-anchor="middle">${text}</text></svg>`;
     link.href = `data:image/svg+xml,${encodeURIComponent(svg)}`;
   }
-  document.head.appendChild(link);
 }

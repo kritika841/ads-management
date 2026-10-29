@@ -24,6 +24,15 @@ export async function GET(request: NextRequest) {
 
   // 1. Direct OTP token_hash verification (official Supabase PKCE / Server-side email verification)
   if (token_hash) {
+    // For password reset flows, forward token_hash to client-side /reset-password/update
+    // so automated email link scanners/prefetchers do not consume the one-time token on GET.
+    if (isResetPasswordFlow || type === "recovery") {
+      const resetUrl = new URL("/reset-password/update", publicOrigin);
+      resetUrl.searchParams.set("token_hash", token_hash);
+      resetUrl.searchParams.set("type", type);
+      return NextResponse.redirect(resetUrl);
+    }
+
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase.auth.verifyOtp({
       token_hash,

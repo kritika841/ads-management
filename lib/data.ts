@@ -433,7 +433,7 @@ export async function getAllAdsForAnalytics() {
 }
 
 export async function getAdDetail(adId: string) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = createSupabaseAdminClient();
   const { data: ad, error } = await supabase
     .from("ads")
     .select(

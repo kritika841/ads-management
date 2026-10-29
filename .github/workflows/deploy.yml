@@ -35,6 +35,7 @@ jobs:
             public \
             scripts \
             lib \
+            supabase \
             package.json \
             package-lock.json \
             deploy.sh \
@@ -139,4 +140,15 @@ jobs:
             fi
 
             bash /home/deployer/apps/satmi-ads/deploy.sh
+
+            if [ -f /home/deployer/apps/satmi-ads/supabase/migrations/20261029120000_fix_creator_changes_and_collaborator_rls.sql ]; then
+              sudo -u postgres psql -d adflow -f /home/deployer/apps/satmi-ads/supabase/migrations/20261029120000_fix_creator_changes_and_collaborator_rls.sql || true
+              sudo systemctl restart adflow-postgrest || true
+            fi
+
+            if [ -d /etc/nginx/conf.d ]; then
+              printf "client_header_buffer_size 16k;\nlarge_client_header_buffers 8 64k;\n" | sudo tee /etc/nginx/conf.d/adflow-buffers.conf >/dev/null || true
+              sudo nginx -t && sudo systemctl reload nginx || sudo rm -f /etc/nginx/conf.d/adflow-buffers.conf
+            fi
+
 

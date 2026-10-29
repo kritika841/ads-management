@@ -1281,7 +1281,11 @@ export async function reviewAd(adId: string, decision: "approve" | "request_chan
   const isAdminReopen = profile.role === "admin" && decision === "request_changes" && ad.production_stage === "approved";
   const isManagerReopen = profile.role === "manager" && decision === "request_changes" && ad.production_stage === "approved";
   const isMediaBuyerReopen = profile.role === "media_buyer" && decision === "request_changes" && ad.production_stage === "approved";
-  if (!isAdminReopen && !isManagerReopen && !isMediaBuyerReopen && (ad.status !== "pending_review" || !["creator_review", "final_review"].includes(ad.production_stage))) {
+  const isChangeRequestReroute =
+    decision === "request_changes" &&
+    (ad.production_stage === "changes_requested" || ad.production_stage === "creator_changes_requested");
+  const isStandardReviewStage = ["creator_review", "final_review"].includes(ad.production_stage);
+  if (!isAdminReopen && !isManagerReopen && !isMediaBuyerReopen && !isChangeRequestReroute && !isStandardReviewStage) {
     return { ok: false, message: "This video is not waiting for final review." };
   }
 
@@ -1336,8 +1340,8 @@ export async function reviewAd(adId: string, decision: "approve" | "request_chan
           production_stage: "final_review"
         }
       });
-    } else if (isAdminReopen || isManagerReopen || isMediaBuyerReopen) {
-      // Fallback: perform reopen directly if DB RPC has not yet been upgraded
+    } else if (decision === "request_changes") {
+      // Fallback: perform change request / reopen directly if DB RPC has not yet been upgraded
       const nextStage = resolvedTarget === "creator" ? "creator_changes_requested" : "changes_requested";
       const { error: updateError } = await admin.from("ads").update({
         production_stage: nextStage,
@@ -1355,16 +1359,23 @@ export async function reviewAd(adId: string, decision: "approve" | "request_chan
         note: note.trim() || null
       });
 
+      const isReopen = ad.production_stage === "approved";
+      const action = isReopen
+        ? "approved_ad_reopened"
+        : resolvedTarget === "creator"
+          ? "final_changes_requested_to_creator"
+          : "final_changes_requested_to_editor";
+
       await admin.from("activity_logs").insert({
         ad_id: adId,
         actor_id: profile.id,
-        action: "approved_ad_reopened",
+        action,
         metadata: {
           note: note.trim() || "",
-          previous_stage: "approved",
+          previous_stage: ad.production_stage,
           production_stage: nextStage,
           target: resolvedTarget,
-          reopened: true
+          ...(isReopen ? { reopened: true } : {})
         }
       });
     } else {

@@ -368,8 +368,14 @@ export async function getUserPasswordStatus(
     // Ignore
   }
 
-  const forceLoggedOut = Boolean(userRecord?.forceLoggedOut || metaForceLoggedOut);
-  const forceLogoutAt = userRecord?.forceLogoutAt || metaForceLogoutAt || null;
+  const localForceLoggedOut = Boolean(
+    userRecord?.forceLoggedOut &&
+    (!metaWindow?.lastChangedAt ||
+      !userRecord.forceLogoutAt ||
+      new Date(metaWindow.lastChangedAt).getTime() <= new Date(userRecord.forceLogoutAt).getTime())
+  );
+  const forceLoggedOut = Boolean(localForceLoggedOut || metaForceLoggedOut);
+  const forceLogoutAt = forceLoggedOut ? (userRecord?.forceLogoutAt || metaForceLogoutAt || null) : null;
 
   return resolvePasswordStatus(
     [userRecord ? { lastChangedAt: userRecord.lastChangedAt, expiresAt: userRecord.expiresAt } : null, metaWindow],

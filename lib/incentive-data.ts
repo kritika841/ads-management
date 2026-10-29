@@ -36,69 +36,10 @@ export async function getIncentiveDashboard(profile: Profile) {
         editor:profiles!ads_editor_id_fkey(id,name)),
       metrics:incentive_daily_metrics(*)
     `;
-  let creativesQuery = admin
+  const creativesQuery = admin
     .from("incentive_creatives")
     .select(CREATIVE_SELECT)
     .order("created_at", { ascending: false });
-
-  let userAds: Array<{
-    id: string;
-    name: string;
-    product_id: string | null;
-    creator_id: string | null;
-    editor_id: string | null;
-    thumbnail_url: string | null;
-    drive_file_id: string | null;
-    preview_url: string | null;
-    resolved_video_url: string | null;
-    status: string;
-    production_stage: string;
-    creator: { id: string; name: string } | null;
-    editor: { id: string; name: string } | null;
-  }> = [];
-
-  if (isScoped) {
-    let userAdsQuery = liveOnly(admin
-      .from("ads")
-      .select("id,name,product_id,creator_id,editor_id,thumbnail_url,drive_file_id,preview_url,resolved_video_url,status,production_stage,created_at,creator:profiles!ads_creator_id_fkey(id,name),editor:profiles!ads_editor_id_fkey(id,name)"), binReady);
-
-    if (profile.role === "content_creator") {
-      userAdsQuery = userAdsQuery.eq("creator_id", profile.id);
-    } else if (profile.role === "editor") {
-      userAdsQuery = userAdsQuery.eq("editor_id", profile.id);
-    } else if (profile.role === "manager") {
-      userAdsQuery = userAdsQuery.or(`creator_id.eq.${profile.id},editor_id.eq.${profile.id}`);
-    }
-
-    const { data: adsData, error: adsError } = await userAdsQuery;
-    if (adsError) throw adsError;
-    userAds = (adsData ?? []).map((ad) => ({
-      ...ad,
-      creator: Array.isArray(ad.creator) ? ad.creator[0] ?? null : ad.creator,
-      editor: Array.isArray(ad.editor) ? ad.editor[0] ?? null : ad.editor
-    }));
-
-    const userAdIds = userAds.map((ad) => ad.id);
-    if (profile.role === "content_creator") {
-      if (userAdIds.length) {
-        creativesQuery = creativesQuery.or(`creator_id.eq.${profile.id},ad_id.in.(${userAdIds.join(",")})`);
-      } else {
-        creativesQuery = creativesQuery.eq("creator_id", profile.id);
-      }
-    } else if (profile.role === "editor") {
-      if (userAdIds.length) {
-        creativesQuery = creativesQuery.or(`editor_id.eq.${profile.id},ad_id.in.(${userAdIds.join(",")})`);
-      } else {
-        creativesQuery = creativesQuery.eq("editor_id", profile.id);
-      }
-    } else if (profile.role === "manager") {
-      if (userAdIds.length) {
-        creativesQuery = creativesQuery.or(`creator_id.eq.${profile.id},editor_id.eq.${profile.id},ad_id.in.(${userAdIds.join(",")})`);
-      } else {
-        creativesQuery = creativesQuery.or(`creator_id.eq.${profile.id},editor_id.eq.${profile.id}`);
-      }
-    }
-  }
 
   const [campaignResult, creativeResult, allAdsResult, metaAdsResult, transcriptMappingsResult] = await Promise.all([
     admin.from("incentive_campaigns").select("*,product:products(id,name,sku)").order("created_at", { ascending: false }),
@@ -121,6 +62,15 @@ export async function getIncentiveDashboard(profile: Profile) {
   }));
   const eligibleAds = allAdsData;
   const allAdsById = new Map(allAdsData.map((ad) => [ad.id, ad]));
+
+  const userAds = !isScoped
+    ? []
+    : allAdsData.filter((ad) => {
+        if (profile.role === "content_creator") return ad.creator_id === profile.id;
+        if (profile.role === "editor") return ad.editor_id === profile.id;
+        if (profile.role === "manager") return ad.creator_id === profile.id || ad.editor_id === profile.id;
+        return false;
+      });
 
   const highConfidenceTranscriptMap = new Map<string, typeof transcriptMappingsResult.data[0]>();
   for (const mapping of transcriptMappingsResult.data ?? []) {
