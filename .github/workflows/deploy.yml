@@ -142,7 +142,7 @@ jobs:
             bash /home/deployer/apps/satmi-ads/deploy.sh
 
             if [ -f /home/deployer/apps/satmi-ads/supabase/migrations/20261029120000_fix_creator_changes_and_collaborator_rls.sql ]; then
-              sudo -u postgres psql -p 5433 -d postgres -v ON_ERROR_STOP=1 -f /home/deployer/apps/satmi-ads/supabase/migrations/20261029120000_fix_creator_changes_and_collaborator_rls.sql
+              sudo -u postgres psql -p 5433 -d postgres -v ON_ERROR_STOP=1 < /home/deployer/apps/satmi-ads/supabase/migrations/20261029120000_fix_creator_changes_and_collaborator_rls.sql
               sudo systemctl restart adflow-postgrest || true
             fi
 
