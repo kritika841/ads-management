@@ -50,16 +50,19 @@ async function safeQuery<T>(promise: Promise<T>, fallback: T, name: string): Pro
   }
 }
 
-async function fetchDashboardAdsWithRetry(fallbackAds: DashboardAdSummaryItem[] = []): Promise<DashboardAdSummaryItem[]> {
+async function fetchDashboardAdsWithRetry(
+  profile: Profile,
+  fallbackAds: DashboardAdSummaryItem[] = []
+): Promise<{ ads: DashboardAdSummaryItem[]; fresh: boolean }> {
   try {
-    return await getDashboardAds();
+    return { ads: await getDashboardAds(profile), fresh: true };
   } catch (firstErr) {
     console.warn("[Dashboard] getDashboardAds timed out or failed; retrying once...", firstErr instanceof Error ? firstErr.message : firstErr);
     try {
-      return await getDashboardAds();
+      return { ads: await getDashboardAds(profile), fresh: true };
     } catch (secondErr) {
       console.error("[Dashboard] getDashboardAds retry failed, using fallback:", secondErr instanceof Error ? secondErr.message : secondErr);
-      return fallbackAds;
+      return { ads: fallbackAds, fresh: false };
     }
   }
 }
@@ -88,8 +91,8 @@ export default async function DashboardPage() {
     editorAverageEditTimes = cached.editorAverageEditTimes;
   } else {
     // Fetch fresh data with fallback to previous cache if available
-    const [freshAds, freshProfiles, freshWorkloads, freshSettings, freshTimeline, freshAverages] = await Promise.all([
-      fetchDashboardAdsWithRetry(cached?.ads ?? []),
+    const [freshAdsResult, freshProfiles, freshWorkloads, freshSettings, freshTimeline, freshAverages] = await Promise.all([
+      fetchDashboardAdsWithRetry(profile, cached?.ads ?? []),
       safeQuery(getProfiles(), cached?.profiles ?? [], "profiles"),
       safeQuery(getEditorWorkloads(), cached?.editorWorkloads ?? {}, "editorWorkloads"),
       safeQuery(getAppSettings(), cached?.settings ?? defaultSettings, "settings"),
@@ -101,15 +104,15 @@ export default async function DashboardPage() {
         : Promise.resolve(undefined)
     ]);
 
-    ads = freshAds;
+    ads = freshAdsResult.ads;
     profiles = freshProfiles;
     editorWorkloads = freshWorkloads;
     settings = freshSettings;
     timelineData = freshTimeline;
     editorAverageEditTimes = freshAverages;
 
-    // Only update cache if we have valid ads
-    if (ads.length > 0 || !cached) {
+    // Only update cache when getDashboardAds succeeded
+    if (freshAdsResult.fresh) {
       cacheMap.set(cacheKey, {
         timestamp: now,
         ads,

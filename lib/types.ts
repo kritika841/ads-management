@@ -133,6 +133,7 @@ export type AdWithRelations = Ad & {
   campaign: Pick<Campaign, "id" | "name"> | null;
   product: Pick<Product, "id" | "name" | "sku" | "image_url"> | null;
   tags: { id: string; name: string }[];
+  collaborator_ids?: string[];
   version_count?: number;
   review_submission_type?: ReviewSubmissionType;
   latest_change_request?: {

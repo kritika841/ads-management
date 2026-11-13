@@ -22,7 +22,7 @@ import { platforms } from "@/lib/constants";
 import { runServerAction } from "@/lib/client-action";
 import { downloadProgressLabel, downloadWithProgress, type DownloadProgress } from "@/lib/client-download";
 import type { ExportJobSnapshot } from "@/lib/export-job-types";
-import { canBulkAddToCampaign, canDeleteAd } from "@/lib/permissions";
+import { canBulkAddToCampaign, canDeleteAd, filterAdsForProfile } from "@/lib/permissions";
 import { creatorCapableProfiles, isCreatorCapableRole } from "@/lib/creators";
 import { clearSavedDashboardFilters, emptyDashboardFilters, loadSavedDashboardFilters, readDashboardFilters, saveDashboardFilters, writeDashboardFilters, type DashboardFilterState, type DashboardView } from "@/lib/dashboard-filter-state";
 import { getSavedLibraryTabLocal, LIBRARY_QUEUE_COOKIE, LIBRARY_REVIEW_TAB_COOKIE, parseLibraryReviewTab, rememberLibraryTab, type LibraryReviewTab } from "@/lib/library-tab-state";
@@ -77,7 +77,8 @@ export function DashboardClient({
   // the pre-delete snapshot, so the grid never re-flows twice.
   const [removedIds, setRemovedIds] = useState<Set<string>>(() => new Set());
   const ads = useMemo(() => {
-    const visible = removedIds.size ? adsProp.filter((item) => !removedIds.has(item.id)) : adsProp;
+    const scoped = filterAdsForProfile(adsProp, profile, settings);
+    const visible = removedIds.size ? scoped.filter((item) => !removedIds.has(item.id)) : scoped;
     if (!Object.keys(freezeOverrides).length && !Object.keys(stageOverrides).length) {
       return visible;
     }
@@ -91,7 +92,7 @@ export function DashboardClient({
       }
       return updated;
     });
-  }, [adsProp, freezeOverrides, stageOverrides, removedIds]);
+  }, [adsProp, freezeOverrides, profile, removedIds, settings, stageOverrides]);
   const handleFreezeChange = (adId: string, state: EditingFreezeState, stage?: ProductionStage) => {
     setFreezeOverrides((current) => ({ ...current, [adId]: state }));
     if (stage) {
@@ -126,10 +127,12 @@ export function DashboardClient({
         const validated = parseLibraryReviewTab(urlReview);
         if (validated) return validated;
       }
-      const local = getSavedLibraryTabLocal(LIBRARY_REVIEW_TAB_COOKIE);
-      if (local) {
-        const validated = parseLibraryReviewTab(local);
-        if (validated) return validated;
+      if (profile.role !== "content_creator" && profile.role !== "editor") {
+        const local = getSavedLibraryTabLocal(LIBRARY_REVIEW_TAB_COOKIE);
+        if (local) {
+          const validated = parseLibraryReviewTab(local);
+          if (validated) return validated;
+        }
       }
     }
     return initialReviewTab;
@@ -347,14 +350,15 @@ export function DashboardClient({
   }, [adsMatchingFilters]);
 
   const reviewCounts = useMemo(() => {
-    const inReviewAds = adsMatchingFilters.filter((ad) => matchesQueue(ad, "needs_review"));
+    const targetQueue: QueueKey = isReviewQueue ? queue : "needs_review";
+    const inReviewAds = adsMatchingFilters.filter((ad) => matchesQueue(ad, targetQueue));
     return {
       all: inReviewAds.length,
       new: inReviewAds.filter((ad) => ad.review_submission_type === "new").length,
       editor: inReviewAds.filter((ad) => ad.review_submission_type === "editor_resubmission").length,
       creator: inReviewAds.filter((ad) => ad.review_submission_type === "creator_resubmission").length
     };
-  }, [adsMatchingFilters]);
+  }, [adsMatchingFilters, isReviewQueue, queue]);
 
   const filteredAds = useMemo(() => {
     const filtered = adsMatchingFilters
@@ -468,10 +472,11 @@ export function DashboardClient({
   }
 
   function selectQueue(nextQueue: QueueKey) {
+    const switchingQueue = nextQueue !== queue;
     setQueue(nextQueue);
     const url = new URL(window.location.href);
     url.searchParams.set("queue", nextQueue);
-    if (nextQueue !== "needs_review" && nextQueue !== "creator_review" && nextQueue !== "final_review") {
+    if (switchingQueue || (nextQueue !== "needs_review" && nextQueue !== "creator_review" && nextQueue !== "final_review")) {
       setReviewSubTab("all");
       url.searchParams.delete("review");
       rememberLibraryTab(LIBRARY_REVIEW_TAB_COOKIE, "all");

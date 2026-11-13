@@ -168,7 +168,9 @@ export function AdPreviewModal({
               dangerouslySetInnerHTML={{
                 __html:
                   ad.script_html ||
-                  (ad.script_text ? `<p>${ad.script_text.replace(/\n/g, "<br/>")}</p>` : "<p>No script added.</p>")
+                  (ad.script_text
+                    ? `<p>${ad.script_text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br/>")}</p>`
+                    : "<p>No script added.</p>")
               }}
             />
           </aside>

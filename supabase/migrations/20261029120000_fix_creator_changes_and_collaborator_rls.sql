@@ -207,6 +207,13 @@ revoke all on function public.final_review_ad_atomic(uuid, uuid, text, text, tex
 grant execute on function public.final_review_ad_atomic(uuid, uuid, text, text, text) to service_role;
 
 -- 4. Allow creators and editors to view ads where they are collaborators
+create index if not exists ad_collaborators_profile_ad_idx
+  on public.ad_collaborators(profile_id, ad_id);
+
+drop policy if exists "ad collaborators visible to active users" on public.ad_collaborators;
+create policy "ad collaborators visible to active users" on public.ad_collaborators
+  for select using ((select auth.uid()) is not null);
+
 drop policy if exists "creators view own ads" on public.ads;
 create policy "creators view own ads" on public.ads
   for select using (
@@ -235,7 +242,48 @@ create policy "editors view assigned ads" on public.ads
     )
   );
 
--- 5. Restore script_html from script_text for any creative or version where script_html was cleared
+-- 5. Optimize get_user_sync_state() so realtime sync polling uses fast index scans
+create or replace function public.get_user_sync_state()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with me as (select auth.uid() as uid)
+  select case
+    when (select uid from me) is null then '{}'::jsonb
+    else jsonb_build_object(
+      'ads_count', (select count(*) from public.ads),
+      'ads_latest', (select max(updated_at) from public.ads),
+      'new_assignments', (
+        select count(*) from public.ads, me
+        where editor_id = me.uid and production_stage = 'ready_for_edit'
+      ),
+      'comments_count', (select count(*) from public.comments),
+      'comments_latest', (select max(created_at) from public.comments),
+      'reviews_count', (select count(*) from public.review_actions),
+      'reviews_latest', (select max(created_at) from public.review_actions),
+      'annotations_count', (select count(*) from public.annotations),
+      'annotations_latest', (select max(created_at) from public.annotations),
+      'activity_count', (select count(*) from public.activity_logs),
+      'activity_latest', (select max(created_at) from public.activity_logs),
+      'notifications_count', (
+        select count(*) from public.notifications, me where user_id = me.uid
+      ),
+      'notifications_latest', (
+        select max(greatest(created_at, coalesce(read_at, created_at)))
+        from public.notifications, me where user_id = me.uid
+      ),
+      'notifications_unread', (
+        select count(*) from public.notifications, me
+        where user_id = me.uid and read_at is null
+      )
+    )
+  end;
+$$;
+
+-- 6. Restore script_html from script_text for any creative or version where script_html was cleared
 update public.ads
 set script_html = '<p>' || replace(replace(replace(replace(btrim(script_text), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), E'\n', '<br />') || '</p>'
 where (script_html is null or btrim(script_html) = '' or btrim(script_html) = '<p></p>')

@@ -7,6 +7,7 @@ import { readMetricVisibilityFile } from "@/lib/metric-visibility-server";
 import { readCampaignGoals } from "@/lib/campaign-goals";
 import { DEFAULT_DOWNLOAD_RETENTION_DAYS, DEFAULT_RECYCLE_BIN_RETENTION_DAYS, normalizeRetentionDays } from "@/lib/retention";
 import { isRecycleBinReady, liveOnly } from "@/lib/recycle-bin";
+import { filterAdsForProfile } from "@/lib/permissions";
 import type {
   ActivityLog,
   AdVersion,
@@ -299,16 +300,17 @@ export type DashboardAdSummaryItem = {
   workflow_status_changed_at: string;
   creator_id: string | null;
   editor_id: string | null;
+  collaborator_ids?: string[];
   deleted_at?: string | null;
   campaign?: { id: string; name: string } | null;
 };
 
-export async function getDashboardAds(): Promise<DashboardAdSummaryItem[]> {
+export async function getDashboardAds(profile?: Profile): Promise<DashboardAdSummaryItem[]> {
   const supabase = await createSupabaseServerClient();
   const binReady = await isRecycleBinReady();
   const { data, error } = await liveOnly(supabase
     .from("ads")
-    .select("id, name, production_stage, deadline, workflow_status_changed_at, creator_id, editor_id, deleted_at, campaign:campaigns(id, name)")
+    .select("id, name, production_stage, deadline, workflow_status_changed_at, creator_id, editor_id, deleted_at, campaign:campaigns(id, name), ad_collaborators(profile_id)")
     .order("updated_at", { ascending: false }), binReady);
 
   if (error) {
@@ -316,10 +318,16 @@ export async function getDashboardAds(): Promise<DashboardAdSummaryItem[]> {
     throw error;
   }
 
-  return (data ?? []) as unknown as DashboardAdSummaryItem[];
+  const rows = ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    ...row,
+    collaborator_ids: ((row.ad_collaborators as { profile_id?: string }[] | undefined) ?? [])
+      .map((item) => item.profile_id)
+      .filter((id): id is string => Boolean(id))
+  })) as unknown as DashboardAdSummaryItem[];
+  return profile ? filterAdsForProfile(rows, profile) : rows;
 }
 
-export async function getAds() {
+export async function getAds(profile?: Profile) {
   const supabase = await createSupabaseServerClient();
   const binReady = await isRecycleBinReady();
 
@@ -328,7 +336,7 @@ export async function getAds() {
       .from("ads")
       .select(`
         id, name, campaign_id, editor_id, creator_id, status, approval_stage, production_stage,
-        drive_url, drive_file_id, preview_url, thumbnail_url, script_text, script_html,
+        drive_url, drive_file_id, preview_url, thumbnail_url, script_text,
         ad_type, platforms, deadline, notes, live_url, submitted_at, approved_at, published_at,
         created_at, updated_at, deleted_at, raw_footage_url, script_ready_at, shoot_completed_at,
         raw_footage_shared_at, editing_started_at, creator_reviewed_at, final_approved_at,
@@ -337,7 +345,8 @@ export async function getAds() {
         editor:profiles!ads_editor_id_fkey(id,name,email,avatar_url,role),
         campaign:campaigns(id,name),
         product:products(id,name,sku,image_url),
-        ad_tags(tags(id,name))
+        ad_tags(tags(id,name)),
+        ad_collaborators(profile_id)
       `)
       .order("updated_at", { ascending: false }), binReady),
     supabase
@@ -350,12 +359,12 @@ export async function getAds() {
       .from("activity_logs")
       .select("id,ad_id,actor_id,action,metadata,created_at")
       .in("action", [
-        "creator_item_created",
         "creator_changes_requested",
         "final_changes_requested_to_creator",
         "final_changes_requested_to_editor",
         "creator_requested_changes",
-        "final_changes_requested"
+        "final_changes_requested",
+        "approved_ad_reopened"
       ])
       .order("created_at", { ascending: false })
       .limit(300),
@@ -404,7 +413,8 @@ export async function getAds() {
     activity_logs: activityMap.get(ad.id) ?? []
   }));
 
-  return normalizeAds(adsWithNested);
+  const normalized = normalizeAds(adsWithNested);
+  return profile ? filterAdsForProfile(normalized, profile) : normalized;
 }
 
 export async function getAllAdsForAnalytics() {
@@ -414,7 +424,11 @@ export async function getAllAdsForAnalytics() {
     .from("ads")
     .select(
       `
-        *,
+        id, name, campaign_id, editor_id, creator_id, status, approval_stage, production_stage,
+        drive_url, drive_file_id, preview_url, thumbnail_url, ad_type, platforms, deadline,
+        submitted_at, approved_at, published_at, created_at, updated_at, deleted_at,
+        script_ready_at, shoot_completed_at, raw_footage_shared_at, editing_started_at,
+        creator_reviewed_at, final_approved_at, workflow_status_changed_at, product_id, assigned_at,
         creator:profiles!ads_creator_id_fkey(id,name,email,avatar_url,role),
         editor:profiles!ads_editor_id_fkey(id,name,email,avatar_url,role),
         campaign:campaigns(id,name),
@@ -494,7 +508,12 @@ export async function getAdDetail(adId: string) {
   }
 
   const [versionsResult, commentsResult, annotationsResult, reviewsResult, activityResult, collaboratorsResult] = detailResults;
-  const normalizedAd = normalizeAds([{ ...ad, activity_logs: activityResult.data, review_actions: reviewsResult.data }])[0];
+  const normalizedAd = normalizeAds([{
+    ...ad,
+    script_html: resolveScriptHtml((ad as { script_html?: string | null }).script_html, (ad as { script_text?: string | null }).script_text) || null,
+    activity_logs: activityResult.data,
+    review_actions: reviewsResult.data
+  }])[0];
   const latestChangeAction = (reviewsResult.data ?? []).find((r: { decision: string }) => r.decision === "request_changes");
   if (latestChangeAction && !normalizedAd.latest_change_request) {
     normalizedAd.latest_change_request = {
@@ -541,6 +560,7 @@ export async function getAnalyticsActivityLogs() {
     .from("activity_logs")
     .select("id,ad_id,actor_id,action,metadata,created_at")
     .not("ad_id", "is", null)
+    .not("metadata", "is", null)
     .order("created_at", { ascending: true });
   if (error) throw error;
   return (data ?? []) as ActivityLog[];
@@ -550,7 +570,7 @@ export async function getAnalyticsReviewActions() {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("review_actions")
-    .select("id,ad_id,reviewer_id,decision,note,created_at")
+    .select("id,ad_id,reviewer_id,decision,created_at")
     .order("created_at", { ascending: true });
   if (error) throw error;
   return (data ?? []) as ReviewAction[];
@@ -560,6 +580,7 @@ function normalizeAds(rows: unknown[]) {
   return rows.map((row) => {
     const record = row as AdWithRelations & {
       ad_tags?: { tags?: { id: string; name: string } | null }[];
+      ad_collaborators?: { profile_id?: string | null }[];
       ad_versions?: { id: string }[];
       review_actions?: { id: string; decision: string; note: string | null; created_at: string; reviewer?: Pick<Profile, "id" | "name" | "role"> | null }[];
       activity_logs?: { id: string; action: string; actor_id?: string | null; metadata?: Record<string, unknown> | null; created_at: string }[];
@@ -616,13 +637,16 @@ function normalizeAds(rows: unknown[]) {
 
     return {
       ...record,
-      script_html: resolveScriptHtml(record.script_html, record.script_text) || null,
+      script_html: record.script_html ? (resolveScriptHtml(record.script_html, record.script_text) || null) : null,
       version_count: record.ad_versions?.length ?? record.version_count,
       latest_change_request: latestChange ? {
         ...latestChange,
         target_role: reviewSubmissionType === "creator_resubmission" ? "creator" : "editor"
       } : null,
       review_submission_type: reviewSubmissionType,
+      collaborator_ids: (record.ad_collaborators ?? [])
+        .map((item) => item.profile_id)
+        .filter((id): id is string => Boolean(id)),
       tags: (record.ad_tags ?? [])
         .map((item) => item.tags)
         .filter(Boolean) as { id: string; name: string }[]
@@ -752,7 +776,12 @@ export async function getCampaignsWithOverview(profile?: Profile): Promise<Campa
       .from("ads")
       .select(
         `
-          *,
+          id, name, campaign_id, editor_id, creator_id, status, approval_stage, production_stage,
+          drive_url, drive_file_id, preview_url, thumbnail_url, script_text,
+          ad_type, platforms, deadline, notes, live_url, submitted_at, approved_at, published_at,
+          created_at, updated_at, deleted_at, raw_footage_url, script_ready_at, shoot_completed_at,
+          raw_footage_shared_at, editing_started_at, creator_reviewed_at, final_approved_at,
+          workflow_status_changed_at, editor_notes, product_id, assigned_at,
           creator:profiles!ads_creator_id_fkey(id,name,email,avatar_url,role),
           editor:profiles!ads_editor_id_fkey(id,name,email,avatar_url,role),
           campaign:campaigns(id,name),
@@ -769,6 +798,9 @@ export async function getCampaignsWithOverview(profile?: Profile): Promise<Campa
 
   if (campaignsResult.error) {
     throw campaignsResult.error;
+  }
+  if (adsResult.error) {
+    throw adsResult.error;
   }
 
   const rawCampaigns = (campaignsResult.data ?? []) as Campaign[];

@@ -14,6 +14,7 @@ import { createMediaAccessToken } from "@/lib/media-token";
 import { LIBRARY_CACHE_TTL_MS, libraryCache } from "@/lib/library-cache";
 import { LIBRARY_QUEUE_COOKIE, LIBRARY_REVIEW_TAB_COOKIE, parseLibraryReviewTab } from "@/lib/library-tab-state";
 import { readDashboardFilters } from "@/lib/dashboard-filter-state";
+import { filterAdsForProfile } from "@/lib/permissions";
 import { queueForRole, queuesForRole } from "@/lib/work-queues";
 import type { AdWithRelations, AppSettings, Campaign, Product, Profile } from "@/lib/types";
 
@@ -53,23 +54,20 @@ async function safeQuery<T>(promise: Promise<T>, fallback: T, name: string): Pro
   }
 }
 
-async function fetchAdsWithRetry(fallbackAds: AdWithRelations[] = []): Promise<AdWithRelations[]> {
+async function fetchAdsWithRetry(
+  profile: Profile,
+  fallbackAds: AdWithRelations[] = []
+): Promise<{ ads: AdWithRelations[]; fresh: boolean }> {
   try {
-    return await getAds();
+    return { ads: await getAds(profile), fresh: true };
   } catch (firstErr) {
     console.warn("[LibraryPage] getAds encountered an issue, retrying once...", firstErr instanceof Error ? firstErr.message : firstErr);
     try {
-      return await getAds();
+      return { ads: await getAds(profile), fresh: true };
     } catch (secondErr) {
-      console.error("[LibraryPage] getAds retry failed, using fallback:", secondErr instanceof Error ? secondErr.message : secondErr);
-      if (fallbackAds.length > 0) return fallbackAds;
-      // Search for any existing cached snapshot in libraryCache before falling back to empty
-      for (const entry of libraryCache.values()) {
-        if (entry.ads && entry.ads.length > 0) {
-          return entry.ads;
-        }
-      }
-      return [];
+      console.error("[LibraryPage] getAds retry failed, using user-scoped fallback:", secondErr instanceof Error ? secondErr.message : secondErr);
+      // Strictly use only this user's own fallback snapshot; never read across libraryCache.values() from other users.
+      return { ads: fallbackAds, fresh: false };
     }
   }
 }
@@ -83,7 +81,11 @@ export default async function LibraryPage({
   // URL wins (deep links, Home shortcuts); otherwise restore the last opened tab.
   const requestedQueue = (Array.isArray(query.queue) ? query.queue[0] : query.queue) ?? cookieStore.get(LIBRARY_QUEUE_COOKIE)?.value;
   const initialQueue = queueForRole(profile.role, requestedQueue) ?? queuesForRole(profile.role)[0].key;
-  const requestedReviewTab = (Array.isArray(query.review) ? query.review[0] : query.review) ?? cookieStore.get(LIBRARY_REVIEW_TAB_COOKIE)?.value;
+  const urlReviewTab = Array.isArray(query.review) ? query.review[0] : query.review;
+  const requestedReviewTab =
+    profile.role === "content_creator" || profile.role === "editor"
+      ? urlReviewTab
+      : (urlReviewTab ?? cookieStore.get(LIBRARY_REVIEW_TAB_COOKIE)?.value);
   const initialReviewTab = parseLibraryReviewTab(requestedReviewTab) ?? "all";
 
   // Pre-parse filters from query parameters on the server for instant SSR hydration
@@ -112,17 +114,17 @@ export default async function LibraryPage({
   let settings: AppSettings;
 
   if (cached && now - cached.timestamp < CACHE_TTL_MS) {
-    ads = cached.ads;
+    settings = cached.settings;
+    ads = filterAdsForProfile(cached.ads, profile, settings);
     campaigns = cached.campaigns;
     products = cached.products;
     profiles = cached.profiles;
     tags = cached.tags;
     editorWorkloads = cached.editorWorkloads;
-    settings = cached.settings;
   } else {
-    const [freshAds, freshCampaigns, freshProducts, freshProfiles, freshTags, freshWorkloads, freshSettings] =
+    const [adsResult, freshCampaigns, freshProducts, freshProfiles, freshTags, freshWorkloads, freshSettings] =
       await Promise.all([
-        fetchAdsWithRetry(cached?.ads ?? []),
+        fetchAdsWithRetry(profile, cached?.ads ?? []),
         safeQuery(getCampaigns(), cached?.campaigns ?? [], "campaigns"),
         safeQuery(getProducts(), cached?.products ?? [], "products"),
         safeQuery(getProfiles(), cached?.profiles ?? [], "profiles"),
@@ -131,15 +133,15 @@ export default async function LibraryPage({
         safeQuery(getAppSettings(), cached?.settings ?? defaultSettings, "settings")
       ]);
 
-    ads = freshAds;
+    settings = freshSettings;
+    ads = filterAdsForProfile(adsResult.ads, profile, settings);
     campaigns = freshCampaigns;
     products = freshProducts;
     profiles = freshProfiles;
     tags = freshTags;
     editorWorkloads = freshWorkloads;
-    settings = freshSettings;
 
-    if (ads.length > 0) {
+    if (adsResult.fresh) {
       libraryCache.set(cacheKey, {
         timestamp: now,
         ads,
