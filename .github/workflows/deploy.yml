@@ -42,29 +42,6 @@ jobs:
             ecosystem.config.cjs \
             next.config.ts
 
-      - name: Prepare VPS disk and Nginx before upload
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT }}
-          script: |
-            echo "=== Disk usage before cleanup ==="
-            df -h || true
-            rm -rf /home/deployer/apps/satmi-ads/.next/cache /home/deployer/apps/satmi-ads/release.tar.gz 2>/dev/null || true
-            find /home/deployer/static-cache -type f -mtime +2 -delete 2>/dev/null || true
-            npm cache clean --force 2>/dev/null || true
-            pm2 flush 2>/dev/null || true
-            sudo journalctl --vacuum-size=50M 2>/dev/null || true
-            sudo apt-get clean 2>/dev/null || true
-            sudo rm -f /var/log/*.gz /var/log/nginx/*.gz /var/log/*.1 /var/log/nginx/*.1 2>/dev/null || true
-            sudo truncate -s 0 /var/log/nginx/error.log /var/log/nginx/access.log 2>/dev/null || true
-            sudo mkdir -p /var/lib/nginx/body /var/lib/nginx/proxy /var/lib/nginx/fastcgi 2>/dev/null || true
-            sudo chown -R www-data:www-data /var/lib/nginx 2>/dev/null || true
-            echo "=== Disk usage after cleanup ==="
-            df -h || true
-
       - name: Upload build to VPS
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -165,6 +142,11 @@ jobs:
             if ! grep -q "127.0.0.1 ads.satmi.in" /etc/hosts 2>/dev/null; then
               echo "127.0.0.1 ads.satmi.in" | sudo tee -a /etc/hosts >/dev/null || true
             fi
+
+            sudo mkdir -p /var/lib/nginx/body /var/lib/nginx/proxy /var/lib/nginx/fastcgi 2>/dev/null || true
+            sudo chown -R www-data:www-data /var/lib/nginx 2>/dev/null || true
+            sudo rm -f /var/log/*.gz /var/log/nginx/*.gz /var/log/*.1 /var/log/nginx/*.1 2>/dev/null || true
+            find /home/deployer/static-cache -type f -mtime +2 -delete 2>/dev/null || true
 
             if [ -d /etc/nginx/conf.d ]; then
               sudo sed -i 's/# *gzip_types/gzip_types/' /etc/nginx/nginx.conf 2>/dev/null || true
