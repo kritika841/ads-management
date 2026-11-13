@@ -2,8 +2,10 @@ module.exports = {
   apps: [
     {
       name: "satmi-ads",
-      script: "npm",
-      args: "start",
+      script: "./node_modules/next/dist/bin/next",
+      args: "start -p 3000",
+      cwd: "/home/deployer/apps/satmi-ads",
+      node_args: "--max-old-space-size=640",
       env: {
         NODE_ENV: "production",
         PORT: 3000,
@@ -11,7 +13,8 @@ module.exports = {
       instances: 1,
       exec_mode: "fork",
       autorestart: true,
-      max_memory_restart: "500M",
+      max_memory_restart: "750M",
+      kill_timeout: 5000,
       out_file: "/home/deployer/logs/satmi-ads-out.log",
       error_file: "/home/deployer/logs/satmi-ads-error.log",
       time: true,
@@ -20,6 +23,7 @@ module.exports = {
       name: "satmi-ads-cron",
       script: "scripts/cron.cjs",
       cwd: "/home/deployer/apps/satmi-ads",
+      node_args: "--max-old-space-size=192",
       env: { NODE_ENV: "production" },
       instances: 1,
       exec_mode: "fork",

@@ -3,9 +3,9 @@ import { getDriveMedia } from "@/lib/drive";
 // One megabyte is enough to read metadata but not enough to sustain playback.
 // Keeping a larger leading range locally lets the browser fill a meaningful
 // buffer before it has to make a second round-trip to Drive.
-const prefixSize = 8 * 1024 * 1024;
-const cacheLifetimeMs = 10 * 60 * 1000;
-const maxEntries = 12;
+const prefixSize = 2 * 1024 * 1024;
+const cacheLifetimeMs = 3 * 60 * 1000;
+const maxEntries = 6;
 
 export type DriveMediaPrefix = {
   bytes: ArrayBuffer;
@@ -97,10 +97,8 @@ export type StreamedDrivePrefix = {
  * A second branch of the same stream captures just the leading prefix into the cache (then lets
  * go), which makes replays and seeks near the start instant without another Drive download.
  */
-export async function streamDriveMediaPrefix(fileId: string): Promise<StreamedDrivePrefix | null> {
-  // No abort signal on purpose: if the browser cancels early (e.g. to fetch a trailing moov
-  // atom first), the cache branch still finishes the bounded prefix, then the upstream closes.
-  const upstream = await getDriveMedia(fileId, "bytes=0-");
+export async function streamDriveMediaPrefix(fileId: string, signal?: AbortSignal): Promise<StreamedDrivePrefix | null> {
+  const upstream = signal ? await getDriveMedia(fileId, "bytes=0-", signal) : await getDriveMedia(fileId, "bytes=0-");
   if (!upstream?.ok || !upstream.body) return null;
 
   const contentType = upstream.headers.get("content-type") ?? "video/mp4";
@@ -142,16 +140,16 @@ export function streamFromCachedPrefix(fileId: string, prefix: DriveMediaPrefix,
   let sentPrefix = false;
 
   return new ReadableStream<Uint8Array>({
-    start() {
-      if (available < prefix.totalSize) upstream = getDriveMedia(fileId, `bytes=${available}-`, abort.signal).catch(() => null);
-    },
     async pull(controller) {
       try {
         if (!sentPrefix) {
           sentPrefix = true;
           controller.enqueue(new Uint8Array(prefix.bytes.slice(start)));
-          if (!upstream) controller.close();
+          if (available >= prefix.totalSize) controller.close();
           return;
+        }
+        if (!upstream) {
+          upstream = getDriveMedia(fileId, `bytes=${available}-`, abort.signal).catch(() => null);
         }
         if (!upstreamReader) {
           const response = await upstream;

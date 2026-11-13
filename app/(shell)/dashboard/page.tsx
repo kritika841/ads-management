@@ -36,7 +36,7 @@ const defaultSettings: AppSettings = {
   updated_at: new Date().toISOString()
 };
 
-import { dashboardCache, DASHBOARD_CACHE_TTL_MS } from "@/lib/dashboard-cache";
+import { dashboardCache, DASHBOARD_CACHE_TTL_MS, setDashboardCacheEntry } from "@/lib/dashboard-cache";
 
 const cacheMap = dashboardCache;
 const CACHE_TTL_MS = DASHBOARD_CACHE_TTL_MS;
@@ -113,7 +113,7 @@ export default async function DashboardPage() {
 
     // Only update cache when getDashboardAds succeeded
     if (freshAdsResult.fresh) {
-      cacheMap.set(cacheKey, {
+      setDashboardCacheEntry(cacheKey, {
         timestamp: now,
         ads,
         profiles,

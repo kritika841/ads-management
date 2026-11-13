@@ -53,7 +53,9 @@ describe("filterAdsForProfile & canViewAdInLibrary", () => {
     role: "content_creator",
     avatar_url: null,
     active: true,
-    created_at: "2026-01-01T00:00:00Z"
+    deleted_at: null,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z"
   };
 
   const editorProfile: Profile = {
@@ -63,7 +65,9 @@ describe("filterAdsForProfile & canViewAdInLibrary", () => {
     role: "editor",
     avatar_url: null,
     active: true,
-    created_at: "2026-01-01T00:00:00Z"
+    deleted_at: null,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z"
   };
 
   const sampleAds = [

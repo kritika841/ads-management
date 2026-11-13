@@ -67,6 +67,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT }}
+          command_timeout: 25m
           envs: PROD_ENV_B64,META_TOKEN,META_ACCOUNT,GH_TOKEN,ASSET_URL
           script: |
             set -e
@@ -78,6 +79,8 @@ jobs:
               "$ASSET_URL" \
               -o "$APP_DIR/release.tar.gz"
             ls -lh "$APP_DIR/release.tar.gz"
+            tar -xzf "$APP_DIR/release.tar.gz" -C "$APP_DIR" deploy.sh ecosystem.config.cjs
+            chmod +x "$APP_DIR/deploy.sh"
             ENV_FILE="$APP_DIR/.env"
             touch "$ENV_FILE"
 
@@ -127,12 +130,22 @@ jobs:
             console.log("Verified .env keys on VPS (" + keys.length + "):", keys.join(", "));
             '
 
+            # Fix kernel 'TCP: out of memory -- consider tuning tcp_mem' on 4GB VPS
+            printf "net.ipv4.tcp_mem = 65536 131072 262144\nnet.ipv4.tcp_rmem = 4096 87380 16777216\nnet.ipv4.tcp_wmem = 4096 65536 16777216\nnet.core.somaxconn = 4096\nvm.swappiness = 20\n" | sudo tee /etc/sysctl.d/99-adflow-network.conf >/dev/null || true
+            sudo sysctl -p /etc/sysctl.d/99-adflow-network.conf >/dev/null 2>&1 || true
+
             if [ -f /etc/adflow-supabase/postgrest.conf ]; then
-              sudo sed -i 's/^db-max-rows = .*/db-max-rows = 100000/g' /etc/adflow-supabase/postgrest.conf || true
-              sudo systemctl restart adflow-postgrest || true
+              PGRST_BEFORE="$(sudo sha256sum /etc/adflow-supabase/postgrest.conf | awk '{print $1}')"
+              sudo sed -i 's/^db-max-rows = .*/db-max-rows = 50000/g' /etc/adflow-supabase/postgrest.conf || true
+              sudo sed -i 's/^db-pool = .*/db-pool = 10/g' /etc/adflow-supabase/postgrest.conf || true
+              PGRST_AFTER="$(sudo sha256sum /etc/adflow-supabase/postgrest.conf | awk '{print $1}')"
+              if [ "$PGRST_BEFORE" != "$PGRST_AFTER" ]; then
+                sudo systemctl restart adflow-postgrest || true
+              fi
             fi
 
             if [ -f /etc/adflow-supabase/gotrue.env ]; then
+              GOTRUE_BEFORE="$(sudo sha256sum /etc/adflow-supabase/gotrue.env | awk '{print $1}')"
               sudo sed -i 's/^GOTRUE_SMTP_HOST=.*/GOTRUE_SMTP_HOST=smtp.gmail.com/' /etc/adflow-supabase/gotrue.env || true
               sudo grep -q '^GOTRUE_SMTP_HOST=' /etc/adflow-supabase/gotrue.env || echo 'GOTRUE_SMTP_HOST=smtp.gmail.com' | sudo tee -a /etc/adflow-supabase/gotrue.env
               sudo sed -i 's/^GOTRUE_SMTP_PORT=.*/GOTRUE_SMTP_PORT=587/' /etc/adflow-supabase/gotrue.env || true
@@ -147,7 +160,10 @@ jobs:
               sudo grep -q '^GOTRUE_SMTP_SENDER_NAME=' /etc/adflow-supabase/gotrue.env || echo 'GOTRUE_SMTP_SENDER_NAME=AdFlow' | sudo tee -a /etc/adflow-supabase/gotrue.env
               sudo sed -i 's/^GOTRUE_MAILER_AUTOCONFIRM=.*/GOTRUE_MAILER_AUTOCONFIRM=false/' /etc/adflow-supabase/gotrue.env || true
               sudo grep -q '^GOTRUE_MAILER_AUTOCONFIRM=' /etc/adflow-supabase/gotrue.env || echo 'GOTRUE_MAILER_AUTOCONFIRM=false' | sudo tee -a /etc/adflow-supabase/gotrue.env
-              sudo systemctl restart adflow-auth || true
+              GOTRUE_AFTER="$(sudo sha256sum /etc/adflow-supabase/gotrue.env | awk '{print $1}')"
+              if [ "$GOTRUE_BEFORE" != "$GOTRUE_AFTER" ]; then
+                sudo systemctl restart adflow-auth || true
+              fi
             fi
 
             if ! grep -q "127.0.0.1 ads.satmi.in" /etc/hosts 2>/dev/null; then
@@ -169,8 +185,12 @@ jobs:
 
             if [ -f /home/deployer/apps/satmi-ads/supabase/migrations/20261029120000_fix_creator_changes_and_collaborator_rls.sql ]; then
               sudo -u postgres psql -p 5433 -d postgres -v ON_ERROR_STOP=1 < /home/deployer/apps/satmi-ads/supabase/migrations/20261029120000_fix_creator_changes_and_collaborator_rls.sql
-              sudo systemctl restart adflow-postgrest || true
+              sudo -u postgres psql -p 5433 -d postgres -c "NOTIFY pgrst, 'reload schema';" || true
             fi
+
+            echo "=== Post-deploy VPS memory & PM2 status ==="
+            free -m || true
+            pm2 list || true
 
       - name: Cleanup temporary deploy release
         if: always()

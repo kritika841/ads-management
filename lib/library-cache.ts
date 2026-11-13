@@ -21,12 +21,30 @@ export type CachedLibraryData = {
 };
 
 export const LIBRARY_CACHE_TTL_MS = 10_000;
+const MAX_LIBRARY_CACHE_ENTRIES = 8;
+const MAX_STALE_RETENTION_MS = 5 * 60_000;
 
 const globalLibraryCache = globalThis as typeof globalThis & {
   __adflowLibraryCache?: Map<string, CachedLibraryData>;
 };
 
 export const libraryCache: Map<string, CachedLibraryData> = (globalLibraryCache.__adflowLibraryCache ??= new Map());
+
+export function setLibraryCacheEntry(key: string, entry: CachedLibraryData) {
+  const now = Date.now();
+  for (const [existingKey, existing] of libraryCache.entries()) {
+    if (now - existing.timestamp > MAX_STALE_RETENTION_MS) {
+      libraryCache.delete(existingKey);
+    }
+  }
+  libraryCache.delete(key);
+  libraryCache.set(key, entry);
+  while (libraryCache.size > MAX_LIBRARY_CACHE_ENTRIES) {
+    const oldestKey = libraryCache.keys().next().value;
+    if (!oldestKey) break;
+    libraryCache.delete(oldestKey);
+  }
+}
 
 /** Drop every cached library snapshot so the next render reads fresh data. */
 export function invalidateLibraryCache() {

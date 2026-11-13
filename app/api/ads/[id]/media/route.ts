@@ -55,7 +55,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       //    and capture the prefix in the background. We never make the browser wait for the
       //    prefix to download before it receives its first byte.
       if (range.start === 0 && range.end === null) {
-        const streamed = await streamDriveMediaPrefix(fileId);
+        const streamed = await streamDriveMediaPrefix(fileId, request.signal);
         if (streamed) {
           const headers = new Headers({
             "Accept-Ranges": "bytes",

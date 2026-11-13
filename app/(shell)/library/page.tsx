@@ -11,7 +11,7 @@ import {
   getTags
 } from "@/lib/data";
 import { createMediaAccessToken } from "@/lib/media-token";
-import { LIBRARY_CACHE_TTL_MS, libraryCache } from "@/lib/library-cache";
+import { LIBRARY_CACHE_TTL_MS, libraryCache, setLibraryCacheEntry } from "@/lib/library-cache";
 import { LIBRARY_QUEUE_COOKIE, LIBRARY_REVIEW_TAB_COOKIE, parseLibraryReviewTab } from "@/lib/library-tab-state";
 import { readDashboardFilters } from "@/lib/dashboard-filter-state";
 import { filterAdsForProfile } from "@/lib/permissions";
@@ -142,7 +142,7 @@ export default async function LibraryPage({
     editorWorkloads = freshWorkloads;
 
     if (adsResult.fresh) {
-      libraryCache.set(cacheKey, {
+      setLibraryCacheEntry(cacheKey, {
         timestamp: now,
         ads,
         campaigns,
