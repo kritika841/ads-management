@@ -1,6 +1,4 @@
 CRON_TZ=Asia/Kolkata
-# The wrapper owns the shared lock and timeout so cron, PM2, manual runs, and the
-# GitHub fallback can never process the same clip concurrently.
-*/10 * * * * /bin/bash /home/deployer/apps/satmi-ads/scripts/run-ingest-cron.sh >> /home/deployer/logs/ingest-clip-segments.log 2>&1
-# Fixed daily audit/retry pass at 00:15 IST.
+# satmi-ads-cron (PM2) runs the recurring ingest schedule; crontab keeps only the
+# daily 00:15 IST fallback pass so duplicate processes do not contend on 1 vCPU.
 15 0 * * * /bin/bash /home/deployer/apps/satmi-ads/scripts/run-ingest-cron.sh >> /home/deployer/logs/ingest-clip-segments.log 2>&1

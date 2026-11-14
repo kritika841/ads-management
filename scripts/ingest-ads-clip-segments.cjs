@@ -6,7 +6,7 @@ const { GoogleGenAI } = require("@google/genai");
 const { createClient } = require("@supabase/supabase-js");
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYS;
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_URL = process.env.SUPABASE_INTERNAL_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON;
 const GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH;
@@ -403,6 +403,19 @@ async function claimRawClipForProcessing(supabase, rawClipId, options = {}) {
 
 async function syncRawClipsCatalog(supabase, drive, options = {}) {
   const { targetClipName = null } = options;
+  const forceCatalogSync = process.argv.includes("--force-catalog-sync") || Boolean(targetClipName);
+  const stampFile = path.join(os.tmpdir(), "adflow-raw-catalog-sync.stamp");
+  if (!forceCatalogSync) {
+    try {
+      const stat = await fs.promises.stat(stampFile);
+      if (Date.now() - stat.mtimeMs < 60 * 60 * 1000) {
+        console.log("Catalog sync skipped (ran within the last 60 minutes).");
+        return;
+      }
+    } catch {
+      // Stamp does not exist yet; proceed with catalog sync.
+    }
+  }
   let offset = 0;
   let processed = 0;
   while (true) {
@@ -453,6 +466,9 @@ async function syncRawClipsCatalog(supabase, drive, options = {}) {
 
     if (targetClipName || sources.length < CATALOG_PAGE_SIZE) break;
     offset += sources.length;
+  }
+  if (!targetClipName) {
+    await fs.promises.writeFile(path.join(os.tmpdir(), "adflow-raw-catalog-sync.stamp"), String(Date.now())).catch(() => {});
   }
   console.log(`Catalog sync checked ${processed} independent Ad Library source(s).`);
 }
@@ -657,32 +673,50 @@ async function repairSegmentIngestState(supabase) {
   let reconciledDone = 0;
   let requeuedTransient = 0;
 
+  // Only inspect clips that actually need state/caption reconciliation instead of dumping
+  // all 50,000+ raw_clip_segments rows into PostgREST and Node memory on every cron run.
   const { data: rawClipRows, error: rawClipRowsError } = await supabase
     .from("raw_clips")
-    .select("id, ingest_status, ingest_error, preview_description");
+    .select("id, ingest_status, ingest_error, preview_description")
+    .or("ingest_status.neq.done,preview_description.is.null")
+    .limit(500);
 
-  if (rawClipRowsError && !String(rawClipRowsError.message || "").includes("relation \"public.raw_clips\" does not exist")) {
+  if (rawClipRowsError) {
+    if (String(rawClipRowsError.message || "").includes("relation \"public.raw_clips\" does not exist")) {
+      return { reconciledDone, requeuedTransient };
+    }
     throw new Error(`Failed to load raw clips for repair: ${rawClipRowsError.message}`);
   }
 
-  const { data: segmentRows, error: segmentError } = await supabase
-    .from("raw_clip_segments")
-    .select("raw_clip_id, segment_index, visual_description")
-    .order("raw_clip_id", { ascending: true })
-    .order("segment_index", { ascending: true });
-
-  if (segmentError) {
-    throw new Error(`Failed to load raw clip segments for repair: ${segmentError.message}`);
+  const candidates = rawClipRows || [];
+  if (candidates.length === 0) {
+    return { reconciledDone, requeuedTransient };
   }
 
   const firstSegmentByRawClipId = new Map();
-  for (const segment of segmentRows || []) {
-    if (segment.raw_clip_id && !firstSegmentByRawClipId.has(segment.raw_clip_id) && String(segment.visual_description || "").trim()) {
-      firstSegmentByRawClipId.set(segment.raw_clip_id, String(segment.visual_description).trim());
+  const chunkSize = 100;
+  for (let i = 0; i < candidates.length; i += chunkSize) {
+    const ids = candidates.slice(i, i + chunkSize).map((row) => row.id);
+    const { data: segmentRows, error: segmentError } = await supabase
+      .from("raw_clip_segments")
+      .select("raw_clip_id, segment_index, visual_description")
+      .in("raw_clip_id", ids)
+      .lte("segment_index", 1)
+      .order("raw_clip_id", { ascending: true })
+      .order("segment_index", { ascending: true });
+
+    if (segmentError) {
+      throw new Error(`Failed to load raw clip segments for repair: ${segmentError.message}`);
+    }
+
+    for (const segment of segmentRows || []) {
+      if (segment.raw_clip_id && !firstSegmentByRawClipId.has(segment.raw_clip_id) && String(segment.visual_description || "").trim()) {
+        firstSegmentByRawClipId.set(segment.raw_clip_id, String(segment.visual_description).trim());
+      }
     }
   }
 
-  for (const rawClip of rawClipRows || []) {
+  for (const rawClip of candidates) {
     const previewDescription = firstSegmentByRawClipId.get(rawClip.id);
     if (!previewDescription) {
       continue;

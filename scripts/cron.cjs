@@ -4,7 +4,7 @@ const http = require("http");
 const { spawn } = require("child_process");
 const dotenv = require("dotenv");
 
-const RUN_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+const RUN_INTERVAL_MS = 20 * 60 * 1000; // 20 minutes (friendly to 1-vCPU VPS)
 const META_SYNC_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 const RECYCLE_BIN_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
 let running = false;
@@ -118,10 +118,10 @@ function runRecycleBinSweep() {
   req.end();
 }
 
-// Run immediately on startup
-runIngest();
-setTimeout(runMetaSync, 15000); // 15s after startup to allow server to be ready
-setTimeout(runRecycleBinSweep, 45000);
+// Stagger initial runs after startup/reboot so Next.js and Nginx warm up without CPU contention
+setTimeout(runIngest, 2 * 60 * 1000);
+setTimeout(runMetaSync, 3 * 60 * 1000);
+setTimeout(runRecycleBinSweep, 5 * 60 * 1000);
 
 // Schedule subsequent runs
 setInterval(runIngest, RUN_INTERVAL_MS);

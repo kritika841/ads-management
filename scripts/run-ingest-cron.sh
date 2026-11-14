@@ -39,8 +39,16 @@ echo "[scheduler] Run started at $(date --iso-8601=seconds)"
 run_worker() {
   local label="$1"
   shift
+  local prefix=()
+  if command -v nice >/dev/null 2>&1; then
+    prefix+=(nice -n 19)
+  fi
+  if command -v ionice >/dev/null 2>&1; then
+    prefix+=(ionice -c 2 -n 7)
+  fi
   set +e
-  "$NODE_BIN" -r dotenv/config "$@"
+  SUPABASE_INTERNAL_URL="${SUPABASE_INTERNAL_URL:-http://127.0.0.1:8000}" \
+    "${prefix[@]}" "$NODE_BIN" --max-old-space-size=384 -r dotenv/config "$@"
   local status=$?
   set -e
 

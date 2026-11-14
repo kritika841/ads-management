@@ -54,6 +54,24 @@ jobs:
           ASSET_URL=$(gh release view deploy-artifact --json assets -q '.assets[0].apiUrl')
           echo "asset_url=$ASSET_URL" >> "$GITHUB_OUTPUT"
 
+      - name: Wait for VPS SSH reachability
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+        run: |
+          PORT="${VPS_PORT:-22}"
+          echo "Checking SSH reachability on ${VPS_HOST}:${PORT}..."
+          for attempt in $(seq 1 90); do
+            if nc -z -w 5 "$VPS_HOST" "$PORT" 2>/dev/null; then
+              echo "VPS SSH is reachable (attempt $attempt)."
+              exit 0
+            fi
+            echo "Attempt $attempt/90: VPS not reachable yet (waiting 10s for reboot/network)..."
+            sleep 10
+          done
+          echo "VPS did not respond on SSH within 15 minutes. Reboot the VPS in Hostinger hPanel and re-run this workflow."
+          exit 1
+
       - name: Extract and restart on VPS
         uses: appleboy/ssh-action@v1.0.3
         env:
@@ -104,6 +122,7 @@ jobs:
             }
             const updates = {
               NEXT_PUBLIC_SUPABASE_URL: "\"https://ads.satmi.in\"",
+              SUPABASE_INTERNAL_URL: "\"http://127.0.0.1:8000\"",
               NEXT_PUBLIC_SUPABASE_ANON_KEY: "\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkZmxvdy12cHMiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc4MzU4NTI5MSwiZXhwIjoyMDk5MTYxMjkxfQ.PNmYQFpq0Yu7QwCq08JAivVQ9WCS3rWzT09CwPs8xZg\"",
               SUPABASE_SERVICE_ROLE_KEY: "\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkZmxvdy12cHMiLCJyb2xlIjoic2VydmljZV9yb2xlIiwiaWF0IjoxNzgzNTg1MjkxLCJleHAiOjIwOTkxNjEyOTF9.kcaaZgkR7f_65dSnvynjZ22cqdU451Q934r0JwvnU-8\"",
               NEXT_PUBLIC_APP_URL: "\"https://ads.satmi.in\"",
@@ -130,9 +149,18 @@ jobs:
             console.log("Verified .env keys on VPS (" + keys.length + "):", keys.join(", "));
             '
 
-            # Fix kernel 'TCP: out of memory -- consider tuning tcp_mem' on 4GB VPS
-            printf "net.ipv4.tcp_mem = 65536 131072 262144\nnet.ipv4.tcp_rmem = 4096 87380 16777216\nnet.ipv4.tcp_wmem = 4096 65536 16777216\nnet.core.somaxconn = 4096\nvm.swappiness = 20\n" | sudo tee /etc/sysctl.d/99-adflow-network.conf >/dev/null || true
+            # Right-size kernel TCP memory (tcp_mem is in 4KB pages: 32768/49152/65536 = 128MB/192MB/256MB)
+            # Yesterday's 262144 pages (1GB unswappable kernel memory) + 16MB socket buffers starved 4GB RAM and caused kswapd 522 livelocks.
+            printf "net.ipv4.tcp_mem = 32768 49152 65536\nnet.ipv4.tcp_rmem = 4096 87380 4194304\nnet.ipv4.tcp_wmem = 4096 65536 4194304\nnet.ipv4.tcp_fin_timeout = 15\nnet.ipv4.tcp_tw_reuse = 1\nnet.core.somaxconn = 2048\nvm.swappiness = 10\nvm.vfs_cache_pressure = 100\n" | sudo tee /etc/sysctl.d/99-adflow-network.conf >/dev/null || true
             sudo sysctl -p /etc/sysctl.d/99-adflow-network.conf >/dev/null 2>&1 || true
+
+            # Safely clear stale swap pages if plenty of physical RAM is free
+            MEM_AVAIL=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)
+            SWAP_USED=$(free -m | awk '/^Swap:/ {print $3}' 2>/dev/null || echo 0)
+            if [ "$SWAP_USED" -gt 500 ] && [ "$MEM_AVAIL" -gt $((SWAP_USED + 600)) ]; then
+              echo "Flushing $SWAP_USED MB of stale swap into $MEM_AVAIL MB available RAM..."
+              sudo swapoff -a && sudo swapon -a || true
+            fi
 
             if [ -f /etc/adflow-supabase/postgrest.conf ]; then
               PGRST_BEFORE="$(sudo sha256sum /etc/adflow-supabase/postgrest.conf | awk '{print $1}')"
@@ -177,7 +205,9 @@ jobs:
 
             if [ -d /etc/nginx/conf.d ]; then
               sudo sed -i 's/# *gzip_types/gzip_types/' /etc/nginx/nginx.conf 2>/dev/null || true
-              printf "client_header_buffer_size 16k;\nlarge_client_header_buffers 8 64k;\nproxy_buffering off;\nproxy_request_buffering off;\nproxy_read_timeout 120s;\nproxy_send_timeout 120s;\n" | sudo tee /etc/nginx/conf.d/adflow-buffers.conf >/dev/null || true
+              # Keep Nginx proxy buffering enabled globally so fast local upstreams (PostgREST, Next.js, orders)
+              # hand off responses immediately without holding sockets/DB pool slots; streaming media uses X-Accel-Buffering: no.
+              printf "client_header_buffer_size 16k;\nlarge_client_header_buffers 8 64k;\nproxy_read_timeout 120s;\nproxy_send_timeout 120s;\n" | sudo tee /etc/nginx/conf.d/adflow-buffers.conf >/dev/null || true
               sudo nginx -t && sudo systemctl reload nginx || sudo rm -f /etc/nginx/conf.d/adflow-buffers.conf
             fi
 

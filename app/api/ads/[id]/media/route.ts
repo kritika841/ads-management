@@ -43,7 +43,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
               "Cache-Control": CACHE_CONTROL,
               "Content-Length": String(cached.totalSize - range.start),
               "Content-Range": `bytes ${range.start}-${cached.totalSize - 1}/${cached.totalSize}`,
-              "Content-Type": cached.contentType
+              "Content-Type": cached.contentType,
+              "X-Accel-Buffering": "no"
             }
           });
         }
@@ -60,7 +61,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           const headers = new Headers({
             "Accept-Ranges": "bytes",
             "Cache-Control": CACHE_CONTROL,
-            "Content-Type": streamed.contentType
+            "Content-Type": streamed.contentType,
+            "X-Accel-Buffering": "no"
           });
           if (streamed.contentLength) headers.set("Content-Length", streamed.contentLength);
           if (streamed.contentRange) headers.set("Content-Range", streamed.contentRange);
@@ -81,6 +83,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       }
       if (!headers.has("accept-ranges")) headers.set("Accept-Ranges", "bytes");
       headers.set("Cache-Control", CACHE_CONTROL);
+      headers.set("X-Accel-Buffering", "no");
       return new Response(media.body, { status: media.status, headers });
     }
     // Service account unavailable — redirect to public Drive download URL (works for shared files)
