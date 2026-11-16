@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Link2, Loader2, Plus, Tags, UploadCloud } from "lucide-react";
-import { getNextAdName, saveCreatorItem, submitFinalClipByReviewer, adminOverrideCreativeEdit } from "@/app/actions/ads";
+import { getNextAdName, getPendingTaskManagerCreativeIds, saveCreatorItem, submitFinalClipByReviewer, adminOverrideCreativeEdit } from "@/app/actions/ads";
 import { runServerAction } from "@/lib/client-action";
 import { RichTextEditor } from "@/components/dashboard/rich-text-editor";
 import { Button } from "@/components/ui/button";
@@ -61,6 +61,7 @@ export function CreatorItemForm({
 
   const [name, setName] = useState(initialAd?.name ?? "");
   const [nameLoading, setNameLoading] = useState(!initialAd);
+  const [pendingTaskManagerIds, setPendingTaskManagerIds] = useState<string[]>([]);
   const [campaignId, setCampaignId] = useState(initialAd?.campaign_id ?? defaultCampaignId ?? campaigns[0]?.id ?? "");
   const [productId, setProductId] = useState(initialAd?.product_id ?? "");
   const [creatorId, setCreatorId] = useState(defaultCreatorId);
@@ -101,9 +102,16 @@ export function CreatorItemForm({
   useEffect(() => {
     if (initialAd || !creatorId) return;
     setNameLoading(true);
-    getNextAdName(creatorId)
-      .then((next) => setName(next))
-      .catch(() => {/* keep empty */})
+    getPendingTaskManagerCreativeIds(creatorId)
+      .then((res) => {
+        setName(res.nextCreativeId);
+        setPendingTaskManagerIds(res.pendingCreativeIds || []);
+      })
+      .catch(() => {
+        getNextAdName(creatorId)
+          .then((next) => setName(next))
+          .catch(() => {});
+      })
       .finally(() => setNameLoading(false));
   }, [creatorId, initialAd]);
 
@@ -234,7 +242,27 @@ export function CreatorItemForm({
         </div>
       ) : null}
       <div className="grid gap-4 md:grid-cols-2">
-        <Field label="Ad name" hint={initialAd ? undefined : "Auto-generated unique ID — read only."}><div className="relative"><Input value={name} readOnly={!initialAd} className={`font-mono tracking-widest ${!initialAd ? "bg-muted cursor-default" : ""}`} aria-busy={nameLoading} />{nameLoading ? <Loader2 className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" aria-hidden /> : null}</div></Field>
+        <Field label="Ad name" hint={initialAd ? undefined : pendingTaskManagerIds.length > 0 ? "Fetched from Task Manager assigned tasks." : "Auto-generated unique ID — read only."}>
+          <div className="relative">
+            <Input value={name} readOnly={!initialAd} className={`font-mono tracking-widest ${!initialAd ? "bg-muted cursor-default" : ""}`} aria-busy={nameLoading} />
+            {nameLoading ? <Loader2 className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" aria-hidden /> : null}
+          </div>
+          {!initialAd && pendingTaskManagerIds.length > 0 ? (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] font-medium text-muted-foreground">Task Manager Queue:</span>
+              {pendingTaskManagerIds.map((cid) => (
+                <button
+                  key={cid}
+                  type="button"
+                  onClick={() => setName(cid)}
+                  className={`rounded-md border px-2 py-0.5 font-mono text-[11px] font-semibold transition-colors ${name === cid ? "border-primary bg-accent text-primary" : "border-border bg-card text-muted-foreground hover:border-ring/50"}`}
+                >
+                  {cid}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </Field>
         <Field label="Campaign"><Select value={campaignId} onChange={(event) => setCampaignId(event.target.value)}>{campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}</Select></Field>
         <Field label="Product"><Select value={productId} onChange={(event) => setProductId(event.target.value)}><option value="">Choose product</option>{products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</Select></Field>
         {/* In override mode, creator is read-only */}

@@ -2036,7 +2036,10 @@ function notificationTitle(decision: "approve" | "request_changes", status: stri
   return "Changes requested";
 }
 
-export async function getNextAdName(creatorId: string): Promise<string> {
+export async function getPendingTaskManagerCreativeIds(creatorId: string): Promise<{
+  nextCreativeId: string;
+  pendingCreativeIds: string[];
+}> {
   await requireProfile();
   const admin = createSupabaseAdminClient();
   const { data: profile } = await admin
@@ -2046,22 +2049,96 @@ export async function getNextAdName(creatorId: string): Promise<string> {
     .maybeSingle();
 
   const rawName = profile?.name ?? "";
-  const prefix = rawName.replace(/[^a-zA-Z]/g, "").slice(0, 3).toUpperCase();
-  if (!prefix) return "AD0001";
+  const prefix = rawName.replace(/[^a-zA-Z]/g, "").slice(0, 3).toUpperCase() || "ADX";
 
-  // Find all ads whose name matches PREFIX#### pattern for this user
-  const { data: existing } = await admin
-    .from("ads")
-    .select("name")
-    .ilike("name", `${prefix}%`);
+  // 1. Query Task Manager Creative ID API (local VPS port 4000 first, then https://tasks.satmi.in)
+  const taskManagerEndpoints = [
+    `http://127.0.0.1:4000/api/adflow/creative-ids?creatorId=${encodeURIComponent(creatorId)}`,
+    `https://tasks.satmi.in/api/adflow/creative-ids?creatorId=${encodeURIComponent(creatorId)}`
+  ];
 
-  const max = (existing ?? []).reduce((acc, { name }) => {
+  for (const endpoint of taskManagerEndpoints) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 2000);
+      const res = await fetch(endpoint, {
+        cache: "no-store",
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.nextCreativeId) {
+          return {
+            nextCreativeId: String(data.nextCreativeId),
+            pendingCreativeIds: Array.isArray(data.pendingCreativeIds)
+              ? data.pendingCreativeIds.map(String)
+              : []
+          };
+        }
+      }
+    } catch {
+      // Fall through to next endpoint or DB computation
+    }
+  }
+
+  // 2. Fallback: Check existing `ads` and `daily_team_targets` in Supabase
+  const [{ data: existingAds }, { data: targetRows }] = await Promise.all([
+    admin.from("ads").select("name, deleted_at").ilike("name", `${prefix}%`),
+    admin.from("daily_team_targets").select("task_name, notes").eq("user_id", creatorId)
+  ]);
+
+  const existingAdNames = new Set(
+    (existingAds ?? [])
+      .filter((a) => !a.deleted_at && a.name)
+      .map((a) => a.name.trim().toUpperCase())
+  );
+
+  let max = (existingAds ?? []).reduce((acc, { name }) => {
     const suffix = name.slice(prefix.length);
     const num = parseInt(suffix, 10);
     return !isNaN(num) && String(num).padStart(4, "0") === suffix ? Math.max(acc, num) : acc;
   }, 0);
 
-  return `${prefix}${String(max + 1).padStart(4, "0")}`;
+  const pendingFromTargets: string[] = [];
+  for (const row of targetRows ?? []) {
+    let cid = "";
+    if (row.notes && row.notes.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(row.notes);
+        if (!parsed.isArchived && parsed.creativeName) {
+          cid = String(parsed.creativeName).trim().toUpperCase();
+        }
+      } catch {}
+    }
+    if (!cid) {
+      const m = String(row.task_name || "").match(/^([A-Z]{3}\d{4})\b/i);
+      if (m) cid = m[1].toUpperCase();
+    }
+    if (cid && cid.startsWith(prefix)) {
+      const suffix = cid.slice(prefix.length);
+      const num = parseInt(suffix, 10);
+      if (!isNaN(num) && String(num).padStart(4, "0") === suffix) {
+        max = Math.max(max, num);
+        if (!existingAdNames.has(cid) && !pendingFromTargets.includes(cid)) {
+          pendingFromTargets.push(cid);
+        }
+      }
+    }
+  }
+
+  pendingFromTargets.sort();
+  const nextCreativeId = pendingFromTargets[0] || `${prefix}${String(max + 1).padStart(4, "0")}`;
+
+  return {
+    nextCreativeId,
+    pendingCreativeIds: pendingFromTargets
+  };
+}
+
+export async function getNextAdName(creatorId: string): Promise<string> {
+  const result = await getPendingTaskManagerCreativeIds(creatorId);
+  return result.nextCreativeId;
 }
 
 export async function bulkAssignCampaign(adIds: string[], campaignId: string) {
