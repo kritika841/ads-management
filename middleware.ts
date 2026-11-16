@@ -9,6 +9,7 @@ export async function middleware(request: NextRequest) {
   // and HMAC-signed video byte-range requests) to avoid saturating local sockets and CPU.
   if (
     pathname === "/api/health" ||
+    pathname === "/api/ads/revalidate" ||
     pathname.startsWith("/api/cron/") ||
     (pathname === "/api/incentives/sync" && request.headers.get("x-internal-cron") === "1") ||
     (pathname.startsWith("/api/ads/") && pathname.endsWith("/media") && searchParams.has("token"))
