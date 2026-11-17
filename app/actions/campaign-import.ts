@@ -138,7 +138,7 @@ export async function listImportableCreatives(campaignId: string) {
   const { data, error } = await liveOnly(
     admin
       .from("ads")
-      .select("id,name,status,production_stage,campaign_id,creator_id,drive_file_id,drive_url,thumbnail_url,created_at,approved_at,final_approved_at,campaign:campaigns(name),creator:profiles!ads_creator_id_fkey(name),ad_tags(tags(id,name))")
+      .select("id,name,status,production_stage,campaign_id,creator_id,drive_file_id,drive_url,thumbnail_url,created_at,approved_at,final_approved_at,campaign:campaigns!ads_campaign_id_fkey(name),creator:profiles!ads_creator_id_fkey(name),ad_tags(tags(id,name))")
       .or(`campaign_id.is.null,campaign_id.neq.${campaignId}`)
       .order("created_at", { ascending: false })
       .limit(1000),

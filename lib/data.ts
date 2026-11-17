@@ -310,7 +310,7 @@ export async function getDashboardAds(profile?: Profile): Promise<DashboardAdSum
   const binReady = await isRecycleBinReady();
   const { data, error } = await liveOnly(supabase
     .from("ads")
-    .select("id, name, production_stage, deadline, workflow_status_changed_at, creator_id, editor_id, deleted_at, campaign:campaigns(id, name), ad_collaborators(profile_id)")
+    .select("id, name, production_stage, deadline, workflow_status_changed_at, creator_id, editor_id, deleted_at, campaign:campaigns!ads_campaign_id_fkey(id, name), ad_collaborators(profile_id)")
     .order("updated_at", { ascending: false }), binReady);
 
   if (error) {
@@ -343,7 +343,7 @@ export async function getAds(profile?: Profile) {
         workflow_status_changed_at, editor_notes, product_id, assigned_at,
         creator:profiles!ads_creator_id_fkey(id,name,email,avatar_url,role),
         editor:profiles!ads_editor_id_fkey(id,name,email,avatar_url,role),
-        campaign:campaigns(id,name),
+        campaign:campaigns!ads_campaign_id_fkey(id,name),
         ad_campaigns(campaign:campaigns(id,name)),
         product:products(id,name,sku,image_url),
         ad_tags(tags(id,name)),
@@ -432,7 +432,7 @@ export async function getAllAdsForAnalytics() {
         creator_reviewed_at, final_approved_at, workflow_status_changed_at, product_id, assigned_at,
         creator:profiles!ads_creator_id_fkey(id,name,email,avatar_url,role),
         editor:profiles!ads_editor_id_fkey(id,name,email,avatar_url,role),
-        campaign:campaigns(id,name),
+        campaign:campaigns!ads_campaign_id_fkey(id,name),
         ad_campaigns(campaign:campaigns(id,name)),
         product:products(id,name,sku,image_url),
         ad_tags(tags(id,name)),
@@ -457,7 +457,7 @@ export async function getAdDetail(adId: string) {
         *,
         creator:profiles!ads_creator_id_fkey(id,name,email,avatar_url,role),
         editor:profiles!ads_editor_id_fkey(id,name,email,avatar_url,role),
-        campaign:campaigns(id,name),
+        campaign:campaigns!ads_campaign_id_fkey(id,name),
         ad_campaigns(campaign:campaigns(id,name)),
         product:products(id,name,sku,image_url),
         ad_tags(tags(id,name))
@@ -789,7 +789,7 @@ export async function getCampaignsWithOverview(profile?: Profile): Promise<Campa
           workflow_status_changed_at, editor_notes, product_id, assigned_at,
           creator:profiles!ads_creator_id_fkey(id,name,email,avatar_url,role),
           editor:profiles!ads_editor_id_fkey(id,name,email,avatar_url,role),
-          campaign:campaigns(id,name),
+          campaign:campaigns!ads_campaign_id_fkey(id,name),
           ad_campaigns(campaign:campaigns(id,name)),
           product:products(id,name,sku,image_url),
           ad_tags(tags(id,name)),

@@ -44,7 +44,7 @@ type RawAd = {
 export async function getTagOverview(): Promise<TagOverview[]> {
   const admin = createSupabaseAdminClient();
   const binReady = await isRecycleBinReady();
-  const adColumns = `id,name,production_stage,updated_at${binReady ? ",deleted_at" : ""},campaign:campaigns(name),creator:profiles!ads_creator_id_fkey(name)`;
+  const adColumns = `id,name,production_stage,updated_at${binReady ? ",deleted_at" : ""},campaign:campaigns!ads_campaign_id_fkey(name),creator:profiles!ads_creator_id_fkey(name)`;
   const { data, error } = await admin
     .from("tags")
     .select(`id,name,ad_tags(ads(${adColumns}))`)
