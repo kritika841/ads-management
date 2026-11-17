@@ -108,15 +108,13 @@ export const creatorControlledStages = [
 export type CreatorControlledStage = (typeof creatorControlledStages)[number];
 
 export const creatorStatusOptionLabels: Record<CreatorControlledStage, string> = {
-  script_writing: "Writing script",
-  ready_to_shoot: "Scripting done",
-  shoot_complete: "Clips done",
+  script_writing: "Script in progress (Pending)",
+  ready_to_shoot: "Scripting done (Ready to shoot)",
+  shoot_complete: "Clips done (Shoot complete)",
   ready_for_edit: "Ready – assign editor"
 };
 
-export const creatorSelectableStages = creatorControlledStages.filter(
-  (stage) => stage !== "script_writing"
-) as Exclude<CreatorControlledStage, "script_writing">[];
+export const creatorSelectableStages = [...creatorControlledStages] as CreatorControlledStage[];
 
 export const creatorEditableStages = [
   "script_writing",

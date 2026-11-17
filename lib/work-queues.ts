@@ -19,7 +19,7 @@ export type QueueKey =
 export function queuesForRole(role: UserRole): { key: QueueKey; label: string }[] {
   if (role === "content_creator") {
     return [
-      { key: "preparing", label: "Preparing" },
+      { key: "preparing", label: "Pending / Preparing" },
       { key: "pending_editor_assign", label: "Pending editor assign" },
       { key: "with_editor", label: "With editor" },
       { key: "creator_review", label: "Needs my review" },
@@ -30,7 +30,7 @@ export function queuesForRole(role: UserRole): { key: QueueKey; label: string }[
   }
   if (role === "editor") {
     return [
-      { key: "new_assignments", label: "New assignments" },
+      { key: "new_assignments", label: "Pending / New assignments" },
       { key: "editing", label: "Editing" },
       { key: "changes", label: "Changes requested" },
       { key: "submitted", label: "Submitted" },
@@ -41,7 +41,7 @@ export function queuesForRole(role: UserRole): { key: QueueKey; label: string }[
     return [
       { key: "all", label: "All" },
       { key: "approved", label: "Approved" },
-      { key: "in_production", label: "In production" },
+      { key: "in_production", label: "Pending / In production" },
       { key: "needs_review", label: "In review" },
       { key: "creator_changes", label: "Changes: Creator" },
       { key: "changes", label: "Changes: Editor" }
@@ -50,7 +50,7 @@ export function queuesForRole(role: UserRole): { key: QueueKey; label: string }[
   return [
     { key: "needs_review", label: "Needs review" },
     { key: "pending_editor_assign", label: "Pending editor assign" },
-    { key: "in_production", label: "In production" },
+    { key: "in_production", label: "Pending / In production" },
     { key: "creator_changes", label: "Changes: Creator" },
     { key: "changes", label: "Changes: Editor" },
     { key: "approved", label: "Approved" },
