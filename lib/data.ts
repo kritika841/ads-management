@@ -344,6 +344,7 @@ export async function getAds(profile?: Profile) {
         creator:profiles!ads_creator_id_fkey(id,name,email,avatar_url,role),
         editor:profiles!ads_editor_id_fkey(id,name,email,avatar_url,role),
         campaign:campaigns(id,name),
+        ad_campaigns(campaign:campaigns(id,name)),
         product:products(id,name,sku,image_url),
         ad_tags(tags(id,name)),
         ad_collaborators(profile_id)
@@ -432,6 +433,7 @@ export async function getAllAdsForAnalytics() {
         creator:profiles!ads_creator_id_fkey(id,name,email,avatar_url,role),
         editor:profiles!ads_editor_id_fkey(id,name,email,avatar_url,role),
         campaign:campaigns(id,name),
+        ad_campaigns(campaign:campaigns(id,name)),
         product:products(id,name,sku,image_url),
         ad_tags(tags(id,name)),
         ad_versions(id)
@@ -456,6 +458,7 @@ export async function getAdDetail(adId: string) {
         creator:profiles!ads_creator_id_fkey(id,name,email,avatar_url,role),
         editor:profiles!ads_editor_id_fkey(id,name,email,avatar_url,role),
         campaign:campaigns(id,name),
+        ad_campaigns(campaign:campaigns(id,name)),
         product:products(id,name,sku,image_url),
         ad_tags(tags(id,name))
       `
@@ -579,6 +582,7 @@ export async function getAnalyticsReviewActions() {
 function normalizeAds(rows: unknown[]) {
   return rows.map((row) => {
     const record = row as AdWithRelations & {
+      ad_campaigns?: { campaign: { id: string; name: string } | null }[];
       ad_tags?: { tags?: { id: string; name: string } | null }[];
       ad_collaborators?: { profile_id?: string | null }[];
       ad_versions?: { id: string }[];
@@ -637,6 +641,7 @@ function normalizeAds(rows: unknown[]) {
 
     return {
       ...record,
+      campaigns: [...new Map([record.campaign, ...(record.ad_campaigns ?? []).map((item) => item.campaign)].filter((item): item is { id: string; name: string } => Boolean(item)).map((item) => [item.id, item])).values()],
       script_html: record.script_html ? (resolveScriptHtml(record.script_html, record.script_text) || null) : null,
       version_count: record.ad_versions?.length ?? record.version_count,
       latest_change_request: latestChange ? {
@@ -785,6 +790,7 @@ export async function getCampaignsWithOverview(profile?: Profile): Promise<Campa
           creator:profiles!ads_creator_id_fkey(id,name,email,avatar_url,role),
           editor:profiles!ads_editor_id_fkey(id,name,email,avatar_url,role),
           campaign:campaigns(id,name),
+          ad_campaigns(campaign:campaigns(id,name)),
           product:products(id,name,sku,image_url),
           ad_tags(tags(id,name)),
           ad_versions(id)
@@ -863,15 +869,16 @@ export async function getCampaignsWithOverview(profile?: Profile): Promise<Campa
   // Group ads by campaign
   const adsByCampaign = new Map<string, AdWithRelations[]>();
   for (const ad of ads) {
-    if (!ad.campaign_id) continue;
-    const list = adsByCampaign.get(ad.campaign_id) ?? [];
     // Attach any incentive metrics onto metadata if available
     const inc = incentiveMap.get(ad.id);
     if (inc) {
       (ad as AdWithRelations & { performance?: typeof inc }).performance = inc;
     }
-    list.push(ad);
-    adsByCampaign.set(ad.campaign_id, list);
+    for (const campaign of ad.campaigns ?? (ad.campaign ? [ad.campaign] : [])) {
+      const list = adsByCampaign.get(campaign.id) ?? [];
+      list.push(ad);
+      adsByCampaign.set(campaign.id, list);
+    }
   }
 
   const creationStages = new Set(["script_writing", "ready_to_shoot", "shoot_complete", "ready_for_edit", "editing"]);

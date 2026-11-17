@@ -44,7 +44,7 @@ export function AdPreviewModal({
   const thumbnailSrc = mediaVisible ? resolveAdThumbnailUrl(ad.thumbnail_url, ad.drive_file_id) : null;
   const details: { label: string; value: React.ReactNode }[] = [
     { label: "Stage", value: productionStageLabels[ad.production_stage] ?? ad.production_stage },
-    { label: "Campaign", value: ad.campaign?.name ?? "No campaign" },
+    { label: "Campaign", value: ad.campaigns?.map((item) => item.name).join(", ") || ad.campaign?.name || "No campaign" },
     { label: "Product", value: ad.product?.name ?? "—" },
     { label: "Platforms", value: ad.platforms.length ? ad.platforms.join(", ") : "—" },
     { label: "Deadline", value: ad.deadline ? <span className="inline-flex items-center gap-1"><CalendarClock className="size-3.5" aria-hidden />{formatDateOnly(ad.deadline)}</span> : "—" },
@@ -67,7 +67,7 @@ export function AdPreviewModal({
               <span className="text-border">/</span>
               <span>Edited by {ad.editor?.name ?? "Unassigned"}</span>
               <span className="hidden text-border sm:inline">/</span>
-              <span className="hidden truncate sm:inline">{ad.campaign?.name ?? "No campaign"}</span>
+              <span className="hidden truncate sm:inline">{ad.campaigns?.map((item) => item.name).join(", ") || ad.campaign?.name || "No campaign"}</span>
             </div>
           </div>
           <div className="flex items-center gap-2">

@@ -131,6 +131,7 @@ export type AdWithRelations = Ad & {
   creator: Pick<Profile, "id" | "name" | "email" | "avatar_url" | "role"> | null;
   editor: Pick<Profile, "id" | "name" | "email" | "avatar_url" | "role"> | null;
   campaign: Pick<Campaign, "id" | "name"> | null;
+  campaigns?: Pick<Campaign, "id" | "name">[];
   product: Pick<Product, "id" | "name" | "sku" | "image_url"> | null;
   tags: { id: string; name: string }[];
   collaborator_ids?: string[];

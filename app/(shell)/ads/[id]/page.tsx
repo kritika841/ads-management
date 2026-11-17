@@ -102,7 +102,7 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
               {isReviewer || isAssignedEditor ? <EditingFreezeBadge state={ad.editing_freeze} /> : null}
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              {ad.campaign?.name ?? "No campaign"} · <span suppressHydrationWarning>{workflowWaitingLabel(ad.workflow_status_changed_at)}</span>
+              {ad.campaigns?.map((item) => item.name).join(", ") || ad.campaign?.name || "No campaign"} · <span suppressHydrationWarning>{workflowWaitingLabel(ad.workflow_status_changed_at)}</span>
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -210,7 +210,7 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
                 <PersonSummary label="Edited by" profile={ad.editor} fallback="Unassigned editor" />
               </div>
               <dl className="mt-5 grid gap-3 border-t border-border pt-4 text-sm">
-                <DetailRow label="Campaign" value={ad.campaign?.name ?? "No campaign"} />
+                <DetailRow label="Campaign" value={ad.campaigns?.map((item) => item.name).join(", ") || ad.campaign?.name || "No campaign"} />
                 <DetailRow label="Product" value={ad.product?.name ?? "No product"} />
                 <DetailRow label="Platforms" value={ad.platforms.join(", ") || "None"} />
                 <DetailRow label="Versions" value={String(versions.length)} />

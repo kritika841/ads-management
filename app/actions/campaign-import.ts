@@ -132,6 +132,9 @@ export async function listImportableCreatives(campaignId: string) {
   }
   const admin = createSupabaseAdminClient();
   const binReady = await isRecycleBinReady();
+  const { data: existingLinks, error: linksError } = await admin.from("ad_campaigns").select("ad_id").eq("campaign_id", campaignId);
+  if (linksError) return { ok: false as const, message: linksError.message, creatives: [] as ImportableCreative[] };
+  const linkedIds = new Set((existingLinks ?? []).map((row) => row.ad_id));
   const { data, error } = await liveOnly(
     admin
       .from("ads")
@@ -143,7 +146,7 @@ export async function listImportableCreatives(campaignId: string) {
   );
   if (error) return { ok: false as const, message: error.message, creatives: [] as ImportableCreative[] };
   const one = <T,>(value: T | T[] | null | undefined) => (Array.isArray(value) ? value[0] : value) ?? null;
-  const creatives = ((data ?? []) as Array<Record<string, unknown>>).map((row) => {
+  const creatives = ((data ?? []) as Array<Record<string, unknown>>).filter((row) => !linkedIds.has(row.id as string)).map((row) => {
     const rawTags = ((row.ad_tags as Array<{ tags?: { id: string; name: string } | null }>) ?? [])
       .map((item) => item?.tags?.name)
       .filter((n): n is string => typeof n === "string" && n.toLowerCase() !== "downloaded");

@@ -310,7 +310,7 @@ export function DashboardClient({
       if (stage.length > 0 && !stage.includes(ad.production_stage)) return false;
       if (editor.length > 0 && (ad.editor_id === null || !editor.includes(ad.editor_id))) return false;
       if (creator.length > 0 && (ad.creator_id === null || !creator.includes(ad.creator_id))) return false;
-      if (campaign.length > 0 && (ad.campaign_id === null || !campaign.includes(ad.campaign_id))) return false;
+      if (campaign.length > 0 && !(ad.campaigns ?? (ad.campaign ? [ad.campaign] : [])).some((item) => campaign.includes(item.id))) return false;
       if (product.length > 0 && (ad.product_id === null || !product.includes(ad.product_id))) return false;
       if (platform.length > 0 && !platform.some((selected) => ad.platforms.includes(selected as AdWithRelations["platforms"][number]))) return false;
       if (tag.length > 0 && !tag.some((selectedTag) => ad.tags.some((item) => item.name === selectedTag))) return false;
@@ -329,7 +329,7 @@ export function DashboardClient({
         if (!matchesDeadline) return false;
       }
       if (text) {
-        const searchable = `${ad.name} ${ad.script_text ?? ""} ${ad.creator?.name ?? ""} ${ad.editor?.name ?? ""} ${ad.campaign?.name ?? ""} ${ad.product?.name ?? ""} ${ad.tags.map((item) => item.name).join(" ")}`.toLowerCase();
+        const searchable = `${ad.name} ${ad.script_text ?? ""} ${ad.creator?.name ?? ""} ${ad.editor?.name ?? ""} ${(ad.campaigns ?? (ad.campaign ? [ad.campaign] : [])).map((item) => item.name).join(" ")} ${ad.product?.name ?? ""} ${ad.tags.map((item) => item.name).join(" ")}`.toLowerCase();
         if (!searchable.includes(text)) return false;
       }
       if (dateFrom || dateTo) {
@@ -1146,7 +1146,7 @@ function WorkflowCard({ ad, mediaToken, profile, canApprove = true, allowManager
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="truncate text-[15px] font-semibold text-foreground">{ad.name}</h2>
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">{ad.campaign?.name ?? "No campaign"}</p>
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">{ad.campaigns?.map((item) => item.name).join(", ") || ad.campaign?.name || "No campaign"}</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {ad.product?.name ? <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">Product · {ad.product.name}</span> : null}
               {visibleTags.map((tag) => <span key={tag.id} className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">#{tag.name}</span>)}
@@ -1559,7 +1559,7 @@ function WorkflowTable({ ads, profile, canApprove = true, allowManagerFinalAppro
             return (
               <tr key={ad.id} className={`cursor-pointer transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${isSelected ? "bg-accent/40" : ""}`} role="link" tabIndex={0} onClick={open} onKeyDown={(event) => { if (event.key === "Enter") open(); }}>
                 <td className="px-3 py-3" onClick={(event) => { event.stopPropagation(); onToggleSelect(ad.id); }}><button type="button" aria-label={isSelected ? "Deselect" : "Select"} aria-pressed={isSelected} className={`flex size-7 items-center justify-center rounded-md border transition-colors ${isSelected ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:border-ring"}`}>{isSelected ? <SquareCheck className="size-4" aria-hidden /> : <Square className="size-4" aria-hidden />}</button></td>
-                <td className="px-4 py-3"><div className="flex items-center gap-3"><RowThumbnail adId={ad.id} name={ad.name} fileId={isFinalMediaVisible(ad.production_stage) ? ad.drive_file_id : null} /><div className="min-w-0"><p className="font-medium text-foreground">{ad.name}</p><p className="text-xs text-muted-foreground">{ad.campaign?.name}</p>{progress ? <DownloadProgressBar progress={progress} compact /> : <div className="mt-1 flex flex-wrap gap-1.5">{ad.product?.name ? <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">Product · {ad.product.name}</span> : null}{ordinaryTags.map((tag) => <span key={tag.id} className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">#{tag.name}</span>)}{profile.role === "admin" && isDownloaded(ad) ? <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-[10px] font-semibold text-success"><Download className="size-2.5" aria-hidden />Downloaded</span> : null}</div>}</div></div></td>
+                <td className="px-4 py-3"><div className="flex items-center gap-3"><RowThumbnail adId={ad.id} name={ad.name} fileId={isFinalMediaVisible(ad.production_stage) ? ad.drive_file_id : null} /><div className="min-w-0"><p className="font-medium text-foreground">{ad.name}</p><p className="text-xs text-muted-foreground">{ad.campaigns?.map((item) => item.name).join(", ") || ad.campaign?.name}</p>{progress ? <DownloadProgressBar progress={progress} compact /> : <div className="mt-1 flex flex-wrap gap-1.5">{ad.product?.name ? <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">Product · {ad.product.name}</span> : null}{ordinaryTags.map((tag) => <span key={tag.id} className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">#{tag.name}</span>)}{profile.role === "admin" && isDownloaded(ad) ? <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-[10px] font-semibold text-success"><Download className="size-2.5" aria-hidden />Downloaded</span> : null}</div>}</div></div></td>
                 <td className="px-4 py-3">
                   <ProductionStageBadge stage={ad.production_stage} role={profile.role} allowManagerFinalApproval={allowManagerFinalApproval} approvalStage={ad.approval_stage} className="bg-muted text-muted-foreground shadow-none" />
                   {ad.production_stage === "creator_changes_requested" ? (

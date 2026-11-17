@@ -60,7 +60,7 @@ export function BulkAssignCampaignModal({
                 Assign {count} Creative{count === 1 ? "" : "s"} to Campaign
               </h2>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Select the destination campaign to reassign the selected creatives.
+                Select a campaign to add to the selected creatives.
               </p>
             </div>
           </div>

@@ -2192,92 +2192,26 @@ export async function bulkAssignCampaign(adIds: string[], campaignId: string) {
       continue;
     }
 
-    // Resolve name clash if ad with lower(name) exists in target campaign
-    let targetName = ad.name;
-    const { data: conflicting } = await admin
-      .from("ads")
-      .select("id")
-      .eq("campaign_id", campaignId)
-      .ilike("name", targetName)
-      .neq("id", ad.id)
-      .maybeSingle();
-
-    if (conflicting) {
-      targetName = `${ad.name} (${Math.floor(Math.random() * 900) + 100})`;
-    }
-
-    // If creative already belongs to another campaign, clone it so it can exist in multiple campaigns
     if (ad.campaign_id) {
-      const { data: sourceAd, error: fetchFullError } = await admin
-        .from("ads")
-        .select("*")
-        .eq("id", ad.id)
-        .single();
-
-      if (fetchFullError || !sourceAd) {
-        errors.push(`Failed to load source creative ${ad.name}: ${fetchFullError?.message ?? "Not found"}`);
+      const { error } = await admin.from("ad_campaigns").upsert(
+        { ad_id: ad.id, campaign_id: campaignId },
+        { onConflict: "ad_id,campaign_id", ignoreDuplicates: true }
+      );
+      if (error) {
+        errors.push(`Failed to add creative ${ad.name} to campaign: ${error.message}`);
         continue;
       }
-
-      // Prepare cloned ad payload
-      const { id: _oldId, created_at: _cAt, updated_at: _uAt, deleted_at: _dAt, ...restOfAd } = sourceAd as Record<string, unknown>;
-      const clonePayload = {
-        ...restOfAd,
-        name: targetName,
-        campaign_id: campaignId,
-        created_at: now,
-        updated_at: now
-      };
-
-      const { data: insertedAd, error: insertError } = await admin
-        .from("ads")
-        .insert(clonePayload)
-        .select("id")
-        .single();
-
-      if (insertError || !insertedAd) {
-        errors.push(`Failed to add creative ${ad.name} to campaign: ${insertError?.message ?? "Insert failed"}`);
-      } else {
-        // Copy existing tags from source ad to the newly added creative
-        try {
-          const { data: tagsToCopy } = await admin
-            .from("ad_tags")
-            .select("tag_id")
-            .eq("ad_id", ad.id);
-
-          if (tagsToCopy && tagsToCopy.length > 0) {
-            await admin.from("ad_tags").insert(
-              tagsToCopy.map((t) => ({
-                ad_id: insertedAd.id,
-                tag_id: t.tag_id
-              }))
-            );
-          }
-        } catch (tagErr) {
-          console.warn("Non-fatal: failed to duplicate tags for campaign ad copy:", tagErr);
-        }
-
-        updatedCount++;
-        updatedAdIds.push(insertedAd.id);
-      }
     } else {
-      // Creative had no previous campaign; assign it directly
-      const { error: updateError } = await admin
-        .from("ads")
-        .update({
-          campaign_id: campaignId,
-          name: targetName,
-          updated_at: now
-        })
+      const { error } = await admin.from("ads")
+        .update({ campaign_id: campaignId, updated_at: now })
         .eq("id", ad.id);
-
-      if (updateError) {
-        errors.push(`Failed to update ${ad.name}: ${updateError.message}`);
-      } else {
-        updatedCount++;
-        updatedAdIds.push(ad.id);
+      if (error) {
+        errors.push(`Failed to update ${ad.name}: ${error.message}`);
+        continue;
       }
     }
+    updatedCount++;
+    updatedAdIds.push(ad.id);
   }
 
   if (updatedAdIds.length > 0) {
@@ -2312,6 +2246,6 @@ export async function bulkAssignCampaign(adIds: string[], campaignId: string) {
   return {
     ok: true,
     count: updatedCount,
-    message: `Successfully assigned ${updatedCount} creative${updatedCount === 1 ? "" : "s"} to "${campaign.name}".`
+    message: `Successfully assigned ${updatedCount} creative${updatedCount === 1 ? "" : "s"} to "${campaign.name}".${errors.length ? ` ${errors.length} could not be assigned: ${errors[0]}` : ""}`
   };
 }
