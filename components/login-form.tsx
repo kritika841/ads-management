@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { checkUserPasswordStatusAction, requestPasswordResetAction } from "@/app/actions/password";
+import { isStaleApplicationFailure } from "@/lib/chunk-load";
 
 export function LoginForm({
   initialMessage = null,
@@ -84,16 +85,28 @@ export function LoginForm({
         }
 
         // Check if password has expired (30-day lifecycle)
-        const passwordStatus = await checkUserPasswordStatusAction(data.user.id);
-        if (passwordStatus.isExpired) {
-          await supabase.auth.signOut();
-          setIsPasswordExpired(true);
-          setMessage("Password expired. Your password has expired after 30 days.");
-          return;
+        try {
+          const passwordStatus = await checkUserPasswordStatusAction(data.user.id);
+          if (passwordStatus.isExpired) {
+            await supabase.auth.signOut();
+            setIsPasswordExpired(true);
+            setMessage("Password expired. Your password has expired after 30 days.");
+            return;
+          }
+        } catch (actionErr) {
+          // If the login tab has a stale Server Action hash from an earlier deployment,
+          // proceed to /dashboard where requireProfile() enforces password expiry on the server.
+          console.warn("Password status check skipped on client (enforced on /dashboard):", actionErr);
         }
 
         window.location.href = "/dashboard";
       } catch (error) {
+        if (isStaleApplicationFailure(error)) {
+          const url = new URL(window.location.href);
+          url.searchParams.set("_v", Date.now().toString());
+          window.location.replace(url.toString());
+          return;
+        }
         setMessage(error instanceof Error ? error.message : "Unable to sign in.");
       }
     });
@@ -108,15 +121,25 @@ export function LoginForm({
         return;
       }
 
-      const clientOrigin = typeof window !== "undefined" ? window.location.origin : undefined;
-      const res = await requestPasswordResetAction(targetEmail, clientOrigin);
-      if (res.ok) {
-        setResetSent(true);
-        setResetMessage(res.message);
-        setActionLink(res.actionLink || null);
-        setEmailDelivered(Boolean(res.emailDelivered));
-      } else {
-        setResetMessage(res.message || "Failed to send password reset email.");
+      try {
+        const clientOrigin = typeof window !== "undefined" ? window.location.origin : undefined;
+        const res = await requestPasswordResetAction(targetEmail, clientOrigin);
+        if (res.ok) {
+          setResetSent(true);
+          setResetMessage(res.message);
+          setActionLink(res.actionLink || null);
+          setEmailDelivered(Boolean(res.emailDelivered));
+        } else {
+          setResetMessage(res.message || "Failed to send password reset email.");
+        }
+      } catch (err) {
+        if (isStaleApplicationFailure(err)) {
+          const url = new URL(window.location.href);
+          url.searchParams.set("_v", Date.now().toString());
+          window.location.replace(url.toString());
+          return;
+        }
+        setResetMessage(err instanceof Error ? err.message : "Failed to send password reset email.");
       }
     });
   }
