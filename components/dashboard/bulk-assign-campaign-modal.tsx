@@ -21,14 +21,16 @@ export function BulkAssignCampaignModal({
   selectedAds?: AdWithRelations[];
   pending: boolean;
   onClose: () => void;
-  onSubmit: (campaignId: string) => void;
+  onSubmit: (campaignIds: string[]) => void;
 }) {
   const activeCampaigns = useMemo(
     () => campaigns.filter((c) => c.active !== false).sort((a, b) => a.name.localeCompare(b.name)),
     [campaigns]
   );
 
-  const [selectedCampaignId, setSelectedCampaignId] = useState<string>(activeCampaigns[0]?.id ?? "");
+  const [selectedCampaignIds, setSelectedCampaignIds] = useState<string[]>(
+    activeCampaigns[0]?.id ? [activeCampaigns[0].id] : []
+  );
   const [search, setSearch] = useState("");
 
   const filteredCampaigns = useMemo(() => {
@@ -39,12 +41,21 @@ export function BulkAssignCampaignModal({
     );
   }, [activeCampaigns, search]);
 
-  const targetCampaign = activeCampaigns.find((c) => c.id === selectedCampaignId);
+  const targetCampaigns = useMemo(
+    () => activeCampaigns.filter((c) => selectedCampaignIds.includes(c.id)),
+    [activeCampaigns, selectedCampaignIds]
+  );
+
+  const toggleCampaign = (campaignId: string) => {
+    setSelectedCampaignIds((prev) =>
+      prev.includes(campaignId) ? prev.filter((id) => id !== campaignId) : [...prev, campaignId]
+    );
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCampaignId) return;
-    onSubmit(selectedCampaignId);
+    if (selectedCampaignIds.length === 0) return;
+    onSubmit(selectedCampaignIds);
   };
 
   return (
@@ -57,10 +68,10 @@ export function BulkAssignCampaignModal({
             </div>
             <div>
               <h2 id="bulk-assign-campaign-title" className="text-base font-bold text-foreground">
-                Assign {count} Creative{count === 1 ? "" : "s"} to Campaign
+                Assign {count} Creative{count === 1 ? "" : "s"} to Campaign{selectedCampaignIds.length > 1 ? "s" : ""}
               </h2>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Select a campaign to add to the selected creatives.
+                Select one or more campaigns to add to the selected creatives.
               </p>
             </div>
           </div>
@@ -94,11 +105,13 @@ export function BulkAssignCampaignModal({
               </div>
             ) : null}
 
-            {/* Campaign Selection with Search */}
+            {/* Campaign Selection with Search (Multi-select supported when assigning campaigns) */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-foreground">Choose Destination Campaign *</label>
-                <span className="text-[11px] text-muted-foreground">{activeCampaigns.length} active campaigns</span>
+                <label className="text-xs font-semibold text-foreground">Choose Destination Campaign(s) *</label>
+                <span className="text-[11px] text-muted-foreground">
+                  {selectedCampaignIds.length} selected · {activeCampaigns.length} active
+                </span>
               </div>
 
               {activeCampaigns.length > 5 ? (
@@ -120,7 +133,10 @@ export function BulkAssignCampaignModal({
                   </div>
                 ) : (
                   filteredCampaigns.map((camp) => {
-                    const isSelected = selectedCampaignId === camp.id;
+                    const isSelected = selectedCampaignIds.includes(camp.id);
+                    const alreadyInCount = selectedAds.filter((ad) =>
+                      (ad.campaigns ?? (ad.campaign ? [ad.campaign] : [])).some((c) => c.id === camp.id)
+                    ).length;
                     return (
                       <label
                         key={camp.id}
@@ -131,17 +147,24 @@ export function BulkAssignCampaignModal({
                       >
                         <div className="flex items-center gap-3 min-w-0 pr-2">
                           <input
-                            type="radio"
+                            type="checkbox"
                             name="campaignSelection"
                             value={camp.id}
                             checked={isSelected}
-                            onChange={() => setSelectedCampaignId(camp.id)}
-                            className="size-4 text-primary accent-primary shrink-0 cursor-pointer"
+                            onChange={() => toggleCampaign(camp.id)}
+                            className="size-4 rounded text-primary accent-primary shrink-0 cursor-pointer"
                           />
                           <div className="min-w-0">
-                            <p className={cn("text-xs font-semibold truncate", isSelected ? "text-primary" : "text-foreground")}>
-                              {camp.name}
-                            </p>
+                            <div className="flex items-center gap-2">
+                              <p className={cn("text-xs font-semibold truncate", isSelected ? "text-primary" : "text-foreground")}>
+                                {camp.name}
+                              </p>
+                              {alreadyInCount > 0 ? (
+                                <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                  {alreadyInCount === selectedAds.length ? "Already assigned" : `In ${alreadyInCount}/${selectedAds.length}`}
+                                </span>
+                              ) : null}
+                            </div>
                             {camp.description ? (
                               <p className="text-[11px] text-muted-foreground truncate mt-0.5">{camp.description}</p>
                             ) : null}
@@ -155,10 +178,10 @@ export function BulkAssignCampaignModal({
               </div>
             </div>
 
-            {targetCampaign ? (
+            {targetCampaigns.length > 0 ? (
               <div className="rounded-lg bg-muted/40 border border-border/80 p-3 text-[11px] text-muted-foreground leading-relaxed">
-                Reassigning <strong className="text-foreground">{count}</strong> creative{count === 1 ? "" : "s"} to{" "}
-                <strong className="text-foreground">{targetCampaign.name}</strong>. The creatives will appear under this campaign in the Creative Library and Campaign views.
+                Assigning <strong className="text-foreground">{count}</strong> creative{count === 1 ? "" : "s"} to{" "}
+                <strong className="text-foreground">{targetCampaigns.map((c) => c.name).join(", ")}</strong>. Existing campaign assignments will coexist on the same creative card without creating duplicate cards.
               </div>
             ) : null}
           </div>
@@ -169,7 +192,7 @@ export function BulkAssignCampaignModal({
             </Button>
             <Button
               type="submit"
-              disabled={pending || !selectedCampaignId}
+              disabled={pending || selectedCampaignIds.length === 0}
               className="gap-2 font-semibold min-w-[150px]"
             >
               {pending ? (
@@ -180,7 +203,7 @@ export function BulkAssignCampaignModal({
               ) : (
                 <>
                   <FolderKanban className="size-4" aria-hidden />
-                  Assign to Campaign
+                  Assign to Campaign{selectedCampaignIds.length > 1 ? `s (${selectedCampaignIds.length})` : ""}
                 </>
               )}
             </Button>

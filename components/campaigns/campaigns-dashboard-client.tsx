@@ -289,21 +289,39 @@ export function CampaignsDashboardClient({
 
   const canManage = profile.role === "admin" || profile.role === "manager";
 
-  // Flat list of all creatives across campaigns
+  // Flat deduplicated list of all creatives across campaigns (a creative in multiple campaigns appears once with all its campaigns)
   const allCreatives: (AdWithRelations & { campaign?: Campaign })[] = useMemo(() => {
-    return campaignOverviews.flatMap((ov) =>
-      ov.creatives
-        .filter((creative) => {
-          if (profile.role === "admin" || profile.role === "manager" || profile.role === "media_buyer") return true;
-          if (profile.role === "content_creator") return creative.creator_id === profile.id;
-          if (profile.role === "editor") return creative.editor_id === profile.id;
-          return true;
-        })
-        .map((creative) => ({
-          ...creative,
-          campaign: ov.campaign
-        }))
-    );
+    const map = new Map<string, AdWithRelations & { campaign?: Campaign }>();
+    for (const ov of campaignOverviews) {
+      for (const creative of ov.creatives) {
+        const visible =
+          profile.role === "admin" ||
+          profile.role === "manager" ||
+          profile.role === "media_buyer" ||
+          (profile.role === "content_creator" && creative.creator_id === profile.id) ||
+          (profile.role === "editor" && creative.editor_id === profile.id);
+        if (!visible) continue;
+
+        const existing = map.get(creative.id);
+        if (existing) {
+          const mergedCampaigns = [...(existing.campaigns ?? (existing.campaign ? [existing.campaign] : []))];
+          if (!mergedCampaigns.some((c) => c.id === ov.campaign.id)) {
+            mergedCampaigns.push({ id: ov.campaign.id, name: ov.campaign.name });
+          }
+          existing.campaigns = mergedCampaigns;
+        } else {
+          const initialCampaigns = creative.campaigns?.length
+            ? [...creative.campaigns]
+            : [{ id: ov.campaign.id, name: ov.campaign.name }];
+          map.set(creative.id, {
+            ...creative,
+            campaign: ov.campaign,
+            campaigns: initialCampaigns
+          });
+        }
+      }
+    }
+    return Array.from(map.values());
   }, [campaignOverviews, profile.role, profile.id]);
 
   // Available filter options extracted from creatives
@@ -414,7 +432,8 @@ export function CampaignsDashboardClient({
   // Filtered ads (for Ads view)
   const filteredAds = useMemo(() => {
     return allCreatives.filter((ad) => {
-      if (adCampaignFilter !== "all" && ad.campaign_id !== adCampaignFilter) return false;
+      const adCampaigns = ad.campaigns ?? (ad.campaign ? [ad.campaign] : []);
+      if (adCampaignFilter !== "all" && !adCampaigns.some((c) => c.id === adCampaignFilter) && ad.campaign_id !== adCampaignFilter) return false;
       if (adProductFilter !== "all" && ad.product_id !== adProductFilter) return false;
       if (adCreatorFilter !== "all" && ad.creator_id !== adCreatorFilter) return false;
       if (adEditorFilter !== "all" && ad.editor_id !== adEditorFilter) return false;
@@ -443,7 +462,7 @@ export function CampaignsDashboardClient({
       if (adSearch.trim()) {
         const q = adSearch.toLowerCase();
         const matchName = ad.name.toLowerCase().includes(q);
-        const matchCamp = ad.campaign?.name.toLowerCase().includes(q);
+        const matchCamp = adCampaigns.some((c) => c.name.toLowerCase().includes(q)) || Boolean(ad.campaign?.name.toLowerCase().includes(q));
         const matchScript = ad.script_text?.toLowerCase().includes(q);
         const matchNotes = ad.notes?.toLowerCase().includes(q);
         const matchProd = ad.product?.name.toLowerCase().includes(q);
@@ -1212,20 +1231,28 @@ export function CampaignsDashboardClient({
       {
         id: "campaign",
         header: "Campaign",
-        sortableValue: (ad) => ad.campaign?.name ?? "",
-        defaultWidth: 170,
+        sortableValue: (ad) => (ad.campaigns ?? (ad.campaign ? [ad.campaign] : [])).map((c) => c.name).join(", "),
+        defaultWidth: 190,
         minWidth: 110,
-        cell: (ad) => (
-          <Link
-            href={`/campaigns/${ad.campaign_id}`}
-            onClick={(e) => e.stopPropagation()}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs font-medium text-foreground hover:bg-muted transition-colors max-w-full truncate group/camp"
-          >
-            <FolderKanban className="size-3 text-primary shrink-0" />
-            <span className="truncate">{ad.campaign?.name ?? "Campaign"}</span>
-            <ExternalLink className="size-2.5 text-muted-foreground opacity-0 group-hover/camp:opacity-100 transition-opacity shrink-0" />
-          </Link>
-        )
+        cell: (ad) => {
+          const adCampaigns = ad.campaigns?.length ? ad.campaigns : ad.campaign ? [ad.campaign] : [];
+          return (
+            <div className="flex flex-wrap gap-1">
+              {adCampaigns.map((camp) => (
+                <Link
+                  key={camp.id}
+                  href={`/campaigns/${camp.id}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-0.5 text-xs font-medium text-foreground hover:bg-muted transition-colors max-w-full truncate group/camp"
+                >
+                  <FolderKanban className="size-3 text-primary shrink-0" />
+                  <span className="truncate">{camp.name}</span>
+                  <ExternalLink className="size-2.5 text-muted-foreground opacity-0 group-hover/camp:opacity-100 transition-opacity shrink-0" />
+                </Link>
+              ))}
+            </div>
+          );
+        }
       },
       {
         id: "product",

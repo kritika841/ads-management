@@ -138,7 +138,7 @@ export async function listImportableCreatives(campaignId: string) {
   const { data, error } = await liveOnly(
     admin
       .from("ads")
-      .select("id,name,status,production_stage,campaign_id,creator_id,drive_file_id,drive_url,thumbnail_url,created_at,approved_at,final_approved_at,campaign:campaigns!ads_campaign_id_fkey(name),creator:profiles!ads_creator_id_fkey(name),ad_tags(tags(id,name))")
+      .select("id,name,status,production_stage,campaign_id,creator_id,drive_file_id,drive_url,thumbnail_url,created_at,approved_at,final_approved_at,campaign:campaigns!ads_campaign_id_fkey(name),ad_campaigns(campaign:campaigns(name)),creator:profiles!ads_creator_id_fkey(name),ad_tags(tags(id,name))")
       .or(`campaign_id.is.null,campaign_id.neq.${campaignId}`)
       .order("created_at", { ascending: false })
       .limit(1000),
@@ -150,6 +150,11 @@ export async function listImportableCreatives(campaignId: string) {
     const rawTags = ((row.ad_tags as Array<{ tags?: { id: string; name: string } | null }>) ?? [])
       .map((item) => item?.tags?.name)
       .filter((n): n is string => typeof n === "string" && n.toLowerCase() !== "downloaded");
+    const primaryName = one(row.campaign as { name: string } | { name: string }[] | null)?.name ?? null;
+    const extraNames = ((row.ad_campaigns as Array<{ campaign?: { name: string } | { name: string }[] | null }>) ?? [])
+      .map((item) => one(item.campaign)?.name)
+      .filter((n): n is string => Boolean(n));
+    const allCampaignNames = Array.from(new Set([primaryName, ...extraNames].filter((n): n is string => Boolean(n))));
 
     return {
       id: row.id as string,
@@ -157,7 +162,7 @@ export async function listImportableCreatives(campaignId: string) {
       status: (row.status as string) ?? "active",
       production_stage: row.production_stage as string,
       campaign_id: (row.campaign_id as string | null) ?? null,
-      campaign_name: one(row.campaign as { name: string } | { name: string }[] | null)?.name ?? null,
+      campaign_name: allCampaignNames.length > 0 ? allCampaignNames.join(", ") : null,
       creator_id: (row.creator_id as string | null) ?? null,
       creator_name: one(row.creator as { name: string } | { name: string }[] | null)?.name ?? null,
       drive_file_id: (row.drive_file_id as string | null) ?? null,

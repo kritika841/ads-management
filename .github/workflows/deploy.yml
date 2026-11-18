@@ -215,8 +215,11 @@ jobs:
 
             if [ -f /home/deployer/apps/satmi-ads/supabase/migrations/20261029120000_fix_creator_changes_and_collaborator_rls.sql ]; then
               sudo -u postgres psql -p 5433 -d postgres -v ON_ERROR_STOP=1 < /home/deployer/apps/satmi-ads/supabase/migrations/20261029120000_fix_creator_changes_and_collaborator_rls.sql
-              sudo -u postgres psql -p 5433 -d postgres -c "NOTIFY pgrst, 'reload schema';" || true
             fi
+            if [ -f /home/deployer/apps/satmi-ads/supabase/migrations/20261117120000_creative_campaign_links.sql ]; then
+              sudo -u postgres psql -p 5433 -d postgres -v ON_ERROR_STOP=1 < /home/deployer/apps/satmi-ads/supabase/migrations/20261117120000_creative_campaign_links.sql
+            fi
+            sudo -u postgres psql -p 5433 -d postgres -c "NOTIFY pgrst, 'reload schema';" || true
 
             echo "=== Post-deploy VPS memory & PM2 status ==="
             free -m || true

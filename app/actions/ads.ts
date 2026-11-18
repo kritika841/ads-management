@@ -190,10 +190,22 @@ export async function saveCreatorItem(payload: z.input<typeof creatorItemSchema>
     editorId = editor.id;
   }
 
+  let resolvedName = data.name;
+  if (!currentAd && /^[A-Z]{3}\d+$/i.test(resolvedName.trim())) {
+    const binReadyForName = await isRecycleBinReady();
+    const { data: collidingAd } = await liveOnly(
+      admin.from("ads").select("id").ilike("name", resolvedName.trim()).limit(1),
+      binReadyForName
+    );
+    if (collidingAd && collidingAd.length > 0) {
+      resolvedName = await getNextAdName(data.creatorId);
+    }
+  }
+
   const now = new Date().toISOString();
   const assignedAt = editorId ? (currentAd?.editor_id === editorId && currentAd?.assigned_at ? currentAd.assigned_at : now) : null;
   const patch = {
-    name: data.name,
+    name: resolvedName,
     campaign_id: data.campaignId,
     product_id: data.productId,
     creator_id: data.creatorId,
@@ -2051,7 +2063,46 @@ export async function getPendingTaskManagerCreativeIds(creatorId: string): Promi
   const rawName = profile?.name ?? "";
   const prefix = rawName.replace(/[^a-zA-Z]/g, "").slice(0, 3).toUpperCase() || "ADX";
 
-  // 1. Query Task Manager Creative ID API (local VPS port 4000 first, then https://tasks.satmi.in)
+  // 1. Always check existing `ads` and `daily_team_targets` in AdFlow's Supabase DB first
+  // so serial numbers never reset to 0001 when Task Manager reports maxExistingNumber: 0.
+  const [{ data: existingAds }, { data: targetRows }] = await Promise.all([
+    admin.from("ads").select("name, deleted_at").ilike("name", `${prefix}%`).limit(10000),
+    admin.from("daily_team_targets").select("task_name, notes").eq("user_id", creatorId)
+  ]);
+
+  const existingAdNames = new Set<string>();
+  for (const ad of existingAds ?? []) {
+    if (!ad.deleted_at && ad.name) {
+      const upper = ad.name.trim().toUpperCase();
+      existingAdNames.add(upper);
+      existingAdNames.add(upper.replace(/\s*\(\d+\)$/, ""));
+    }
+  }
+
+  const prefixNumberRegex = new RegExp(`^${prefix}(\\d+)\\b`, "i");
+  let max = (existingAds ?? []).reduce((acc, { name }) => {
+    if (!name) return acc;
+    const match = name.trim().match(prefixNumberRegex);
+    if (!match) return acc;
+    const num = parseInt(match[1], 10);
+    return !isNaN(num) ? Math.max(acc, num) : acc;
+  }, 0);
+
+  const pendingFromTargets: string[] = [];
+  const addPendingCandidate = (rawId: unknown) => {
+    const cid = String(rawId || "").trim().toUpperCase();
+    if (!cid.startsWith(prefix)) return;
+    const suffix = cid.slice(prefix.length);
+    const num = parseInt(suffix, 10);
+    if (!isNaN(num) && /^\d+$/.test(suffix) && num > 0) {
+      max = Math.max(max, num);
+      if (!existingAdNames.has(cid) && !pendingFromTargets.includes(cid)) {
+        pendingFromTargets.push(cid);
+      }
+    }
+  };
+
+  // 2. Query Task Manager Creative ID API for any pending assigned task IDs
   const taskManagerEndpoints = [
     `http://127.0.0.1:4000/api/adflow/creative-ids?creatorId=${encodeURIComponent(creatorId)}`,
     `https://tasks.satmi.in/api/adflow/creative-ids?creatorId=${encodeURIComponent(creatorId)}`
@@ -2068,39 +2119,22 @@ export async function getPendingTaskManagerCreativeIds(creatorId: string): Promi
       clearTimeout(timer);
       if (res.ok) {
         const data = await res.json();
-        if (data?.nextCreativeId) {
-          return {
-            nextCreativeId: String(data.nextCreativeId),
-            pendingCreativeIds: Array.isArray(data.pendingCreativeIds)
-              ? data.pendingCreativeIds.map(String)
-              : []
-          };
+        if (Array.isArray(data?.pendingCreativeIds)) {
+          for (const item of data.pendingCreativeIds) {
+            addPendingCandidate(item);
+          }
         }
+        if (typeof data?.maxExistingNumber === "number" && data.maxExistingNumber > max) {
+          max = data.maxExistingNumber;
+        }
+        break;
       }
     } catch {
       // Fall through to next endpoint or DB computation
     }
   }
 
-  // 2. Fallback: Check existing `ads` and `daily_team_targets` in Supabase
-  const [{ data: existingAds }, { data: targetRows }] = await Promise.all([
-    admin.from("ads").select("name, deleted_at").ilike("name", `${prefix}%`),
-    admin.from("daily_team_targets").select("task_name, notes").eq("user_id", creatorId)
-  ]);
-
-  const existingAdNames = new Set(
-    (existingAds ?? [])
-      .filter((a) => !a.deleted_at && a.name)
-      .map((a) => a.name.trim().toUpperCase())
-  );
-
-  let max = (existingAds ?? []).reduce((acc, { name }) => {
-    const suffix = name.slice(prefix.length);
-    const num = parseInt(suffix, 10);
-    return !isNaN(num) && String(num).padStart(4, "0") === suffix ? Math.max(acc, num) : acc;
-  }, 0);
-
-  const pendingFromTargets: string[] = [];
+  // 3. Also check `daily_team_targets` in Supabase
   for (const row of targetRows ?? []) {
     let cid = "";
     if (row.notes && row.notes.startsWith("{")) {
@@ -2115,15 +2149,8 @@ export async function getPendingTaskManagerCreativeIds(creatorId: string): Promi
       const m = String(row.task_name || "").match(/^([A-Z]{3}\d{4})\b/i);
       if (m) cid = m[1].toUpperCase();
     }
-    if (cid && cid.startsWith(prefix)) {
-      const suffix = cid.slice(prefix.length);
-      const num = parseInt(suffix, 10);
-      if (!isNaN(num) && String(num).padStart(4, "0") === suffix) {
-        max = Math.max(max, num);
-        if (!existingAdNames.has(cid) && !pendingFromTargets.includes(cid)) {
-          pendingFromTargets.push(cid);
-        }
-      }
+    if (cid) {
+      addPendingCandidate(cid);
     }
   }
 
@@ -2141,7 +2168,7 @@ export async function getNextAdName(creatorId: string): Promise<string> {
   return result.nextCreativeId;
 }
 
-export async function bulkAssignCampaign(adIds: string[], campaignId: string) {
+export async function bulkAssignCampaign(adIds: string[], campaignIdInput: string | string[]) {
   const profile = await requireProfile();
   const settings = await getAppSettings();
 
@@ -2153,22 +2180,32 @@ export async function bulkAssignCampaign(adIds: string[], campaignId: string) {
     return { ok: false, message: "No creatives selected." };
   }
 
-  if (!campaignId) {
+  const targetCampaignIds = Array.from(
+    new Set(
+      (Array.isArray(campaignIdInput) ? campaignIdInput : [campaignIdInput])
+        .map((id) => (typeof id === "string" ? id.trim() : ""))
+        .filter(Boolean)
+    )
+  );
+
+  if (targetCampaignIds.length === 0) {
     return { ok: false, message: "Please select a target campaign." };
   }
 
   const admin = createSupabaseAdminClient();
-
-  // Validate target campaign
   const binReadyForCampaign = await isRecycleBinReady();
-  const { data: campaign, error: campaignError } = await liveOnly(admin
-    .from("campaigns")
-    .select("id, name, active")
-    .eq("id", campaignId), binReadyForCampaign)
-    .maybeSingle();
 
-  if (campaignError || !campaign) {
-    return { ok: false, message: campaignError?.message ?? "Selected campaign not found." };
+  const targetCampaigns: Array<{ id: string; name: string; active?: boolean }> = [];
+  for (const targetId of targetCampaignIds) {
+    const { data: campaign, error: campaignError } = await liveOnly(
+      admin.from("campaigns").select("id, name, active").eq("id", targetId),
+      binReadyForCampaign
+    ).maybeSingle();
+
+    if (campaignError || !campaign) {
+      return { ok: false, message: campaignError?.message ?? "Selected campaign not found." };
+    }
+    targetCampaigns.push(campaign);
   }
 
   // Fetch the target ads
@@ -2187,32 +2224,50 @@ export async function bulkAssignCampaign(adIds: string[], campaignId: string) {
   const updatedAdIds: string[] = [];
 
   for (const ad of adsToUpdate) {
-    if (ad.campaign_id === campaignId) {
-      updatedCount++;
-      continue;
+    let currentPrimary = ad.campaign_id;
+    let adUpdated = false;
+    let adFailed = false;
+
+    for (const targetCampaign of targetCampaigns) {
+      const campaignId = targetCampaign.id;
+      if (currentPrimary === campaignId) {
+        adUpdated = true;
+        continue;
+      }
+
+      if (currentPrimary) {
+        const { error } = await admin.from("ad_campaigns").upsert(
+          { ad_id: ad.id, campaign_id: campaignId },
+          { onConflict: "ad_id,campaign_id", ignoreDuplicates: true }
+        );
+        if (error) {
+          errors.push(`Failed to add creative ${ad.name} to campaign: ${error.message}`);
+          adFailed = true;
+          continue;
+        }
+        adUpdated = true;
+      } else {
+        const { error } = await admin
+          .from("ads")
+          .update({ campaign_id: campaignId, updated_at: now })
+          .eq("id", ad.id);
+        if (error) {
+          errors.push(`Failed to update ${ad.name}: ${error.message}`);
+          adFailed = true;
+          continue;
+        }
+        currentPrimary = campaignId;
+        adUpdated = true;
+      }
     }
 
-    if (ad.campaign_id) {
-      const { error } = await admin.from("ad_campaigns").upsert(
-        { ad_id: ad.id, campaign_id: campaignId },
-        { onConflict: "ad_id,campaign_id", ignoreDuplicates: true }
-      );
-      if (error) {
-        errors.push(`Failed to add creative ${ad.name} to campaign: ${error.message}`);
-        continue;
-      }
-    } else {
-      const { error } = await admin.from("ads")
-        .update({ campaign_id: campaignId, updated_at: now })
-        .eq("id", ad.id);
-      if (error) {
-        errors.push(`Failed to update ${ad.name}: ${error.message}`);
-        continue;
-      }
+    if (adUpdated && !adFailed) {
+      updatedCount++;
+      updatedAdIds.push(ad.id);
     }
-    updatedCount++;
-    updatedAdIds.push(ad.id);
   }
+
+  const campaignNamesLabel = targetCampaigns.map((c) => c.name).join(", ");
 
   if (updatedAdIds.length > 0) {
     try {
@@ -2223,8 +2278,8 @@ export async function bulkAssignCampaign(adIds: string[], campaignId: string) {
           target_type: "ad",
           target_id: id,
           metadata: {
-            new_campaign_id: campaignId,
-            campaign_name: campaign.name
+            new_campaign_id: targetCampaignIds.length === 1 ? targetCampaignIds[0] : targetCampaignIds,
+            campaign_name: campaignNamesLabel
           }
         }))
       );
@@ -2237,7 +2292,9 @@ export async function bulkAssignCampaign(adIds: string[], campaignId: string) {
   revalidatePath("/dashboard");
   revalidatePath("/campaigns");
   revalidatePath("/campaigns/[id]", "page");
-  revalidatePath(`/campaigns/${campaignId}`);
+  for (const targetId of targetCampaignIds) {
+    revalidatePath(`/campaigns/${targetId}`);
+  }
 
   if (updatedCount === 0 && errors.length > 0) {
     return { ok: false, message: errors[0] };
@@ -2246,6 +2303,6 @@ export async function bulkAssignCampaign(adIds: string[], campaignId: string) {
   return {
     ok: true,
     count: updatedCount,
-    message: `Successfully assigned ${updatedCount} creative${updatedCount === 1 ? "" : "s"} to "${campaign.name}".${errors.length ? ` ${errors.length} could not be assigned: ${errors[0]}` : ""}`
+    message: `Successfully assigned ${updatedCount} creative${updatedCount === 1 ? "" : "s"} to "${campaignNamesLabel}".${errors.length ? ` ${errors.length} could not be assigned: ${errors[0]}` : ""}`
   };
 }

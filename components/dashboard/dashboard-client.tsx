@@ -713,11 +713,11 @@ export function DashboardClient({
     }
   }
 
-  async function submitBulkCampaign(campaignId: string) {
+  async function submitBulkCampaign(campaignIds: string | string[]) {
     if (!selectedIds.size || isBulkAssigningCampaign) return;
     setIsBulkAssigningCampaign(true);
     try {
-      const response = await runServerAction(() => bulkAssignCampaign(Array.from(selectedIds), campaignId));
+      const response = await runServerAction(() => bulkAssignCampaign(Array.from(selectedIds), campaignIds));
       if (!response.ok) {
         toast({ title: "Could not assign campaign", description: response.message ?? "Try again.", tone: "error" });
         return;

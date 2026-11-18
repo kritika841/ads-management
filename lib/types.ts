@@ -87,6 +87,7 @@ export type Ad = {
   id: string;
   name: string;
   campaign_id: string | null;
+  campaign_ids?: string[];
   product_id: string | null;
   creator_id: string | null;
   editor_id: string | null;

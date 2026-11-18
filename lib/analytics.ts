@@ -278,7 +278,7 @@ function bottlenecks(ads: AdWithRelations[], nowMs: number, targets: AnalyticsSl
     const targetHours = isTargetStage(ad.production_stage) ? targets[ad.production_stage] : null;
     const ratio = targetHours ? ageHours / targetHours : 0;
     const severity: "healthy" | "at_risk" | "breached" = ratio > 1 ? "breached" : ratio >= 0.75 ? "at_risk" : "healthy";
-    return { id: ad.id, name: ad.name, product: ad.product?.name ?? "No product", campaign: ad.campaign?.name ?? "No campaign", owner: ownerName(ad), stage: ad.production_stage, stageLabel: stageLabels[ad.production_stage], ageHours, targetHours, deadline: ad.deadline, severity };
+    return { id: ad.id, name: ad.name, product: ad.product?.name ?? "No product", campaign: ad.campaigns?.map((item) => item.name).join(", ") || ad.campaign?.name || "No campaign", owner: ownerName(ad), stage: ad.production_stage, stageLabel: stageLabels[ad.production_stage], ageHours, targetHours, deadline: ad.deadline, severity };
   }).sort((a, b) => severityScore(b) - severityScore(a)).slice(0, 20);
 }
 
@@ -346,7 +346,11 @@ function reworkRate(ads: AdWithRelations[], events: Map<string, StageEvent[]>, r
 }
 
 function matchesDimensions(ad: AdWithRelations, filters: ResolvedAnalyticsFilters) {
-  return (!filters.productId || ad.product_id === filters.productId) && (!filters.campaignId || ad.campaign_id === filters.campaignId) && (!filters.creatorId || ad.creator_id === filters.creatorId) && (!filters.editorId || ad.editor_id === filters.editorId);
+  const matchesCampaign =
+    !filters.campaignId ||
+    ad.campaign_id === filters.campaignId ||
+    Boolean(ad.campaigns?.some((c) => c.id === filters.campaignId));
+  return (!filters.productId || ad.product_id === filters.productId) && matchesCampaign && (!filters.creatorId || ad.creator_id === filters.creatorId) && (!filters.editorId || ad.editor_id === filters.editorId);
 }
 
 function approvedIn(ads: AdWithRelations[], period: Period) { return ads.filter((ad) => { const at = approvalTime(ad); return at !== null && inPeriod(at, period); }); }
