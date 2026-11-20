@@ -51,7 +51,7 @@ const bulkRolesSchema = z.array(z.enum(["admin", "content_creator", "editor", "m
 const settingsSchema = z.object({
   twoStepApproval: z.boolean(),
   deadlineReminderDays: z.number().int().min(1).max(30),
-  maxConcurrentEdits: z.number().int().min(1).max(10),
+  maxConcurrentEdits: z.number().int().min(1).max(50),
   allowManagerFinalApproval: z.boolean().default(true),
   managerCreativeScope: managerCreativeScopeSchema,
   hiddenMetricsByRole: hiddenMetricsSchema,

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ExternalLink, Loader2, LockOpen, Play, Send, Snowflake, X } from "lucide-react";
+import { Check, ExternalLink, Layers, Link2, Loader2, LockOpen, Play, Send, Snowflake, X } from "lucide-react";
 import { startEditing, submitEditedVideo } from "@/app/actions/ads";
 import { runServerAction } from "@/lib/client-action";
 import { RequestedChanges } from "@/components/review/requested-changes";
@@ -14,6 +14,12 @@ import type { ResubmissionFeedbackItem } from "@/lib/resubmission";
 import type { AdWithRelations, EditorTimeLog } from "@/lib/types";
 import { formatDateOnly } from "@/lib/utils";
 
+type EditedVariationDraft = {
+  id: string;
+  label: string;
+  driveUrl: string;
+};
+
 export function EditorWorkspace({ ad, feedback, inProgressCount, maxConcurrentEdits, timeLogs }: { ad: AdWithRelations; feedback: ResubmissionFeedbackItem[]; inProgressCount: number; maxConcurrentEdits: number; timeLogs: EditorTimeLog[] }) {
   const frozen = ad.editing_freeze === "frozen";
   const unfrozen = ad.editing_freeze === "unfrozen";
@@ -21,8 +27,19 @@ export function EditorWorkspace({ ad, feedback, inProgressCount, maxConcurrentEd
   const atCapacity = !unfrozen && inProgressCount >= maxConcurrentEdits;
   const router = useRouter();
   const resubmitting = ad.production_stage === "changes_requested";
+  const creatorVariations = ad.variations ?? [];
   const [driveUrl, setDriveUrl] = useState(resubmitting ? ad.drive_url ?? "" : "");
   const [driveUrlError, setDriveUrlError] = useState<string | null>(null);
+  const [variationVideos, setVariationVideos] = useState<EditedVariationDraft[]>(() =>
+    creatorVariations.map((cv, idx) => {
+      const prev = (ad.edited_variations ?? []).find((ev) => ev.id === cv.id) ?? ad.edited_variations?.[idx];
+      return {
+        id: cv.id || `var-${idx + 1}`,
+        label: cv.label || `Variation ${idx + 1}`,
+        driveUrl: resubmitting && prev ? prev.drive_url || "" : ""
+      };
+    })
+  );
   const [editorNotes, setEditorNotes] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [confirmationOpen, setConfirmationOpen] = useState(false);
@@ -39,6 +56,18 @@ export function EditorWorkspace({ ad, feedback, inProgressCount, maxConcurrentEd
     setDriveUrlError(validation.error);
   }
 
+  function updateVariationUrl(index: number, driveUrlValue: string) {
+    setVariationVideos((current) =>
+      current.map((item, idx) => (idx === index ? { ...item, driveUrl: driveUrlValue } : item))
+    );
+  }
+
+  const variationVideosValid = variationVideos.every((item) => {
+    const trimmed = item.driveUrl.trim();
+    if (!trimmed) return false;
+    return !parseGoogleDriveVideoFileUrl(trimmed).error;
+  });
+
   function begin() {
     setMessage(null);
     startTransition(async () => {
@@ -51,7 +80,13 @@ export function EditorWorkspace({ ad, feedback, inProgressCount, maxConcurrentEd
   function submit() {
     setMessage(null);
     startTransition(async () => {
-      const response = await runServerAction(() => submitEditedVideo({ adId: ad.id, driveUrl, editorNotes, changesConfirmed: confirmed }));
+      const response = await runServerAction(() => submitEditedVideo({
+        adId: ad.id,
+        driveUrl,
+        variationVideos,
+        editorNotes,
+        changesConfirmed: confirmed
+      }));
       if (!response.ok) {
         setMessage(response.message ?? "Unable to submit the edited video.");
         return;
@@ -91,6 +126,25 @@ export function EditorWorkspace({ ad, feedback, inProgressCount, maxConcurrentEd
         </div>
         <div className="space-y-4">
           <div><p className="text-xs font-semibold uppercase text-muted-foreground">Raw footage</p>{ad.production_stage === "ready_for_edit" ? <p className="mt-2 text-sm text-muted-foreground">The raw footage link unlocks once you start editing.</p> : ad.raw_footage_url ? <a href={ad.raw_footage_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">Open Drive folder <ExternalLink className="size-4" aria-hidden /></a> : <p className="mt-2 text-sm text-destructive">Raw footage link is missing.</p>}</div>
+          {ad.production_stage !== "ready_for_edit" && ad.variations && ad.variations.length > 0 ? (
+            <div>
+              <p className="text-xs font-semibold uppercase text-muted-foreground">Variations ({ad.variations.length})</p>
+              <ul className="mt-2 space-y-1.5">
+                {ad.variations.map((variation, idx) => (
+                  <li key={variation.id} className="flex items-center justify-between gap-2 text-sm">
+                    <span className="truncate text-foreground">{variation.label || `Variation ${idx + 1}`}</span>
+                    {variation.raw_footage_url ? (
+                      <a href={variation.raw_footage_url} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-primary hover:underline">
+                        Open folder <ExternalLink className="size-3.5" aria-hidden />
+                      </a>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Pending link</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <dl className="grid gap-2 text-sm"><div className="flex justify-between gap-3"><dt className="text-muted-foreground">Creator</dt><dd className="font-medium text-foreground">{ad.creator?.name ?? "Unassigned"}</dd></div><div className="flex justify-between gap-3"><dt className="text-muted-foreground">Campaign</dt><dd className="font-medium text-foreground">{ad.campaigns?.map((item) => item.name).join(", ") || ad.campaign?.name || "No campaign"}</dd></div><div className="flex justify-between gap-3"><dt className="text-muted-foreground">Deadline</dt><dd className={ad.deadline ? "font-medium text-foreground" : "text-muted-foreground"}>{ad.deadline ? formatDateOnly(ad.deadline) : "No deadline set"}</dd></div></dl>
         </div>
       </div>
@@ -112,7 +166,62 @@ export function EditorWorkspace({ ad, feedback, inProgressCount, maxConcurrentEd
           {driveUrlError ? (
             <p className="mt-1.5 text-xs text-destructive" role="alert">{driveUrlError}</p>
           ) : null}
-        </Field><Field label="Editing note" hint="Optional"><Textarea className="min-h-20" value={editorNotes} onChange={(event) => setEditorNotes(event.target.value)} placeholder="What changed or what should reviewers know?" /></Field></div><div className="mt-5 flex justify-end"><Button disabled={isPending || frozen || !driveUrl.trim() || Boolean(driveUrlError)} onClick={() => resubmitting ? setConfirmationOpen(true) : submit()}>{isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Send className="size-4" aria-hidden />}{resubmitting ? "Resubmit edited video" : "Submit edited video"}</Button></div></div> : null}
+        </Field><Field label="Editing note" hint="Optional"><Textarea className="min-h-20" value={editorNotes} onChange={(event) => setEditorNotes(event.target.value)} placeholder="What changed or what should reviewers know?" /></Field></div>
+
+        {variationVideos.length > 0 ? (
+          <div className="mt-5 rounded-xl border border-border bg-muted/30 p-4">
+            <div>
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                <Layers className="size-4 text-primary" aria-hidden />
+                Variation videos ({variationVideos.length})
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Submit the edited Google Drive video file link for each creator variation below.
+              </p>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {variationVideos.map((item, idx) => {
+                const trimmed = item.driveUrl.trim();
+                const urlError = trimmed ? parseGoogleDriveVideoFileUrl(trimmed).error : null;
+
+                return (
+                  <div
+                    key={item.id}
+                    className="grid gap-3 rounded-lg border border-border bg-card p-3 md:grid-cols-[180px_minmax(0,1fr)] md:items-start"
+                  >
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">Variation</p>
+                      <p className="mt-1.5 text-sm font-semibold text-foreground">{item.label}</p>
+                    </div>
+                    <Field
+                      label="Edited video (Drive link)"
+                      hint="Required · Must be a single Google Drive video file link."
+                    >
+                      <div className="relative">
+                        <Link2 className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                        <Input
+                          className="pl-9"
+                          value={item.driveUrl}
+                          onChange={(event) => updateVariationUrl(idx, event.target.value)}
+                          placeholder="https://drive.google.com/file/d/..."
+                          aria-invalid={Boolean(urlError)}
+                        />
+                      </div>
+                      {urlError ? (
+                        <p className="mt-1 text-xs text-destructive" role="alert">{urlError}</p>
+                      ) : !trimmed ? (
+                        <p className="mt-1 text-xs text-warning">Paste the Google Drive video file link for {item.label}.</p>
+                      ) : null}
+                    </Field>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="mt-5 flex justify-end"><Button disabled={isPending || frozen || !driveUrl.trim() || Boolean(driveUrlError) || !variationVideosValid} onClick={() => resubmitting ? setConfirmationOpen(true) : submit()}>{isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Send className="size-4" aria-hidden />}{resubmitting ? "Resubmit edited video" : "Submit edited video"}</Button></div></div> : null}
 
       {/* Live editing timer — shown whenever the editor is actively in editing or changes_requested */}
       {(ad.production_stage === "editing" || resubmitting) ? (

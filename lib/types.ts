@@ -83,6 +83,20 @@ export type Product = {
 
 export type EditingFreezeState = "frozen" | "unfrozen";
 
+export type CreativeVariation = {
+  id: string;
+  label: string;
+  raw_footage_url: string;
+};
+
+export type EditedVariation = {
+  id: string;
+  label: string;
+  drive_url: string;
+  drive_file_id: string | null;
+  preview_url: string | null;
+};
+
 export type Ad = {
   id: string;
   name: string;
@@ -124,6 +138,8 @@ export type Ad = {
   created_at: string;
   deleted_at?: string | null;
   deleted_by?: string | null;
+  variations?: CreativeVariation[];
+  edited_variations?: EditedVariation[];
 };
 
 export type ReviewSubmissionType = "new" | "editor_resubmission" | "creator_resubmission";

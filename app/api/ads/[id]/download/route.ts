@@ -6,6 +6,7 @@ import { getDriveMedia, getDriveMetadata } from "@/lib/drive";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { resolveAdMedia } from "@/lib/ad-media-export";
 import { createDownloadLog } from "@/lib/download-logs";
+import { EDITOR_VARIATIONS_ACTION, extractEditedVariationsFromActivityLogs } from "@/lib/creative-variations";
 
 const folderMime = "application/vnd.google-apps.folder";
 
@@ -35,8 +36,21 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       .eq("ad_id", id)
       .eq("drive_file_id", requestedFileId)
       .maybeSingle();
-    if (!version?.drive_file_id) return new NextResponse("Video not found", { status: 404 });
-    fileId = version.drive_file_id;
+    if (version?.drive_file_id) {
+      fileId = version.drive_file_id;
+    } else {
+      const { data: variationLogs } = await admin
+        .from("activity_logs")
+        .select("action,metadata,created_at")
+        .eq("ad_id", id)
+        .eq("action", EDITOR_VARIATIONS_ACTION)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      const editedVariations = extractEditedVariationsFromActivityLogs(variationLogs);
+      const matched = editedVariations.find((item) => item.drive_file_id === requestedFileId);
+      if (!matched?.drive_file_id) return new NextResponse("Video not found", { status: 404 });
+      fileId = matched.drive_file_id;
+    }
   }
 
   let metadata: Awaited<ReturnType<typeof getDriveMetadata>> = null;

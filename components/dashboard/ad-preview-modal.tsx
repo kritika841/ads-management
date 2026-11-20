@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, CalendarClock, Clapperboard, Video, X } from "lucide-react";
+import { ArrowUpRight, CalendarClock, Clapperboard, ExternalLink, Play, Video, X } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ import { Modal } from "@/components/ui/modal";
 import { FreezeEditingToggle } from "@/components/workflow/freeze-editing-toggle";
 import { ProductionStageBadge } from "@/components/workflow/production-stage";
 import { UnfreezeEditingButton } from "@/components/workflow/unfreeze-editing-button";
+import { buildPlayableAdVideos, buildVariationPairs } from "@/lib/creative-variations";
 import { resolveAdThumbnailUrl } from "@/lib/drive-urls";
 import { canToggleEditingFreeze, isFinalMediaVisible, productionStageLabels } from "@/lib/production-workflow";
 import { cn, formatDateOnly } from "@/lib/utils";
@@ -33,6 +35,12 @@ export function AdPreviewModal({
   role?: UserRole;
   onFreezeChange?: (adId: string, state: EditingFreezeState, stage?: ProductionStage) => void;
 }) {
+  const [selectedVideoKey, setSelectedVideoKey] = useState("main");
+
+  useEffect(() => {
+    setSelectedVideoKey("main");
+  }, [ad?.id]);
+
   if (!ad) {
     return null;
   }
@@ -41,7 +49,12 @@ export function AdPreviewModal({
   const canManageEditing = role === "admin" || role === "manager";
   const showFreeze = canManageEditing && canToggleEditingFreeze(ad.production_stage);
   const showUnfreezeOverride = canManageEditing && Boolean(ad.editor_id) && ad.production_stage === "ready_for_edit";
-  const thumbnailSrc = mediaVisible ? resolveAdThumbnailUrl(ad.thumbnail_url, ad.drive_file_id) : null;
+  const playableVideos = mediaVisible ? buildPlayableAdVideos(ad) : [];
+  const activeVideo = playableVideos.find((item) => item.key === selectedVideoKey) ?? playableVideos[0] ?? null;
+  const activePreviewUrl = activeVideo?.previewUrl ?? (mediaVisible ? ad.preview_url : null);
+  const activeFileId = activeVideo?.driveFileId ?? (mediaVisible ? ad.drive_file_id : null);
+  const thumbnailSrc = mediaVisible ? resolveAdThumbnailUrl(activeVideo?.isMain ? ad.thumbnail_url : null, activeFileId) : null;
+  const variationPairs = buildVariationPairs(ad.variations, ad.edited_variations, true, mediaVisible);
   const details: { label: string; value: React.ReactNode }[] = [
     { label: "Stage", value: productionStageLabels[ad.production_stage] ?? ad.production_stage },
     { label: "Campaign", value: ad.campaigns?.map((item) => item.name).join(", ") || ad.campaign?.name || "No campaign" },
@@ -87,21 +100,55 @@ export function AdPreviewModal({
           </div>
         </header>
         <div className="grid min-h-0 flex-1 overflow-y-auto lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.8fr)] lg:overflow-hidden">
-          <div className="min-h-[300px] bg-neutral-950 lg:min-h-0">
-            {mediaVisible && ad.preview_url ? (
-              <iframe src={ad.preview_url} title={ad.name} className="h-full min-h-[280px] w-full" allow="autoplay" />
-            ) : thumbnailSrc ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={thumbnailSrc} alt="" className="h-full min-h-[280px] w-full object-contain" />
-            ) : !mediaVisible ? (
-              <div className="flex h-full min-h-[300px] flex-col items-center justify-center gap-3 px-6 text-center">
-                <span className="flex size-12 items-center justify-center rounded-full border border-border bg-card text-muted-foreground"><Clapperboard className="size-5" aria-hidden /></span>
-                <p className="text-sm font-semibold text-foreground">{productionStageLabels[ad.production_stage] ?? "In production"}</p>
-                <p className="max-w-sm text-sm text-muted-foreground">{pendingMediaCopy[ad.production_stage] ?? "The video isn't available yet."}</p>
+          <div className="flex min-h-[300px] flex-col bg-neutral-950 lg:min-h-0">
+            {mediaVisible && playableVideos.length > 1 ? (
+              <div className="flex flex-wrap items-center gap-1.5 border-b border-border bg-card/95 px-3 py-2">
+                {playableVideos.map((video) => {
+                  const selected = activeVideo?.key === video.key;
+                  return (
+                    <button
+                      key={video.key}
+                      type="button"
+                      onClick={() => setSelectedVideoKey(video.key)}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
+                        selected
+                          ? "bg-primary text-primary-foreground"
+                          : "border border-border bg-muted text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      <Play className="size-3" aria-hidden />
+                      {video.label}
+                    </button>
+                  );
+                })}
               </div>
-            ) : (
-              <div className="flex h-full min-h-[300px] flex-col items-center justify-center gap-2 text-sm text-muted-foreground"><Video className="size-7" aria-hidden />Preview unavailable</div>
-            )}
+            ) : null}
+            <div className="min-h-0 flex-1">
+              {mediaVisible && activePreviewUrl ? (
+                <iframe key={activeVideo?.key ?? "main"} src={activePreviewUrl} title={`${ad.name} - ${activeVideo?.label ?? "Video"}`} className="h-full min-h-[280px] w-full" allow="autoplay" />
+              ) : mediaVisible && activeFileId ? (
+                <video
+                  key={activeFileId}
+                  src={`/api/ads/${ad.id}/media?fileId=${encodeURIComponent(activeFileId)}`}
+                  controls
+                  autoPlay
+                  playsInline
+                  className="h-full min-h-[280px] w-full bg-black object-contain"
+                />
+              ) : thumbnailSrc ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={thumbnailSrc} alt="" className="h-full min-h-[280px] w-full object-contain" />
+              ) : !mediaVisible ? (
+                <div className="flex h-full min-h-[300px] flex-col items-center justify-center gap-3 px-6 text-center">
+                  <span className="flex size-12 items-center justify-center rounded-full border border-border bg-card text-muted-foreground"><Clapperboard className="size-5" aria-hidden /></span>
+                  <p className="text-sm font-semibold text-foreground">{productionStageLabels[ad.production_stage] ?? "In production"}</p>
+                  <p className="max-w-sm text-sm text-muted-foreground">{pendingMediaCopy[ad.production_stage] ?? "The video isn't available yet."}</p>
+                </div>
+              ) : (
+                <div className="flex h-full min-h-[300px] flex-col items-center justify-center gap-2 text-sm text-muted-foreground"><Video className="size-7" aria-hidden />Preview unavailable</div>
+              )}
+            </div>
           </div>
           <aside className="min-h-0 border-t border-border p-5 lg:overflow-y-auto lg:border-l lg:border-t-0 lg:p-6">
             {(ad.production_stage === "creator_changes_requested" || ad.production_stage === "changes_requested") ? (
@@ -129,6 +176,65 @@ export function AdPreviewModal({
                 </div>
               ))}
             </dl>
+            {variationPairs.length > 0 ? (
+              <div className="mb-5 rounded-lg border border-border p-3 text-xs">
+                <p className="text-[10px] font-semibold uppercase text-muted-foreground">
+                  Variations ({variationPairs.length})
+                </p>
+                <ul className="mt-2 space-y-2">
+                  {variationPairs.map((pair, idx) => {
+                    const playableMatch = playableVideos.find(
+                      (video) => !video.isMain && ((pair.driveFileId && video.driveFileId === pair.driveFileId) || video.label === pair.label || video.key.endsWith(`-${idx}`))
+                    );
+                    const isActive = playableMatch && activeVideo?.key === playableMatch.key;
+                    return (
+                      <li key={pair.key} className="flex items-center justify-between gap-2">
+                        <span className="truncate font-medium text-foreground">{pair.label}</span>
+                        <span className="flex shrink-0 items-center gap-2.5 font-medium">
+                          {playableMatch ? (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedVideoKey(playableMatch.key)}
+                              className={cn(
+                                "inline-flex items-center gap-1 rounded px-1.5 py-0.5 transition-colors",
+                                isActive
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-muted text-foreground hover:bg-primary/15 hover:text-primary"
+                              )}
+                            >
+                              <Play className="size-3" aria-hidden />
+                              {isActive ? "Playing" : "Watch"}
+                            </button>
+                          ) : null}
+                          {pair.rawUrl ? (
+                            <a
+                              href={pair.rawUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-muted-foreground hover:text-primary hover:underline"
+                            >
+                              Raw <ExternalLink className="size-3" aria-hidden />
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground">Raw pending</span>
+                          )}
+                          {mediaVisible && pair.editedUrl ? (
+                            <a
+                              href={pair.editedUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-primary hover:underline"
+                            >
+                              Edited <ExternalLink className="size-3" aria-hidden />
+                            </a>
+                          ) : null}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : null}
             {showFreeze || showUnfreezeOverride ? (
               <div className="mb-5 rounded-lg border border-border p-3">
                 <h3 className="section-heading">Editing controls</h3>

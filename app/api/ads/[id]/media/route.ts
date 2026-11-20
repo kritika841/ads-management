@@ -2,6 +2,7 @@ import { getDriveMedia } from "@/lib/drive";
 import { getCachedDriveMediaPrefix, streamDriveMediaPrefix, streamFromCachedPrefix, warmDriveMediaPrefix, type DriveMediaPrefix } from "@/lib/drive-media-cache";
 import { verifyMediaAccessToken } from "@/lib/media-token";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { EDITOR_VARIATIONS_ACTION, extractEditedVariationsFromActivityLogs } from "@/lib/creative-variations";
 
 export const runtime = "nodejs";
 
@@ -114,7 +115,17 @@ async function canAccessMedia(adId: string, fileId: string) {
     .eq("drive_file_id", fileId)
     .limit(1)
     .maybeSingle();
-  return Boolean(version);
+  if (version) return true;
+
+  const { data: variationLogs } = await supabase
+    .from("activity_logs")
+    .select("action,metadata,created_at")
+    .eq("ad_id", adId)
+    .eq("action", EDITOR_VARIATIONS_ACTION)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const editedVariations = extractEditedVariationsFromActivityLogs(variationLogs);
+  return editedVariations.some((item) => item.drive_file_id === fileId);
 }
 
 type ByteRange = { start: number; end: number | null };

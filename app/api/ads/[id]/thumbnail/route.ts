@@ -1,4 +1,5 @@
 import { getDriveThumbnail } from "@/lib/drive";
+import { EDITOR_VARIATIONS_ACTION, extractEditedVariationsFromActivityLogs } from "@/lib/creative-variations";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -42,8 +43,9 @@ function generateFallbackSvg(name: string): Response {
   });
 }
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const requestedFileId = extractDriveFileId(new URL(request.url).searchParams.get("fileId"));
   const admin = createSupabaseAdminClient();
   const { data: ad, error } = await admin
     .from("ads")
@@ -59,13 +61,29 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const productData = Array.isArray(ad.product) ? ad.product[0] : ad.product;
   const productImage = (productData as { image_url?: string | null } | null)?.image_url;
 
-  const fileId =
+  const primaryFileId =
     extractDriveFileId(ad.drive_file_id) ||
     extractDriveFileId(ad.resolved_video_url) ||
     extractDriveFileId(ad.drive_url) ||
     extractDriveFileId(ad.preview_url) ||
     extractDriveFileId(ad.thumbnail_url) ||
     extractDriveFileId(ad.raw_footage_url);
+
+  let fileId = primaryFileId;
+  if (requestedFileId && requestedFileId !== primaryFileId) {
+    const { data: variationLogs } = await admin
+      .from("activity_logs")
+      .select("action,metadata,created_at")
+      .eq("ad_id", id)
+      .eq("action", EDITOR_VARIATIONS_ACTION)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    const editedVars = extractEditedVariationsFromActivityLogs(variationLogs);
+    const matched = editedVars.find((item) => item.drive_file_id === requestedFileId || extractDriveFileId(item.drive_url) === requestedFileId);
+    if (matched) {
+      fileId = requestedFileId;
+    }
+  }
 
   if (fileId) {
     // 1. Try Google Drive API with Service Account (authorized)

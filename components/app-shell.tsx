@@ -33,6 +33,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { NotificationBell } from "@/components/notification-bell";
 import { RealtimeSync } from "@/components/realtime-sync";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { AttendanceHeaderWidget } from "@/components/attendance/attendance-header-widget";
 import { AnnouncementOverlay } from "@/components/announcements/announcement-overlay";
 import { UserSessionTracker } from "@/components/session/user-session-tracker";
 import { cn } from "@/lib/utils";
@@ -211,6 +212,7 @@ export function AppShell({
               <NotificationBell notifications={notifications} userId={profile.id}>
                 <Bell className="size-[18px]" aria-hidden />
               </NotificationBell>
+              <AttendanceHeaderWidget profile={profile} />
               <Link
                 href={profile.role === "admin" ? "/admin/settings#security" : "/settings"}
                 className="ml-1 flex items-center gap-2 rounded-lg border border-border bg-card py-1 pl-1 pr-2 transition-colors hover:bg-muted/70"

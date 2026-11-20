@@ -23,6 +23,7 @@ import { hasAdAccess } from "@/lib/ad-access";
 import { requireProfile } from "@/lib/auth";
 import { getAdDetail, getAppSettings, getCampaigns, getEditorInProgressCount, getEditorTimeLogs, getEditorWorkloads, getProducts, getProfiles, getTags } from "@/lib/data";
 import { canDeleteAd } from "@/lib/permissions";
+import { buildVariationPairs } from "@/lib/creative-variations";
 import { creatorCapableProfiles, isCreatorCapableRole } from "@/lib/creators";
 import { creatorEditableStages, getProductionStageLabel, isFinalMediaVisible, productionStageLabels, workflowWaitingLabel } from "@/lib/production-workflow";
 import type { ResubmissionFeedbackItem } from "@/lib/resubmission";
@@ -221,6 +222,51 @@ export default async function AdDetailPage({ params }: { params: Promise<{ id: s
                   Raw footage folder <ExternalLink className="size-4" aria-hidden />
                 </a>
               ) : null}
+              {(() => {
+                const showRaw = isReviewer || isCreator || (isAssignedEditor && ad.production_stage !== "ready_for_edit");
+                const variationPairs = buildVariationPairs(ad.variations, ad.edited_variations, showRaw, mediaVisible);
+                if (variationPairs.length === 0) return null;
+                return (
+                  <div className="mt-4 border-t border-border pt-4">
+                    <p className="text-xs font-semibold uppercase text-muted-foreground">
+                      Variations ({variationPairs.length})
+                    </p>
+                    <ul className="mt-2 space-y-2">
+                      {variationPairs.map((pair) => (
+                        <li key={pair.key} className="flex items-center justify-between gap-2 text-sm">
+                          <span className="truncate text-foreground">{pair.label}</span>
+                          <span className="flex shrink-0 items-center gap-2.5 text-xs font-medium">
+                            {showRaw ? (
+                              pair.rawUrl ? (
+                                <a
+                                  href={pair.rawUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 text-muted-foreground hover:text-primary hover:underline"
+                                >
+                                  Raw <ExternalLink className="size-3" aria-hidden />
+                                </a>
+                              ) : (
+                                <span className="text-muted-foreground">Raw pending</span>
+                              )
+                            ) : null}
+                            {mediaVisible && pair.editedUrl ? (
+                              <a
+                                href={pair.editedUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-primary hover:underline"
+                              >
+                                Edited <ExternalLink className="size-3" aria-hidden />
+                              </a>
+                            ) : null}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })()}
               {ad.tags.length ? <div className="mt-4 flex flex-wrap gap-1.5 border-t border-border pt-4">{ad.tags.map((tag) => <span key={tag.id} className="rounded-md bg-accent px-2 py-1 text-[11px] font-medium text-accent-foreground">#{tag.name}</span>)}</div> : null}
             </section>
 

@@ -8,6 +8,16 @@ export default function nextConfig(phase: string): NextConfig {
     // Keep dev and production artifacts isolated so concurrent checks cannot
     // invalidate a running development server's module manifest.
     distDir: phase === PHASE_DEVELOPMENT_SERVER ? ".next-dev" : ".next",
+    async rewrites() {
+      if (phase !== PHASE_DEVELOPMENT_SERVER) return [];
+      const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || "https://ads.satmi.in").replace(/\/+$/, "");
+      return [
+        {
+          source: "/supabase-proxy/:path*",
+          destination: `${supabaseUrl}/:path*`
+        }
+      ];
+    },
     images: {
       remotePatterns: [
         {

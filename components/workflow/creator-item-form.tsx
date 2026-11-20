@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Link2, Loader2, Plus, Tags, UploadCloud } from "lucide-react";
+import { Check, Layers, Link2, Loader2, Plus, Tags, Trash2, UploadCloud } from "lucide-react";
 import { getNextAdName, getPendingTaskManagerCreativeIds, saveCreatorItem, submitFinalClipByReviewer, adminOverrideCreativeEdit } from "@/app/actions/ads";
 import { runServerAction } from "@/lib/client-action";
 import { RichTextEditor } from "@/components/dashboard/rich-text-editor";
@@ -13,6 +13,21 @@ import { parseGoogleDriveVideoFileUrl } from "@/lib/drive-urls";
 import { creatorControlledStages, creatorSelectableStages, creatorStatusOptionLabels, productionStageLabels, productionStages, type CreatorControlledStage } from "@/lib/production-workflow";
 import { eligibleCreatorsFor, isCreatorCapableRole } from "@/lib/creators";
 import type { AdWithRelations, Campaign, Product, Profile } from "@/lib/types";
+
+type VariationDraft = {
+  id: string;
+  label: string;
+  rawFootageUrl: string;
+};
+
+function isValidGoogleDriveUrl(value: string): boolean {
+  try {
+    const url = new URL(value.trim());
+    return url.hostname === "drive.google.com" || url.hostname === "docs.google.com";
+  } catch {
+    return false;
+  }
+}
 
 export function CreatorItemForm({
   profile,
@@ -90,6 +105,17 @@ export function CreatorItemForm({
   const [tagDraft, setTagDraft] = useState("");
   const [deadline, setDeadline] = useState(initialAd?.deadline ?? "");
   const [notes, setNotes] = useState(initialAd?.notes ?? "");
+  const [hasVariations, setHasVariations] = useState(Boolean(initialAd?.variations && initialAd.variations.length > 0));
+  const [variations, setVariations] = useState<VariationDraft[]>(() =>
+    (initialAd?.variations ?? []).map((item, idx) => ({
+      id: item.id || `var-${idx + 1}`,
+      label: item.label || `Variation ${idx + 1}`,
+      rawFootageUrl: item.raw_footage_url || ""
+    }))
+  );
+  const [variationCountInput, setVariationCountInput] = useState(() =>
+    String(initialAd?.variations?.length && initialAd.variations.length > 0 ? initialAd.variations.length : 1)
+  );
 
   // Final submission fields — admin/manager only
   const [finalMode, setFinalMode] = useState(Boolean(initialAd?.drive_url));
@@ -136,6 +162,15 @@ export function CreatorItemForm({
     ? Boolean(finalDriveUrl.trim() && !finalDriveUrlError)
     : true;
 
+  const variationsValid = !hasVariations || (
+    variations.length > 0 &&
+    variations.every((item) => {
+      const url = item.rawFootageUrl.trim();
+      if (!url) return overrideMode || !requiresRawFootage;
+      return isValidGoogleDriveUrl(url);
+    })
+  );
+
   const canSave = Boolean(
     name.trim() &&
     campaignId &&
@@ -144,8 +179,69 @@ export function CreatorItemForm({
     scriptText.trim() &&
     (!requiresRawFootage || rawFootageUrl.trim()) &&
     (!editorId || deadline) &&
-    finalModeReady
+    finalModeReady &&
+    variationsValid
   );
+
+  function toggleVariations(checked: boolean) {
+    setHasVariations(checked);
+    if (checked && variations.length === 0) {
+      const next = [{ id: "var-1", label: "Variation 1", rawFootageUrl: "" }];
+      setVariations(next);
+      setVariationCountInput("1");
+    }
+  }
+
+  function applyVariationCount(targetCountRaw: number) {
+    const targetCount = Math.max(1, Math.min(50, Math.floor(targetCountRaw || 1)));
+    setVariationCountInput(String(targetCount));
+    setVariations((current) => {
+      if (targetCount === current.length) return current;
+      if (targetCount > current.length) {
+        const extra: VariationDraft[] = [];
+        for (let i = current.length; i < targetCount; i++) {
+          extra.push({
+            id: `var-${i + 1}-${Date.now().toString(36)}`,
+            label: `Variation ${i + 1}`,
+            rawFootageUrl: ""
+          });
+        }
+        return [...current, ...extra];
+      }
+      return current.slice(0, targetCount);
+    });
+  }
+
+  function addVariationRow() {
+    setVariations((current) => {
+      const nextIndex = current.length + 1;
+      const next = [
+        ...current,
+        {
+          id: `var-${nextIndex}-${Date.now().toString(36)}`,
+          label: `Variation ${nextIndex}`,
+          rawFootageUrl: ""
+        }
+      ];
+      setVariationCountInput(String(next.length));
+      return next;
+    });
+  }
+
+  function removeVariationRow(index: number) {
+    setVariations((current) => {
+      if (current.length <= 1) return current;
+      const next = current.filter((_, idx) => idx !== index);
+      setVariationCountInput(String(next.length));
+      return next;
+    });
+  }
+
+  function updateVariationRow(index: number, patch: Partial<VariationDraft>) {
+    setVariations((current) =>
+      current.map((item, idx) => (idx === index ? { ...item, ...patch } : item))
+    );
+  }
 
   const tagOptions = useMemo(() => Array.from(new Set([...availableTags, ...selectedTags])).filter((tag) => Boolean(tag) && tag.toLowerCase() !== "downloaded").sort(), [availableTags, selectedTags]);
 
@@ -171,6 +267,7 @@ export function CreatorItemForm({
           stage: stage as Parameters<typeof adminOverrideCreativeEdit>[0]["stage"],
           editorId,
           rawFootageUrl,
+          variations: hasVariations ? variations : [],
           platforms: selectedPlatforms,
           tags: selectedTags,
           deadline,
@@ -198,6 +295,7 @@ export function CreatorItemForm({
         stage: stage as CreatorControlledStage,
         editorId,
         rawFootageUrl,
+        variations: hasVariations ? variations : [],
         platforms: selectedPlatforms,
         tags: selectedTags,
         deadline,
@@ -294,6 +392,139 @@ export function CreatorItemForm({
           </div>
         </section>
       ) : null}
+
+      <section className="rounded-xl border border-border bg-card/60 p-4">
+        <label className="flex cursor-pointer items-start gap-3">
+          <input
+            id="creative-variations-toggle"
+            type="checkbox"
+            className="mt-0.5 size-4 accent-primary"
+            checked={hasVariations}
+            onChange={(event) => toggleVariations(event.target.checked)}
+          />
+          <span>
+            <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+              <Layers className="size-4 text-primary" aria-hidden />
+              Want to add variations to this creative
+            </span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              Tick this to attach any number of variation raw footage folder links inside {name || "this creative"}.
+            </span>
+          </span>
+        </label>
+
+        {hasVariations ? (
+          <div className="mt-4 space-y-4 border-t border-border pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs font-medium text-muted-foreground">
+                {variations.length} {variations.length === 1 ? "variation" : "variations"} configured
+                {requiresRawFootage && !overrideMode ? " · Google Drive links required for this stage" : ""}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <span>Count:</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={variationCountInput}
+                    onChange={(event) => setVariationCountInput(event.target.value)}
+                    onBlur={() => applyVariationCount(Number(variationCountInput))}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        applyVariationCount(Number(variationCountInput));
+                      }
+                    }}
+                    className="h-8 w-20 px-2 text-xs"
+                    aria-label="Number of variations"
+                  />
+                </label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="h-8 px-2.5 text-xs"
+                  onClick={() => applyVariationCount(Number(variationCountInput))}
+                >
+                  Set
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="h-8 px-2.5 text-xs"
+                  onClick={addVariationRow}
+                >
+                  <Plus className="size-3.5" aria-hidden />
+                  Add variation
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {variations.map((item, idx) => {
+                const trimmedUrl = item.rawFootageUrl.trim();
+                const invalidUrl = Boolean(trimmedUrl && !isValidGoogleDriveUrl(trimmedUrl));
+                const missingRequiredUrl = Boolean(!trimmedUrl && requiresRawFootage && !overrideMode);
+
+                return (
+                  <div
+                    key={item.id}
+                    className="grid gap-3 rounded-lg border border-border bg-background p-3 md:grid-cols-[180px_minmax(0,1fr)_auto] md:items-start"
+                  >
+                    <Field label={`Variation ${idx + 1} label`}>
+                      <Input
+                        value={item.label}
+                        onChange={(event) => updateVariationRow(idx, { label: event.target.value })}
+                        placeholder={`Variation ${idx + 1}`}
+                      />
+                    </Field>
+                    <Field
+                      label="Raw footage folder link"
+                      hint={requiresRawFootage && !overrideMode ? "Required Google Drive URL." : "Optional until shoot is complete."}
+                    >
+                      <div className="relative">
+                        <Link2 className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                        <Input
+                          className="pl-9"
+                          value={item.rawFootageUrl}
+                          onChange={(event) => updateVariationRow(idx, { rawFootageUrl: event.target.value })}
+                          placeholder="https://drive.google.com/drive/folders/..."
+                          aria-invalid={invalidUrl}
+                        />
+                      </div>
+                      {invalidUrl ? (
+                        <p className="mt-1 text-xs text-destructive" role="alert">
+                          Use a valid Google Drive URL.
+                        </p>
+                      ) : missingRequiredUrl ? (
+                        <p className="mt-1 text-xs text-warning">
+                          Add a Google Drive link before saving at this stage.
+                        </p>
+                      ) : null}
+                    </Field>
+                    <div className="flex justify-end md:pt-7">
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="size-9 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                        title="Remove variation"
+                        aria-label={`Remove Variation ${idx + 1}`}
+                        disabled={variations.length <= 1}
+                        onClick={() => removeVariationRow(idx)}
+                      >
+                        <Trash2 className="size-4" aria-hidden />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+      </section>
 
       <Field label="Notes"><Textarea className="min-h-20" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Production context or instructions" /></Field>
 

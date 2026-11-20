@@ -362,7 +362,7 @@ export function SettingsClient({
                   <Input
                     type="number"
                     min={1}
-                    max={10}
+                    max={50}
                     value={maxConcurrentEdits}
                     onChange={(event) => setMaxConcurrentEdits(Number(event.target.value))}
                   />

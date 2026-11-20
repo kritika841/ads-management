@@ -19,6 +19,7 @@ import { Input, Select, Textarea } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { platforms } from "@/lib/constants";
+import { buildPlayableAdVideos } from "@/lib/creative-variations";
 import { runServerAction } from "@/lib/client-action";
 import { downloadProgressLabel, downloadWithProgress, type DownloadProgress } from "@/lib/client-download";
 import type { ExportJobSnapshot } from "@/lib/export-job-types";
@@ -670,15 +671,20 @@ export function DashboardClient({
     }
   }
 
-  async function downloadOne(ad: AdWithRelations) {
+  async function downloadOne(ad: AdWithRelations, options?: { fileId?: string | null; label?: string }) {
     if (downloadingIds.has(ad.id)) return;
     setDownloadingIds((current) => new Set(current).add(ad.id));
     setDownloadProgress((current) => ({ ...current, [ad.id]: { receivedBytes: 0, totalBytes: null, percent: null, etaSeconds: null } }));
+    const targetFileId = options?.fileId && options.fileId !== ad.drive_file_id ? options.fileId : null;
+    const downloadUrl = targetFileId
+      ? `/api/ads/${ad.id}/download?fileId=${encodeURIComponent(targetFileId)}`
+      : `/api/ads/${ad.id}/download`;
+    const downloadFilename = targetFileId && options?.label ? `${ad.name} - ${options.label}.mp4` : `${ad.name}.mp4`;
     try {
-      await downloadWithProgress(`/api/ads/${ad.id}/download`, `${ad.name}.mp4`, (progress) => setDownloadProgress((current) => ({ ...current, [ad.id]: progress })));
+      await downloadWithProgress(downloadUrl, downloadFilename, (progress) => setDownloadProgress((current) => ({ ...current, [ad.id]: progress })));
       try { await markDownloaded([ad.id]); }
       catch (cause) { toast({ title: `${ad.name} downloaded`, description: cause instanceof Error ? cause.message : "The Downloaded tag could not be saved.", tone: "error" }); }
-      toast({ title: `${ad.name} downloaded`, tone: "success" });
+      toast({ title: `${targetFileId && options?.label ? `${ad.name} (${options.label})` : ad.name} downloaded`, tone: "success" });
     } catch {
       toast({ title: "Download failed", description: "Network error — please try again.", tone: "error" });
     } finally {
@@ -919,7 +925,7 @@ export function DashboardClient({
         }}
       />
     ) : null}
-    {filteredAds.length ? view === "grid" ? <><section className="mt-3 grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">{visibleGridAds.map((ad) => <WorkflowCard key={ad.id} ad={ad} mediaToken={mediaTokens[ad.id]} profile={profile} canApprove={canApprove} allowManagerFinalApproval={allowManagerFinalApproval} editors={editors} editorWorkloads={editorWorkloads} pending={actingAdId === ad.id} playing={playingAdIds.has(ad.id)} selected={selectedIds.has(ad.id)} downloading={downloadingIds.has(ad.id)} downloadProgress={downloadProgress[ad.id]} onToggleSelect={() => toggleSelect(ad.id)} onPlay={() => playVideo(ad)} onFreezeChange={handleFreezeChange} onPlaybackError={() => { stopVideo(ad.id); toast({ title: "Video unavailable", description: `${ad.name} could not be played.`, tone: "error" }); }} onQuickPreview={() => setPreviewAd(ad)} onOpenDrive={() => { if (ad.drive_url) window.open(ad.drive_url, "_blank", "noopener,noreferrer"); }} onDownload={() => downloadOne(ad)} onEdit={() => openCreatorForm(ad)} onApprove={() => decide(ad, "approve")} onRequestChanges={() => openCancelModal(ad)} onReopen={(target) => openCancelModal(ad, target)} onAssignEditor={(editorId, deadline) => assign(ad, editorId, deadline)} onDeleted={handleDeleted} />)}</section>{hasMoreGridAds ? <div ref={loadMoreRef} className="flex h-20 items-center justify-center" role="status" aria-label="Loading more creatives"><Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden /><span className="sr-only">Loading more creatives</span></div> : null}</> : <WorkflowTable ads={filteredAds} profile={profile} canApprove={canApprove} allowManagerFinalApproval={allowManagerFinalApproval} pendingId={actingAdId} selectedIds={selectedIds} downloadingIds={downloadingIds} downloadProgress={downloadProgress} onToggleSelect={toggleSelect} onApprove={(ad) => decide(ad, "approve")} onRequestChanges={(ad) => openCancelModal(ad)} onDownload={downloadOne} onFreezeChange={handleFreezeChange} onQuickPreview={setPreviewAd} onDeleted={handleDeleted} /> : <EmptyQueue canCreate={canCreate} createBlocked={createBlocked} onCreate={handleCreateClick} queue={queue} onClearFilters={() => clearFilters(true)} />}
+    {filteredAds.length ? view === "grid" ? <><section className="mt-3 grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">{visibleGridAds.map((ad) => <WorkflowCard key={ad.id} ad={ad} mediaToken={mediaTokens[ad.id]} profile={profile} canApprove={canApprove} allowManagerFinalApproval={allowManagerFinalApproval} editors={editors} editorWorkloads={editorWorkloads} pending={actingAdId === ad.id} playing={playingAdIds.has(ad.id)} selected={selectedIds.has(ad.id)} downloading={downloadingIds.has(ad.id)} downloadProgress={downloadProgress[ad.id]} onToggleSelect={() => toggleSelect(ad.id)} onPlay={() => playVideo(ad)} onFreezeChange={handleFreezeChange} onPlaybackError={() => { stopVideo(ad.id); toast({ title: "Video unavailable", description: `${ad.name} could not be played.`, tone: "error" }); }} onQuickPreview={() => setPreviewAd(ad)} onOpenDrive={(url) => { const target = url ?? ad.drive_url; if (target) window.open(target, "_blank", "noopener,noreferrer"); }} onDownload={(options) => downloadOne(ad, options)} onEdit={() => openCreatorForm(ad)} onApprove={() => decide(ad, "approve")} onRequestChanges={() => openCancelModal(ad)} onReopen={(target) => openCancelModal(ad, target)} onAssignEditor={(editorId, deadline) => assign(ad, editorId, deadline)} onDeleted={handleDeleted} />)}</section>{hasMoreGridAds ? <div ref={loadMoreRef} className="flex h-20 items-center justify-center" role="status" aria-label="Loading more creatives"><Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden /><span className="sr-only">Loading more creatives</span></div> : null}</> : <WorkflowTable ads={filteredAds} profile={profile} canApprove={canApprove} allowManagerFinalApproval={allowManagerFinalApproval} pendingId={actingAdId} selectedIds={selectedIds} downloadingIds={downloadingIds} downloadProgress={downloadProgress} onToggleSelect={toggleSelect} onApprove={(ad) => decide(ad, "approve")} onRequestChanges={(ad) => openCancelModal(ad)} onDownload={downloadOne} onFreezeChange={handleFreezeChange} onQuickPreview={setPreviewAd} onDeleted={handleDeleted} /> : <EmptyQueue canCreate={canCreate} createBlocked={createBlocked} onCreate={handleCreateClick} queue={queue} onClearFilters={() => clearFilters(true)} />}
 
     {formOpen ? <Modal open labelledBy="creator-form-title" onClose={() => { setFormOpen(false); setEditingAd(null); }} className="p-0 sm:p-6"><section className="mx-auto min-h-full w-full bg-card shadow-float sm:min-h-0 sm:max-w-5xl sm:rounded-xl"><div className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-border bg-card px-5 sm:rounded-t-lg"><div><h2 id="creator-form-title" className="text-lg font-semibold text-foreground">{editingAd ? (editingAd && !creatorEditableStages.includes(editingAd.production_stage as (typeof creatorEditableStages)[number]) && (profile.role === "admin" || profile.role === "manager") ? "Override edit creative" : "Update creative") : "Add creative"}</h2><p className="text-xs text-muted-foreground">{editingAd && !creatorEditableStages.includes(editingAd.production_stage as (typeof creatorEditableStages)[number]) && (profile.role === "admin" || profile.role === "manager") ? "Admin/manager override — all fields editable." : "Set the current preparation status and save."}</p></div><Button size="icon" variant="ghost" title="Close" onClick={() => { setFormOpen(false); setEditingAd(null); }}><X className="size-5" aria-hidden /></Button></div><div className="p-5"><CreatorItemForm profile={profile} creators={creators} editors={editors} campaigns={campaigns.filter((item) => item.active)} products={products.filter((item) => item.active)} initialAd={editingAd} availableTags={availableTags} editorWorkloads={editorWorkloads} overrideMode={Boolean(editingAd && !creatorEditableStages.includes(editingAd.production_stage as (typeof creatorEditableStages)[number]) && (profile.role === "admin" || profile.role === "manager"))} onSaved={() => { setFormOpen(false); setEditingAd(null); router.refresh(); }} /></div></section></Modal> : null}
 
@@ -1075,7 +1081,7 @@ function BulkTagModal({ count, availableTags, pending, onClose, onSubmit }: { co
   );
 }
 
-function WorkflowCard({ ad, mediaToken, profile, canApprove = true, allowManagerFinalApproval = true, editors, editorWorkloads, pending, playing, selected, downloading, downloadProgress, onToggleSelect, onPlay, onFreezeChange, onPlaybackError, onQuickPreview, onOpenDrive, onDownload, onEdit, onApprove, onRequestChanges, onReopen, onAssignEditor, onDeleted }: { ad: AdWithRelations; mediaToken?: string; profile: Profile; canApprove?: boolean; allowManagerFinalApproval?: boolean; editors: Profile[]; editorWorkloads: Record<string, number>; pending: boolean; playing: boolean; selected: boolean; downloading: boolean; downloadProgress?: DownloadProgress; onToggleSelect: () => void; onPlay: () => void; onFreezeChange: (adId: string, state: EditingFreezeState, stage?: ProductionStage) => void; onPlaybackError: () => void; onQuickPreview: () => void; onOpenDrive: () => void; onDownload: () => void; onEdit: () => void; onApprove: () => void; onRequestChanges: () => void; onReopen?: (target: "creator" | "editor") => void; onAssignEditor: (editorId: string, deadline: string) => void; onDeleted: (adId: string) => void }) {
+function WorkflowCard({ ad, mediaToken, profile, canApprove = true, allowManagerFinalApproval = true, editors, editorWorkloads, pending, playing, selected, downloading, downloadProgress, onToggleSelect, onPlay, onFreezeChange, onPlaybackError, onQuickPreview, onOpenDrive, onDownload, onEdit, onApprove, onRequestChanges, onReopen, onAssignEditor, onDeleted }: { ad: AdWithRelations; mediaToken?: string; profile: Profile; canApprove?: boolean; allowManagerFinalApproval?: boolean; editors: Profile[]; editorWorkloads: Record<string, number>; pending: boolean; playing: boolean; selected: boolean; downloading: boolean; downloadProgress?: DownloadProgress; onToggleSelect: () => void; onPlay: () => void; onFreezeChange: (adId: string, state: EditingFreezeState, stage?: ProductionStage) => void; onPlaybackError: () => void; onQuickPreview: () => void; onOpenDrive: (url?: string | null) => void; onDownload: (options?: { fileId?: string | null; label?: string }) => void; onEdit: () => void; onApprove: () => void; onRequestChanges: () => void; onReopen?: (target: "creator" | "editor") => void; onAssignEditor: (editorId: string, deadline: string) => void; onDeleted: (adId: string) => void }) {
   const router = useRouter();
   const { toast } = useToast();
   const isApproved = ad.production_stage === "approved";
@@ -1086,10 +1092,18 @@ function WorkflowCard({ ad, mediaToken, profile, canApprove = true, allowManager
   const [dismissingDownloaded, setDismissingDownloaded] = useState(false);
   const [downloadedDismissed, setDownloadedDismissed] = useState(false);
   const [showAllTags, setShowAllTags] = useState(false);
+  const [selectedVideoIdx, setSelectedVideoIdx] = useState(0);
   const mediaVisible = isFinalMediaVisible(ad.production_stage);
-  const canPreview = mediaVisible && Boolean(ad.drive_file_id);
-  const canOpenInDrive = mediaVisible && Boolean(ad.drive_url);
-  const thumbnail = canPreview ? `/api/ads/${ad.id}/thumbnail?v=${encodeURIComponent(ad.drive_file_id!)}` : null;
+  const playableVideos = useMemo(() => (mediaVisible ? buildPlayableAdVideos(ad) : []), [ad, mediaVisible]);
+  const safeVideoIdx = selectedVideoIdx < playableVideos.length ? selectedVideoIdx : 0;
+  const activeVideo = playableVideos[safeVideoIdx] ?? null;
+  const activeFileId = activeVideo?.driveFileId ?? ad.drive_file_id;
+  const activeDriveUrl = activeVideo?.driveUrl ?? ad.drive_url;
+  const canPreview = mediaVisible && Boolean(activeFileId);
+  const canOpenInDrive = mediaVisible && Boolean(activeDriveUrl);
+  const thumbnail = canPreview
+    ? `/api/ads/${ad.id}/thumbnail?fileId=${encodeURIComponent(activeFileId!)}&v=${encodeURIComponent(activeFileId!)}`
+    : null;
   const reviewer = profile.role === "admin" || profile.role === "manager";
   const isMediaBuyer = profile.role === "media_buyer";
   const canFinalReview = reviewer && (ad.production_stage === "creator_review" || ad.production_stage === "final_review");
@@ -1129,8 +1143,8 @@ function WorkflowCard({ ad, mediaToken, profile, canApprove = true, allowManager
       <button type="button" onClick={(e) => { e.stopPropagation(); onToggleSelect(); }} aria-label={selected ? "Deselect" : "Select"} aria-pressed={selected} className={cn("absolute right-3 z-20 flex size-7 items-center justify-center rounded-md border transition-all duration-150", profile.role === "admin" && downloaded ? "top-12" : "top-3", selected ? "border-primary bg-primary text-primary-foreground opacity-100" : "border-border bg-card/80 text-muted-foreground opacity-0 group-hover/card:opacity-100")}>{selected ? <SquareCheck className="size-4" aria-hidden /> : <Square className="size-4" aria-hidden />}</button>
       <div className="relative">
         {canPreview ? (
-          playing ? <InlineCardVideo ad={ad} mediaToken={mediaToken} poster={thumbnail} onError={onPlaybackError} /> :
-          <button className="relative block aspect-video w-full overflow-hidden bg-neutral-950" onPointerEnter={() => { if (mediaToken) { void fetch(mediaUrl(ad, mediaToken, true)).catch(() => undefined); } }} onFocus={() => { if (mediaToken) { void fetch(mediaUrl(ad, mediaToken, true)).catch(() => undefined); } }} onClick={onPlay} aria-label={`Play ${ad.name}`}>
+          playing ? <InlineCardVideo key={activeFileId ?? ad.id} ad={ad} fileId={activeFileId} mediaToken={mediaToken} poster={thumbnail} onError={onPlaybackError} /> :
+          <button className="relative block aspect-video w-full overflow-hidden bg-neutral-950" onPointerEnter={() => { if (activeFileId && (activeFileId !== ad.drive_file_id || mediaToken)) { void fetch(mediaUrl(ad, mediaToken, true, activeFileId)).catch(() => undefined); } }} onFocus={() => { if (activeFileId && (activeFileId !== ad.drive_file_id || mediaToken)) { void fetch(mediaUrl(ad, mediaToken, true, activeFileId)).catch(() => undefined); } }} onClick={onPlay} aria-label={`Play ${ad.name}${activeVideo && !activeVideo.isMain ? ` (${activeVideo.label})` : ""}`}>
             {thumbnail ? <CardThumbnail src={thumbnail} name={ad.name} /> : <MediaPlaceholder label="Final video submitted" />}
             <span className="absolute left-1/2 top-1/2 inline-flex size-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-black/65 text-white shadow-lg backdrop-blur-sm transition duration-200 group-hover/card:scale-105 group-hover/card:bg-black/80"><Play className="ml-0.5 size-5 fill-current" aria-hidden /></span>
           </button>
@@ -1142,6 +1156,30 @@ function WorkflowCard({ ad, mediaToken, profile, canApprove = true, allowManager
         <span className="pointer-events-none absolute left-3 top-3 z-10 max-w-[60%]"><ProductionStageBadge stage={ad.production_stage} role={profile.role} allowManagerFinalApproval={allowManagerFinalApproval} approvalStage={ad.approval_stage} /></span>
         {profile.role === "admin" && downloaded ? <button type="button" disabled={dismissingDownloaded} onClick={(event) => { event.stopPropagation(); void dismissDownloaded(); }} className="group/download absolute right-3 top-3 z-10 inline-flex items-center gap-1 rounded-full border border-success/40 bg-card/90 px-2.5 py-1 text-[10px] font-semibold text-success shadow-sm backdrop-blur-sm transition hover:bg-success/10 disabled:cursor-wait" title="Dismiss downloaded badge" aria-label={`Dismiss downloaded badge for ${ad.name}`}><Download className="size-3" aria-hidden />Downloaded{dismissingDownloaded ? <Loader2 className="size-2.5 animate-spin" aria-hidden /> : <X className="size-2.5 opacity-0 transition-opacity group-hover/download:opacity-100 group-focus-visible/download:opacity-100" aria-hidden />}</button> : null}
       </div>
+      {playableVideos.length > 1 ? (
+        <div className="flex items-center gap-1.5 overflow-x-auto border-b border-border bg-muted/40 px-3 py-1.5" onClick={(event) => event.stopPropagation()}>
+          {playableVideos.map((video, idx) => {
+            const isSelected = safeVideoIdx === idx;
+            return (
+              <button
+                key={video.key}
+                type="button"
+                onClick={() => setSelectedVideoIdx(idx)}
+                className={cn(
+                  "shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+                  isSelected
+                    ? "bg-primary text-primary-foreground shadow-xs"
+                    : "border border-border bg-card text-muted-foreground hover:text-foreground"
+                )}
+                aria-pressed={isSelected}
+                title={`Switch to ${video.label}`}
+              >
+                {video.label}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
       <div className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -1149,6 +1187,7 @@ function WorkflowCard({ ad, mediaToken, profile, canApprove = true, allowManager
             <p className="mt-0.5 truncate text-xs text-muted-foreground">{ad.campaigns?.map((item) => item.name).join(", ") || ad.campaign?.name || "No campaign"}</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {ad.product?.name ? <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">Product · {ad.product.name}</span> : null}
+              {ad.variations && ad.variations.length > 0 ? <span className="inline-flex items-center rounded-full border border-border bg-accent px-2 py-0.5 text-[10px] font-medium text-accent-foreground">{ad.variations.length} {ad.variations.length === 1 ? "variation" : "variations"}</span> : null}
               {visibleTags.map((tag) => <span key={tag.id} className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">#{tag.name}</span>)}
               {remainingTagsCount > 0 ? (
                 <button
@@ -1165,7 +1204,7 @@ function WorkflowCard({ ad, mediaToken, profile, canApprove = true, allowManager
               ) : null}
             </div>
           </div>
-          <div className="flex gap-0.5">{canDeleteAd(profile.role) ? <DeleteAdButton adId={ad.id} adName={ad.name} compact onDeleted={onDeleted} /> : null}{canPreview ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-50" title="Download video" disabled={downloading} onClick={(e) => { e.stopPropagation(); onDownload(); }}>{downloading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Download className="size-4" aria-hidden />}</button> : null}<button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" title="Expand details" aria-label={`Expand ${ad.name}`} onClick={onQuickPreview}><Maximize2 className="size-4" aria-hidden /></button>{canOpenInDrive ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" title="Open final video in Google Drive" aria-label={`Open ${ad.name} in Google Drive`} onClick={onOpenDrive}><Eye className="size-4" aria-hidden /></button> : null}</div>
+          <div className="flex gap-0.5">{canDeleteAd(profile.role) ? <DeleteAdButton adId={ad.id} adName={ad.name} compact onDeleted={onDeleted} /> : null}{canPreview ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-50" title="Download video" disabled={downloading} onClick={(e) => { e.stopPropagation(); onDownload({ fileId: activeFileId, label: activeVideo && !activeVideo.isMain ? activeVideo.label : undefined }); }}>{downloading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Download className="size-4" aria-hidden />}</button> : null}<button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" title="Expand details" aria-label={`Expand ${ad.name}`} onClick={onQuickPreview}><Maximize2 className="size-4" aria-hidden /></button>{canOpenInDrive ? <button className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" title="Open final video in Google Drive" aria-label={`Open ${ad.name} in Google Drive`} onClick={() => onOpenDrive(activeDriveUrl)}><Eye className="size-4" aria-hidden /></button> : null}</div>
         </div>
         {downloadProgress ? <DownloadProgressBar progress={downloadProgress} /> : null}
         <div className="mt-4 grid grid-cols-2 gap-3 border-y border-border py-3"><Person label="Creator" person={ad.creator} /><Person label="Editor" person={ad.editor} /></div>
@@ -1334,8 +1373,10 @@ function formatClock(seconds: number) {
  * Instead the whole frame is the control — tap to pause, tap again to resume — with a slim
  * progress bar, time and mute toggle that appear on hover or while paused.
  */
-function InlineCardVideo({ ad, mediaToken, poster, onError }: { ad: AdWithRelations; mediaToken?: string; poster: string | null; onError: () => void }) {
+function InlineCardVideo({ ad, fileId, mediaToken, poster, onError }: { ad: AdWithRelations; fileId?: string | null; mediaToken?: string; poster: string | null; onError: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const sliderRef = useRef<HTMLDivElement>(null);
+  const suppressClickRef = useRef(false);
   // Buffering is only surfaced after a short grace period. Most stalls resolve in well under a
   // second, and flashing a spinner for those is what made playback feel janky.
   const [showSpinner, setShowSpinner] = useState(false);
@@ -1343,11 +1384,14 @@ function InlineCardVideo({ ad, mediaToken, poster, onError }: { ad: AdWithRelati
   const [paused, setPaused] = useState(false);
   const [muted, setMuted] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [scrubRatio, setScrubRatio] = useState<number | null>(null);
+  const [hoverRatio, setHoverRatio] = useState<number | null>(null);
   const [progress, setProgress] = useState({ current: 0, duration: 0, buffered: 0 });
   // A server refresh issues a fresh signed token. Capturing the URL at mount
   // keeps the active media element's src unchanged, so live dashboard updates
   // cannot reset playback to the beginning.
-  const [source] = useState(() => mediaUrl(ad, mediaToken));
+  const [source] = useState(() => mediaUrl(ad, mediaToken, false, fileId));
 
   function clearSpinnerTimer() {
     if (spinnerTimer.current !== null) {
@@ -1393,13 +1437,71 @@ function InlineCardVideo({ ad, mediaToken, poster, onError }: { ad: AdWithRelati
     setMuted(video.muted);
   }
 
-  function seek(event: React.MouseEvent<HTMLDivElement>) {
-    event.stopPropagation();
+  function getSliderRatio(clientX: number) {
+    const track = sliderRef.current;
+    if (!track) return 0;
+    const rect = track.getBoundingClientRect();
+    if (rect.width <= 0) return 0;
+    return Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+  }
+
+  function seekToRatio(ratio: number) {
     const video = videoRef.current;
     if (!video || !Number.isFinite(video.duration) || video.duration <= 0) return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-    video.currentTime = ratio * video.duration;
+    const clamped = Math.min(1, Math.max(0, ratio));
+    const nextTime = clamped * video.duration;
+    video.currentTime = nextTime;
+    setProgress((current) => ({ ...current, current: nextTime }));
+  }
+
+  function handleSliderPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    event.stopPropagation();
+    suppressClickRef.current = true;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const ratio = getSliderRatio(event.clientX);
+    setIsDragging(true);
+    setScrubRatio(ratio);
+    setHoverRatio(ratio);
+    seekToRatio(ratio);
+  }
+
+  function handleSliderPointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    const ratio = getSliderRatio(event.clientX);
+    setHoverRatio(ratio);
+    if (!isDragging) return;
+    setScrubRatio(ratio);
+    seekToRatio(ratio);
+  }
+
+  function handleSliderPointerEnd(event: React.PointerEvent<HTMLDivElement>) {
+    event.stopPropagation();
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (isDragging) {
+      const ratio = getSliderRatio(event.clientX);
+      seekToRatio(ratio);
+    }
+    setIsDragging(false);
+    setScrubRatio(null);
+    window.setTimeout(() => {
+      suppressClickRef.current = false;
+    }, 0);
+  }
+
+  function handleSliderKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    const video = videoRef.current;
+    if (!video || !Number.isFinite(video.duration) || video.duration <= 0) return;
+    let nextTime: number | null = null;
+    if (event.key === "ArrowRight") nextTime = Math.min(video.duration, video.currentTime + 5);
+    else if (event.key === "ArrowLeft") nextTime = Math.max(0, video.currentTime - 5);
+    else if (event.key === "Home") nextTime = 0;
+    else if (event.key === "End") nextTime = video.duration;
+    if (nextTime === null) return;
+    event.preventDefault();
+    event.stopPropagation();
+    video.currentTime = nextTime;
+    setProgress((current) => ({ ...current, current: nextTime }));
   }
 
   function syncProgress() {
@@ -1432,8 +1534,12 @@ function InlineCardVideo({ ad, mediaToken, poster, onError }: { ad: AdWithRelati
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const percent = progress.duration ? (progress.current / progress.duration) * 100 : 0;
+  const displayCurrent = scrubRatio !== null && progress.duration > 0 ? scrubRatio * progress.duration : progress.current;
+  const percent = scrubRatio !== null ? scrubRatio * 100 : progress.duration ? (progress.current / progress.duration) * 100 : 0;
+  const clampedPercent = Math.min(100, Math.max(0, percent));
   const bufferedPercent = progress.duration ? Math.min(100, (progress.buffered / progress.duration) * 100) : 0;
+  const activeTooltipRatio = isDragging ? (scrubRatio ?? hoverRatio) : hoverRatio;
+  const tooltipTime = activeTooltipRatio !== null && progress.duration > 0 ? activeTooltipRatio * progress.duration : null;
 
   return (
     <div
@@ -1441,7 +1547,10 @@ function InlineCardVideo({ ad, mediaToken, poster, onError }: { ad: AdWithRelati
       role="button"
       tabIndex={0}
       aria-label={paused ? `Play ${ad.name}` : `Pause ${ad.name}`}
-      onClick={togglePlayback}
+      onClick={() => {
+        if (suppressClickRef.current) return;
+        togglePlayback();
+      }}
       onKeyDown={(event) => { if (event.key === " " || event.key === "Enter") { event.preventDefault(); togglePlayback(); } }}
     >
       <video
@@ -1485,18 +1594,71 @@ function InlineCardVideo({ ad, mediaToken, poster, onError }: { ad: AdWithRelati
         </span>
       )}
 
+      {!paused && !isDragging ? (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[3px] bg-neutral-100/20 opacity-90 transition-opacity duration-150 group-hover/player:opacity-0 group-focus-visible/player:opacity-0">
+          <div className="h-full bg-primary" style={{ width: `${clampedPercent}%` }} />
+        </div>
+      ) : null}
+
       <div
+        onClick={(event) => event.stopPropagation()}
         className={cn(
-          "absolute inset-x-0 bottom-0 flex items-center gap-2 bg-gradient-to-t from-black/70 to-transparent px-3 pb-2 pt-6 text-[11px] font-medium text-white transition-opacity duration-150",
-          paused ? "opacity-100" : "opacity-0 group-hover/player:opacity-100 group-focus-visible/player:opacity-100"
+          "absolute inset-x-0 bottom-0 flex items-center gap-2 bg-gradient-to-t from-black/80 via-black/45 to-transparent px-2.5 pb-2 pt-7 text-[11px] font-medium text-white transition-opacity duration-150",
+          paused || isDragging ? "opacity-100" : "opacity-0 group-hover/player:opacity-100 group-focus-visible/player:opacity-100"
         )}
       >
-        <span className="tabular-nums">{formatClock(progress.current)} / {formatClock(progress.duration)}</span>
-        <div className="relative h-1.5 flex-1 cursor-pointer rounded-full bg-neutral-100/25" onClick={seek} role="slider" aria-label="Seek" aria-valuemin={0} aria-valuemax={Math.round(progress.duration)} aria-valuenow={Math.round(progress.current)} tabIndex={-1}>
-          <span className="absolute inset-y-0 left-0 rounded-full bg-neutral-100/40" style={{ width: `${bufferedPercent}%` }} />
-          <span className="absolute inset-y-0 left-0 rounded-full bg-primary" style={{ width: `${percent}%` }} />
+        <button
+          type="button"
+          className="inline-flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-neutral-100/15"
+          onClick={(event) => {
+            event.stopPropagation();
+            togglePlayback();
+          }}
+          aria-label={paused ? "Play video" : "Pause video"}
+          title={paused ? "Play" : "Pause"}
+        >
+          {paused ? <Play className="ml-0.5 size-3.5 fill-current" aria-hidden /> : <Pause className="size-3.5 fill-current" aria-hidden />}
+        </button>
+        <span className="shrink-0 tabular-nums">{formatClock(displayCurrent)} / {formatClock(progress.duration)}</span>
+        <div
+          ref={sliderRef}
+          className="group/slider relative flex h-5 flex-1 cursor-pointer touch-none items-center"
+          onPointerDown={handleSliderPointerDown}
+          onPointerMove={handleSliderPointerMove}
+          onPointerUp={handleSliderPointerEnd}
+          onPointerCancel={handleSliderPointerEnd}
+          onPointerLeave={() => {
+            if (!isDragging) setHoverRatio(null);
+          }}
+          onKeyDown={handleSliderKeyDown}
+          role="slider"
+          aria-label="Seek video progress"
+          aria-valuemin={0}
+          aria-valuemax={Math.round(progress.duration)}
+          aria-valuenow={Math.round(displayCurrent)}
+          tabIndex={0}
+        >
+          {tooltipTime !== null && activeTooltipRatio !== null ? (
+            <span
+              className="pointer-events-none absolute -top-6 -translate-x-1/2 rounded border border-neutral-100/20 bg-neutral-950/95 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-neutral-100 shadow-md"
+              style={{ left: `clamp(16px, ${activeTooltipRatio * 100}%, calc(100% - 16px))` }}
+            >
+              {formatClock(tooltipTime)}
+            </span>
+          ) : null}
+          <div className="relative h-1.5 w-full rounded-full bg-neutral-100/25 transition-[height] duration-100 group-hover/slider:h-2">
+            <span className="absolute inset-y-0 left-0 rounded-full bg-neutral-100/40" style={{ width: `${bufferedPercent}%` }} />
+            <span className="absolute inset-y-0 left-0 rounded-full bg-primary" style={{ width: `${clampedPercent}%` }} />
+            <span
+              className={cn(
+                "pointer-events-none absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary bg-neutral-100 shadow-md transition-transform duration-100",
+                isDragging ? "scale-125" : "scale-100 group-hover/slider:scale-115"
+              )}
+              style={{ left: `${clampedPercent}%` }}
+            />
+          </div>
         </div>
-        <button type="button" className="inline-flex size-7 items-center justify-center rounded-md hover:bg-neutral-100/15" onClick={toggleMute} aria-label={muted ? "Unmute" : "Mute"} title={muted ? "Unmute" : "Mute"}>
+        <button type="button" className="inline-flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-neutral-100/15" onClick={toggleMute} aria-label={muted ? "Unmute" : "Mute"} title={muted ? "Unmute" : "Mute"}>
           {muted ? <VolumeX className="size-4" aria-hidden /> : <Volume2 className="size-4" aria-hidden />}
         </button>
       </div>
@@ -1504,9 +1666,10 @@ function InlineCardVideo({ ad, mediaToken, poster, onError }: { ad: AdWithRelati
   );
 }
 
-function mediaUrl(ad: AdWithRelations, token?: string, warm = false) {
-  const params = new URLSearchParams({ fileId: ad.drive_file_id! });
-  if (token) params.set("token", token);
+function mediaUrl(ad: AdWithRelations, token?: string, warm = false, fileId?: string | null) {
+  const targetFileId = fileId ?? ad.drive_file_id!;
+  const params = new URLSearchParams({ fileId: targetFileId });
+  if (token && targetFileId === ad.drive_file_id) params.set("token", token);
   if (warm) params.set("warm", "1");
   return `/api/ads/${ad.id}/media?${params}`;
 }
@@ -1559,7 +1722,7 @@ function WorkflowTable({ ads, profile, canApprove = true, allowManagerFinalAppro
             return (
               <tr key={ad.id} className={`cursor-pointer transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${isSelected ? "bg-accent/40" : ""}`} role="link" tabIndex={0} onClick={open} onKeyDown={(event) => { if (event.key === "Enter") open(); }}>
                 <td className="px-3 py-3" onClick={(event) => { event.stopPropagation(); onToggleSelect(ad.id); }}><button type="button" aria-label={isSelected ? "Deselect" : "Select"} aria-pressed={isSelected} className={`flex size-7 items-center justify-center rounded-md border transition-colors ${isSelected ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:border-ring"}`}>{isSelected ? <SquareCheck className="size-4" aria-hidden /> : <Square className="size-4" aria-hidden />}</button></td>
-                <td className="px-4 py-3"><div className="flex items-center gap-3"><RowThumbnail adId={ad.id} name={ad.name} fileId={isFinalMediaVisible(ad.production_stage) ? ad.drive_file_id : null} /><div className="min-w-0"><p className="font-medium text-foreground">{ad.name}</p><p className="text-xs text-muted-foreground">{ad.campaigns?.map((item) => item.name).join(", ") || ad.campaign?.name}</p>{progress ? <DownloadProgressBar progress={progress} compact /> : <div className="mt-1 flex flex-wrap gap-1.5">{ad.product?.name ? <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">Product · {ad.product.name}</span> : null}{ordinaryTags.map((tag) => <span key={tag.id} className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">#{tag.name}</span>)}{profile.role === "admin" && isDownloaded(ad) ? <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-[10px] font-semibold text-success"><Download className="size-2.5" aria-hidden />Downloaded</span> : null}</div>}</div></div></td>
+                <td className="px-4 py-3"><div className="flex items-center gap-3"><RowThumbnail adId={ad.id} name={ad.name} fileId={isFinalMediaVisible(ad.production_stage) ? ad.drive_file_id : null} /><div className="min-w-0"><p className="font-medium text-foreground">{ad.name}</p><p className="text-xs text-muted-foreground">{ad.campaigns?.map((item) => item.name).join(", ") || ad.campaign?.name}</p>{progress ? <DownloadProgressBar progress={progress} compact /> : <div className="mt-1 flex flex-wrap gap-1.5">{ad.product?.name ? <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">Product · {ad.product.name}</span> : null}{ad.variations && ad.variations.length > 0 ? <span className="inline-flex items-center rounded-full border border-border bg-accent px-2 py-0.5 text-[10px] font-medium text-accent-foreground">{ad.variations.length} {ad.variations.length === 1 ? "variation" : "variations"}</span> : null}{ordinaryTags.map((tag) => <span key={tag.id} className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">#{tag.name}</span>)}{profile.role === "admin" && isDownloaded(ad) ? <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-[10px] font-semibold text-success"><Download className="size-2.5" aria-hidden />Downloaded</span> : null}</div>}</div></div></td>
                 <td className="px-4 py-3">
                   <ProductionStageBadge stage={ad.production_stage} role={profile.role} allowManagerFinalApproval={allowManagerFinalApproval} approvalStage={ad.approval_stage} className="bg-muted text-muted-foreground shadow-none" />
                   {ad.production_stage === "creator_changes_requested" ? (

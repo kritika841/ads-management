@@ -8,6 +8,14 @@ import { readCampaignGoals } from "@/lib/campaign-goals";
 import { DEFAULT_DOWNLOAD_RETENTION_DAYS, DEFAULT_RECYCLE_BIN_RETENTION_DAYS, normalizeRetentionDays } from "@/lib/retention";
 import { isRecycleBinReady, liveOnly } from "@/lib/recycle-bin";
 import { filterAdsForProfile } from "@/lib/permissions";
+import {
+  buildEditedVariationsByAdId,
+  buildVariationsByAdId,
+  CREATIVE_VARIATIONS_ACTION,
+  EDITOR_VARIATIONS_ACTION,
+  extractEditedVariationsFromActivityLogs,
+  extractVariationsFromActivityLogs
+} from "@/lib/creative-variations";
 import type {
   ActivityLog,
   AdVersion,
@@ -18,6 +26,7 @@ import type {
   Campaign,
   CampaignOverview,
   Comment,
+  CreativeVariation,
   DailyTarget,
   DailyTaskRule,
   DailyTargetDaySetting,
@@ -331,7 +340,7 @@ export async function getAds(profile?: Profile) {
   const supabase = await createSupabaseServerClient();
   const binReady = await isRecycleBinReady();
 
-  const [adsResult, reviewsResult, activityResult, freezeMap] = await Promise.all([
+  const [adsResult, reviewsResult, activityResult, variationsResult, freezeMap] = await Promise.all([
     liveOnly(supabase
       .from("ads")
       .select(`
@@ -369,6 +378,11 @@ export async function getAds(profile?: Profile) {
       ])
       .order("created_at", { ascending: false })
       .limit(300),
+    supabase
+      .from("activity_logs")
+      .select("ad_id,action,metadata,created_at")
+      .in("action", [CREATIVE_VARIATIONS_ACTION, EDITOR_VARIATIONS_ACTION])
+      .order("created_at", { ascending: false }),
     getEditingFreezeMap()
   ]);
 
@@ -406,12 +420,17 @@ export async function getAds(profile?: Profile) {
     activityMap.set(log.ad_id, list);
   }
 
+  const variationsMap = buildVariationsByAdId(variationsResult.data);
+  const editedVariationsMap = buildEditedVariationsByAdId(variationsResult.data);
+
   const adsWithNested = (adsResult.data ?? []).map((ad) => ({
     ...ad,
     script_html: (ad as { script_html?: string | null }).script_html ?? null,
     editing_freeze: freezeMap.get(ad.id) ?? null,
     review_actions: reviewMap.get(ad.id) ?? [],
-    activity_logs: activityMap.get(ad.id) ?? []
+    activity_logs: activityMap.get(ad.id) ?? [],
+    variations: variationsMap.get(ad.id) ?? [],
+    edited_variations: editedVariationsMap.get(ad.id) ?? []
   }));
 
   const normalized = normalizeAds(adsWithNested);
@@ -654,7 +673,9 @@ function normalizeAds(rows: unknown[]) {
         .filter((id): id is string => Boolean(id)),
       tags: (record.ad_tags ?? [])
         .map((item) => item.tags)
-        .filter(Boolean) as { id: string; name: string }[]
+        .filter(Boolean) as { id: string; name: string }[],
+      variations: record.variations ?? extractVariationsFromActivityLogs(record.activity_logs),
+      edited_variations: record.edited_variations ?? extractEditedVariationsFromActivityLogs(record.activity_logs)
     };
   }) as AdWithRelations[];
 }
@@ -775,7 +796,7 @@ export async function getEditorAverageEditTimes(): Promise<Record<string, number
 export async function getCampaignsWithOverview(profile?: Profile): Promise<CampaignOverview[]> {
   const admin = createSupabaseAdminClient();
   const binReady = await isRecycleBinReady();
-  const [campaignsResult, adsResult, incentiveResult, campaignGoals, appSettings] = await Promise.all([
+  const [campaignsResult, adsResult, incentiveResult, campaignGoals, appSettings, variationsResult] = await Promise.all([
     liveOnly(admin.from("campaigns").select("*").order("name", { ascending: true }), binReady),
     liveOnly(admin
       .from("ads")
@@ -799,7 +820,12 @@ export async function getCampaignsWithOverview(profile?: Profile): Promise<Campa
       .order("updated_at", { ascending: false }), binReady),
     admin.from("incentive_creatives").select("ad_id,latest_spend,latest_purchases,latest_cpa"),
     readCampaignGoals(),
-    getAppSettings()
+    getAppSettings(),
+    admin
+      .from("activity_logs")
+      .select("ad_id,action,metadata,created_at")
+      .in("action", [CREATIVE_VARIATIONS_ACTION, EDITOR_VARIATIONS_ACTION])
+      .order("created_at", { ascending: false })
   ]);
 
   if (campaignsResult.error) {
@@ -814,7 +840,13 @@ export async function getCampaignsWithOverview(profile?: Profile): Promise<Campa
     ...c,
     video_goal: (c.video_goal && c.video_goal > 0) ? c.video_goal : campaignGoals[c.id] ?? null
   }));
-  const rawAds = normalizeAds(adsResult.data ?? []);
+  const campaignVariationsMap = buildVariationsByAdId(variationsResult.data);
+  const campaignEditedVariationsMap = buildEditedVariationsByAdId(variationsResult.data);
+  const rawAds = normalizeAds((adsResult.data ?? []).map((ad) => ({
+    ...ad,
+    variations: campaignVariationsMap.get(ad.id) ?? [],
+    edited_variations: campaignEditedVariationsMap.get(ad.id) ?? []
+  })));
 
   // Filter ads based on user profile and permissions so users only see their own ads
   let collaboratorAdIds = new Set<string>();

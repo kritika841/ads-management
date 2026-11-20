@@ -41,7 +41,7 @@ describe("exact ZIP export jobs", () => {
   });
 
   it("keeps the inline video source stable while live data refreshes", () => {
-    expect(dashboard).toContain("const [source] = useState(() => mediaUrl(ad, mediaToken))");
+    expect(dashboard).toContain("const [source] = useState(() => mediaUrl(ad, mediaToken, false, fileId))");
     expect(dashboard).toMatch(/<video[^>]*\bsrc=\{source\}/);
   });
 

@@ -10,6 +10,7 @@ export async function middleware(request: NextRequest) {
   if (
     pathname === "/api/health" ||
     pathname === "/api/ads/revalidate" ||
+    pathname.startsWith("/supabase-proxy/") ||
     pathname.startsWith("/api/cron/") ||
     (pathname === "/api/incentives/sync" && request.headers.get("x-internal-cron") === "1") ||
     (pathname.startsWith("/api/ads/") && pathname.endsWith("/media") && searchParams.has("token"))

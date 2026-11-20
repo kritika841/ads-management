@@ -50,6 +50,9 @@ import path from "path";
 import { reviewAd } from "@/app/actions/ads";
 import { AttendanceHeaderWidget } from "@/components/attendance/attendance-header-widget";
 import { AttendancePromptModal } from "@/components/attendance/attendance-prompt-modal";
+import { ToastProvider } from "@/components/ui/toast";
+import { render, screen } from "@testing-library/react";
+import React from "react";
 
 const LOCAL_STORE_FILE = path.join(process.cwd(), "data", "attendance-logs.json");
 
@@ -126,9 +129,16 @@ describe("Attendance UI Removal Verification", () => {
     expect(result).toBeNull();
   });
 
-  it("renders null for AttendanceHeaderWidget so checkin/checkout buttons are removed", () => {
-    const result = AttendanceHeaderWidget({ profile: { id: "u-1", name: "User", role: "editor" } as any });
-    expect(result).toBeNull();
+  it("renders Check In button in AttendanceHeaderWidget", () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(JSON.stringify({ ok: true, checkInTime: null, checkOutTime: null }), { status: 200 }))));
+    render(
+      React.createElement(
+        ToastProvider,
+        null,
+        React.createElement(AttendanceHeaderWidget, { profile: { id: "u-1", name: "User", role: "editor" } as any })
+      )
+    );
+    expect(screen.getByText("Check In")).toBeTruthy();
   });
 });
 

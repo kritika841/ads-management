@@ -357,3 +357,372 @@ export async function getAttendanceForRange(
     return item.date >= from && item.date <= to;
   });
 }
+
+const EXPLICIT_ATTENDANCE_FILE = path.join(process.cwd(), "data", "explicit-attendance.json");
+
+export type ManualAttendanceStatus = {
+  date: string;
+  checkInTime: string | null;
+  checkOutTime: string | null;
+  syncedWithTasks: boolean;
+};
+
+type ExplicitAttendanceEntry = {
+  user_id: string;
+  user_name: string;
+  user_role: string;
+  date: string;
+  check_in_at: string;
+  check_out_at: string | null;
+  updated_at: string;
+};
+
+async function readExplicitAttendance(): Promise<ExplicitAttendanceEntry[]> {
+  try {
+    const raw = await fs.readFile(EXPLICIT_ATTENDANCE_FILE, "utf-8");
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeExplicitAttendance(entries: ExplicitAttendanceEntry[]): Promise<void> {
+  try {
+    await fs.mkdir(path.dirname(EXPLICIT_ATTENDANCE_FILE), { recursive: true });
+    await fs.writeFile(EXPLICIT_ATTENDANCE_FILE, JSON.stringify(entries, null, 2), "utf-8");
+  } catch (cause) {
+    console.error("Failed to write explicit attendance cache:", cause);
+  }
+}
+
+function getTaskManagerAttendanceEndpoints(query = ""): string[] {
+  const configured = process.env.TASK_MANAGER_URL?.trim().replace(/\/+$/, "");
+  const bases = Array.from(
+    new Set([configured, "http://127.0.0.1:4000", "https://tasks.satmi.in"].filter(Boolean) as string[])
+  );
+  return bases.map((base) => `${base}/api/adflow/attendance${query}`);
+}
+
+function getTaskManagerServiceHeaders(): Record<string, string> {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || "";
+  return {
+    "Content-Type": "application/json",
+    ...(serviceKey ? { "x-adflow-service-key": serviceKey } : {})
+  };
+}
+
+async function upsertExplicitAttendanceLocal(entry: ExplicitAttendanceEntry): Promise<void> {
+  const list = await readExplicitAttendance();
+  const idx = list.findIndex((item) => item.user_id === entry.user_id && item.date === entry.date);
+  if (idx >= 0) {
+    list[idx] = entry;
+  } else {
+    list.unshift(entry);
+  }
+  await writeExplicitAttendance(list);
+}
+
+async function readSharedSupabaseAttendanceForToday(
+  userId: string,
+  today: string
+): Promise<{ checkInTime: string | null; checkOutTime: string | null } | null> {
+  if (!isSupabaseConfigured()) return null;
+  try {
+    const admin = createSupabaseAdminClient();
+    const { data, error } = await admin
+      .from("audit_logs")
+      .select("action,metadata,created_at")
+      .eq("target_type", "attendance")
+      .eq("target_id", `${today}::${userId}`)
+      .in("action", ["tasks_attendance_checkin", "tasks_attendance_checkout"])
+      .order("created_at", { ascending: true });
+
+    if (error || !data || data.length === 0) return null;
+
+    let checkInTime: string | null = null;
+    let checkOutTime: string | null = null;
+    for (const row of data) {
+      const meta = (row.metadata || {}) as Record<string, unknown>;
+      if (row.action === "tasks_attendance_checkin") {
+        const candidate = String(meta.checkInTime || row.created_at);
+        if (!checkInTime || candidate < checkInTime) checkInTime = candidate;
+      } else if (row.action === "tasks_attendance_checkout") {
+        const candidate = String(meta.checkOutTime || row.created_at);
+        if (!checkOutTime || candidate > checkOutTime) checkOutTime = candidate;
+        if (!checkInTime && meta.checkInTime) checkInTime = String(meta.checkInTime);
+      }
+    }
+    return checkInTime ? { checkInTime, checkOutTime } : null;
+  } catch {
+    return null;
+  }
+}
+
+async function publishManualAttendanceToSupabase(
+  action: "tasks_attendance_checkin" | "tasks_attendance_checkout",
+  params: {
+    userId: string;
+    userName: string;
+    userRole: string;
+    date: string;
+    checkInTime: string;
+    checkOutTime: string | null;
+  }
+): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  try {
+    const admin = createSupabaseAdminClient();
+    await admin.from("audit_logs").insert({
+      actor_id: params.userId,
+      action,
+      target_type: "attendance",
+      target_id: `${params.date}::${params.userId}`,
+      metadata: {
+        userId: params.userId,
+        userName: params.userName,
+        role: params.userRole,
+        date: params.date,
+        status: "present",
+        checkInTime: params.checkInTime,
+        checkOutTime: params.checkOutTime,
+        source: "adflow"
+      }
+    });
+  } catch {
+    // Non-fatal if offline
+  }
+}
+
+/**
+ * Fetches today's explicit Check-In / Check-Out status for the header button,
+ * checking shared Supabase attendance events and the live Task Manager service.
+ */
+export async function getManualTodayAttendance(userId: string): Promise<ManualAttendanceStatus> {
+  const today = getTodayIstKey();
+
+  const sharedSupabase = await readSharedSupabaseAttendanceForToday(userId, today);
+  if (sharedSupabase?.checkInTime) {
+    return {
+      date: today,
+      checkInTime: sharedSupabase.checkInTime,
+      checkOutTime: sharedSupabase.checkOutTime,
+      syncedWithTasks: true
+    };
+  }
+
+  for (const endpoint of getTaskManagerAttendanceEndpoints(`?userId=${encodeURIComponent(userId)}`)) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 2000);
+      const res = await fetch(endpoint, {
+        headers: getTaskManagerServiceHeaders(),
+        cache: "no-store",
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+
+      if (res.ok) {
+        const data = await res.json();
+        const rec = data?.record as { checkInTime?: string | null; checkOutTime?: string | null; userName?: string; role?: string } | null;
+        if (rec?.checkInTime) {
+          await upsertExplicitAttendanceLocal({
+            user_id: userId,
+            user_name: rec.userName || "User",
+            user_role: rec.role || "member",
+            date: today,
+            check_in_at: rec.checkInTime,
+            check_out_at: rec.checkOutTime || null,
+            updated_at: new Date().toISOString()
+          });
+          return {
+            date: today,
+            checkInTime: rec.checkInTime,
+            checkOutTime: rec.checkOutTime || null,
+            syncedWithTasks: true
+          };
+        }
+
+        // Tasks responded authoritatively with no record for today
+        return {
+          date: today,
+          checkInTime: null,
+          checkOutTime: null,
+          syncedWithTasks: true
+        };
+      }
+    } catch {
+      // Try next endpoint or local fallback
+    }
+  }
+
+  const localList = await readExplicitAttendance();
+  const found = localList.find((item) => item.user_id === userId && item.date === today);
+  return {
+    date: today,
+    checkInTime: found?.check_in_at ?? null,
+    checkOutTime: found?.check_out_at ?? null,
+    syncedWithTasks: false
+  };
+}
+
+/**
+ * Performs explicit Check-In from AdFlow and syncs it to Task Manager attendance + Supabase.
+ */
+export async function manualCheckInWithTasks(
+  userId: string,
+  userName: string,
+  userRole: string
+): Promise<{ ok: true; status: ManualAttendanceStatus } | { ok: false; error: string }> {
+  const nowIso = new Date().toISOString();
+  const today = getTodayIstKey();
+
+  const existing = await getManualTodayAttendance(userId);
+  if (existing.checkInTime) {
+    return { ok: true, status: existing };
+  }
+
+  const adflowRecord = await recordCheckIn(userId, userName, userRole);
+
+  let checkInTime = adflowRecord.check_in_at || nowIso;
+  let checkOutTime: string | null = null;
+  let syncedWithTasks = false;
+
+  await publishManualAttendanceToSupabase("tasks_attendance_checkin", {
+    userId,
+    userName,
+    userRole,
+    date: today,
+    checkInTime,
+    checkOutTime: null
+  });
+
+  for (const endpoint of getTaskManagerAttendanceEndpoints()) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3000);
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: getTaskManagerServiceHeaders(),
+        body: JSON.stringify({ action: "checkin", userId, skipSupabasePublish: true }),
+        cache: "no-store",
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.record?.checkInTime) {
+          checkInTime = data.record.checkInTime;
+          checkOutTime = data.record.checkOutTime ?? null;
+        }
+        syncedWithTasks = true;
+        break;
+      }
+    } catch {
+      // Try next endpoint
+    }
+  }
+
+  await upsertExplicitAttendanceLocal({
+    user_id: userId,
+    user_name: userName,
+    user_role: userRole,
+    date: today,
+    check_in_at: checkInTime,
+    check_out_at: checkOutTime,
+    updated_at: nowIso
+  });
+
+  return {
+    ok: true,
+    status: {
+      date: today,
+      checkInTime,
+      checkOutTime,
+      syncedWithTasks: syncedWithTasks || isSupabaseConfigured()
+    }
+  };
+}
+
+/**
+ * Performs explicit Check-Out from AdFlow and syncs it to Task Manager attendance + Supabase.
+ */
+export async function manualCheckOutWithTasks(
+  userId: string,
+  userName: string,
+  userRole: string
+): Promise<{ ok: true; status: ManualAttendanceStatus } | { ok: false; error: string }> {
+  const nowIso = new Date().toISOString();
+  const today = getTodayIstKey();
+  const current = await getManualTodayAttendance(userId);
+
+  if (!current.checkInTime) {
+    return { ok: false, error: "Please check in first before checking out." };
+  }
+
+  if (current.checkOutTime) {
+    return { ok: true, status: current };
+  }
+
+  const adflowRecord = await recordCheckOut(userId);
+  let checkInTime = current.checkInTime;
+  let checkOutTime = adflowRecord?.check_out_at || nowIso;
+  let syncedWithTasks = false;
+
+  await publishManualAttendanceToSupabase("tasks_attendance_checkout", {
+    userId,
+    userName,
+    userRole,
+    date: today,
+    checkInTime,
+    checkOutTime
+  });
+
+  for (const endpoint of getTaskManagerAttendanceEndpoints()) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3000);
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: getTaskManagerServiceHeaders(),
+        body: JSON.stringify({ action: "checkout", userId, skipSupabasePublish: true }),
+        cache: "no-store",
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.record) {
+          checkInTime = data.record.checkInTime || checkInTime;
+          checkOutTime = data.record.checkOutTime || checkOutTime;
+        }
+        syncedWithTasks = true;
+        break;
+      }
+    } catch {
+      // Try next endpoint
+    }
+  }
+
+  await upsertExplicitAttendanceLocal({
+    user_id: userId,
+    user_name: userName,
+    user_role: userRole,
+    date: today,
+    check_in_at: checkInTime,
+    check_out_at: checkOutTime,
+    updated_at: nowIso
+  });
+
+  return {
+    ok: true,
+    status: {
+      date: today,
+      checkInTime,
+      checkOutTime,
+      syncedWithTasks: syncedWithTasks || isSupabaseConfigured()
+    }
+  };
+}

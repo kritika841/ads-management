@@ -30,11 +30,22 @@ export function AdVersionPreview({
 }) {
   const items = useMemo<PreviewItem[]>(() => {
     const sortedVersions = [...versions].sort((a, b) => b.version_number - a.version_number);
+    const editedVars = (ad.edited_variations ?? []).map((variation, idx) => ({
+      key: `evar-${variation.id}-${idx}`,
+      label: variation.label || `Variation ${idx + 1}`,
+      date: ad.updated_at,
+      driveUrl: variation.drive_url,
+      driveFileId: variation.drive_file_id,
+      previewUrl: variation.preview_url,
+      thumbnailUrl: null,
+      scriptHtml: ad.script_html,
+      scriptText: ad.script_text ?? null
+    }));
 
     return [
       {
         key: "current",
-        label: "Current",
+        label: editedVars.length > 0 ? "Main video" : "Current",
         date: ad.updated_at,
         driveUrl: ad.drive_url,
         driveFileId: ad.drive_file_id,
@@ -43,6 +54,7 @@ export function AdVersionPreview({
         scriptHtml: ad.script_html,
         scriptText: ad.script_text ?? null
       },
+      ...editedVars,
       ...sortedVersions.map((version) => ({
         key: version.id,
         label: `v${version.version_number}`,

@@ -26,7 +26,20 @@ import { resolveScriptHtml, sanitizeScriptHtml } from "@/lib/sanitize";
 import { validateReviewInput } from "@/lib/workflow";
 import { isRecycleBinReady, liveOnly, softDeleteAd } from "@/lib/recycle-bin";
 import { planEditorAssignment, reassignableEditorStages, type EditorAssignmentKind } from "@/lib/editor-assignment";
+import {
+  CREATIVE_VARIATIONS_ACTION,
+  EDITOR_VARIATIONS_ACTION,
+  extractEditedVariationsFromActivityLogs,
+  extractVariationsFromActivityLogs,
+  normalizeCreativeVariations
+} from "@/lib/creative-variations";
 import type { Ad, Profile } from "@/lib/types";
+
+const variationItemSchema = z.object({
+  id: z.string().trim().max(80).optional(),
+  label: z.string().trim().max(120).optional().default(""),
+  rawFootageUrl: z.string().trim().max(2000).optional().default("")
+});
 
 const creatorItemSchema = z.object({
   id: z.string().uuid().optional(),
@@ -39,15 +52,23 @@ const creatorItemSchema = z.object({
   stage: z.enum(["script_writing", "ready_to_shoot", "shoot_complete", "ready_for_edit"]),
   editorId: z.string().uuid().optional().or(z.literal("")),
   rawFootageUrl: z.string().trim().optional().or(z.literal("")),
+  variations: z.array(variationItemSchema).optional(),
   platforms: z.array(z.string()).default([]),
   tags: z.array(z.string()).default([]),
   deadline: z.string().optional().nullable(),
   notes: z.string().trim().max(4000).optional().nullable()
 });
 
+const editedVariationItemSchema = z.object({
+  id: z.string().trim().max(80).optional(),
+  label: z.string().trim().max(120).optional().default(""),
+  driveUrl: z.string().trim().max(2000).optional().default("")
+});
+
 const editorSubmissionSchema = z.object({
   adId: z.string().uuid(),
   driveUrl: z.string().trim().url("Use a valid Google Drive video URL."),
+  variationVideos: z.array(editedVariationItemSchema).optional(),
   editorNotes: z.string().trim().max(4000).optional().nullable(),
   changesConfirmed: z.boolean().default(false)
 });
@@ -174,6 +195,12 @@ export async function saveCreatorItem(payload: z.input<typeof creatorItemSchema>
     rawFootageUrl = data.rawFootageUrl!.trim();
   }
 
+  const normalizedVariations = data.variations !== undefined ? normalizeCreativeVariations(data.variations) : undefined;
+  if (normalizedVariations) {
+    const variationErr = validateVariationUrls(normalizedVariations, requiresRawFootage);
+    if (variationErr) return { ok: false, message: variationErr };
+  }
+
   // Creator-form saves never clear an existing editor. Clearing is a privileged,
   // explicitly reasoned operation handled by the dedicated assignment RPC.
   let editorId: string | null = currentAd?.editor_id ?? null;
@@ -245,6 +272,10 @@ export async function saveCreatorItem(payload: z.input<typeof creatorItemSchema>
     editor_id: editorId
   });
 
+  if (normalizedVariations !== undefined) {
+    await persistCreativeVariations(admin, saved.id, profile.id, normalizedVariations, Boolean(currentAd));
+  }
+
   const newHandoff = handingOff && (currentAd?.production_stage !== "ready_for_edit" || currentAd.editor_id !== editorId);
   if (newHandoff && editorId) {
     await notifyUserIds(admin, [editorId], saved.id, "New editing assignment", `${profile.name} assigned ${saved.name} to you. The script and raw footage are ready.`);
@@ -268,6 +299,7 @@ const adminOverrideSchema = z.object({
     stage: z.enum(["script_writing", "ready_to_shoot", "shoot_complete", "ready_for_edit", "editing", "creator_review", "final_review", "creator_changes_requested", "changes_requested", "approved"]),
   editorId: z.string().uuid().optional().or(z.literal("")),
   rawFootageUrl: z.string().trim().optional().or(z.literal("")),
+  variations: z.array(variationItemSchema).optional(),
   platforms: z.array(z.string()).default([]),
   tags: z.array(z.string()).default([]),
   deadline: z.string().optional().nullable(),
@@ -319,6 +351,13 @@ export async function adminOverrideCreativeEdit(payload: z.input<typeof adminOve
   const now = new Date().toISOString();
   const stageIndex = ["script_writing", "ready_to_shoot", "shoot_complete", "ready_for_edit", "editing", "creator_review", "final_review", "creator_changes_requested", "changes_requested", "approved"].indexOf(data.stage);
   const assignedAt = editorId ? (currentAd.editor_id === editorId && currentAd.assigned_at ? currentAd.assigned_at : now) : null;
+
+  const requiresRawFootageOverride = stageIndex >= 2;
+  const normalizedVariations = data.variations !== undefined ? normalizeCreativeVariations(data.variations) : undefined;
+  if (normalizedVariations) {
+    const variationErr = validateVariationUrls(normalizedVariations, requiresRawFootageOverride);
+    if (variationErr) return { ok: false, message: variationErr };
+  }
 
   const patch: Record<string, unknown> = {
     name: data.name,
@@ -383,6 +422,10 @@ export async function adminOverrideCreativeEdit(payload: z.input<typeof adminOve
     editor_id: editorId,
     by: profile.role,
   });
+
+  if (normalizedVariations !== undefined) {
+    await persistCreativeVariations(admin, saved.id, profile.id, normalizedVariations, true);
+  }
 
   // Notify newly assigned editor
   const newEditorAssigned = editorId && editorId !== currentAd.editor_id;
@@ -458,6 +501,47 @@ export async function submitEditedVideo(payload: z.input<typeof editorSubmission
     return { ok: false, message: driveVideoResult.error ?? "Use a valid Google Drive single video file URL." };
   }
   const drivePreview = driveVideoResult.result;
+
+  const { data: creatorVarLogs } = await admin
+    .from("activity_logs")
+    .select("action,metadata,created_at")
+    .eq("ad_id", ad.id)
+    .eq("action", CREATIVE_VARIATIONS_ACTION)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const creatorVariations = extractVariationsFromActivityLogs(creatorVarLogs);
+
+  const parsedEditedVariations: Array<{
+    id: string;
+    label: string;
+    drive_url: string;
+    drive_file_id: string | null;
+    preview_url: string | null;
+  }> = [];
+  if (creatorVariations.length > 0) {
+    const submitted = data.variationVideos ?? [];
+    for (let i = 0; i < creatorVariations.length; i++) {
+      const cv = creatorVariations[i];
+      const match = submitted.find((s) => s.id && s.id === cv.id) ?? submitted[i];
+      const label = cv.label || `Variation ${i + 1}`;
+      const rawUrl = (match?.driveUrl ?? "").trim();
+      if (!rawUrl) {
+        return { ok: false, message: `Add the edited Google Drive video link for ${label}.` };
+      }
+      const parsedVar = parseGoogleDriveVideoFileUrl(rawUrl);
+      if (parsedVar.error || !parsedVar.result) {
+        return { ok: false, message: `${label}: ${parsedVar.error ?? "Use a valid Google Drive single video file URL."}` };
+      }
+      parsedEditedVariations.push({
+        id: cv.id || `var-${i + 1}`,
+        label,
+        drive_url: rawUrl,
+        drive_file_id: parsedVar.result.fileId,
+        preview_url: parsedVar.result.previewUrl
+      });
+    }
+  }
+
   const metadata = await getDriveMetadata(drivePreview.fileId).catch(() => null);
   const update = {
     drive_url: data.driveUrl,
@@ -481,6 +565,10 @@ export async function submitEditedVideo(payload: z.input<typeof editorSubmission
     p_editor_notes: update.editor_notes ?? ""
   });
   if (submissionError) return { ok: false, message: submissionError.message };
+
+  if (creatorVariations.length > 0) {
+    await persistEditedVariations(admin, ad.id, profile.id, parsedEditedVariations);
+  }
 
   // Close any active timer session when the editor submits
   await admin
@@ -1979,6 +2067,100 @@ function validateGoogleDriveUrl(value: string | undefined, label: string) {
     return `Use a valid ${label} URL.`;
   }
   return null;
+}
+
+function validateVariationUrls(
+  variations: Array<{ label: string; raw_footage_url: string }>,
+  requireAllUrls: boolean
+): string | null {
+  for (let i = 0; i < variations.length; i++) {
+    const item = variations[i];
+    const url = item.raw_footage_url.trim();
+    const label = item.label.trim() || `Variation ${i + 1}`;
+    if (!url) {
+      if (requireAllUrls) {
+        return `Add the Google Drive raw footage URL for ${label}.`;
+      }
+      continue;
+    }
+    const err = validateGoogleDriveUrl(url, `${label} raw footage`);
+    if (err) return err;
+  }
+  return null;
+}
+
+async function persistCreativeVariations(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  adId: string,
+  actorId: string,
+  variations: Array<{ id: string; label: string; raw_footage_url: string }>,
+  isExistingAd: boolean
+) {
+  let previous: Array<{ id: string; label: string; raw_footage_url: string }> = [];
+  if (isExistingAd) {
+    const { data: logs } = await admin
+      .from("activity_logs")
+      .select("action,metadata,created_at")
+      .eq("ad_id", adId)
+      .eq("action", CREATIVE_VARIATIONS_ACTION)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    previous = extractVariationsFromActivityLogs(logs);
+  }
+
+  const unchanged =
+    previous.length === variations.length &&
+    previous.every(
+      (item, idx) =>
+        item.id === variations[idx].id &&
+        item.label === variations[idx].label &&
+        item.raw_footage_url === variations[idx].raw_footage_url
+    );
+
+  if (unchanged) return;
+
+  await logActivity(adId, actorId, CREATIVE_VARIATIONS_ACTION, {
+    variation_count: variations.length,
+    variations
+  });
+}
+
+async function persistEditedVariations(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  adId: string,
+  actorId: string,
+  editedVariations: Array<{
+    id: string;
+    label: string;
+    drive_url: string;
+    drive_file_id: string | null;
+    preview_url: string | null;
+  }>
+) {
+  const { data: logs } = await admin
+    .from("activity_logs")
+    .select("action,metadata,created_at")
+    .eq("ad_id", adId)
+    .eq("action", EDITOR_VARIATIONS_ACTION)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const previous = extractEditedVariationsFromActivityLogs(logs);
+
+  const unchanged =
+    previous.length === editedVariations.length &&
+    previous.every(
+      (item, idx) =>
+        item.id === editedVariations[idx].id &&
+        item.label === editedVariations[idx].label &&
+        item.drive_url === editedVariations[idx].drive_url
+    );
+
+  if (unchanged) return;
+
+  await logActivity(adId, actorId, EDITOR_VARIATIONS_ACTION, {
+    variation_count: editedVariations.length,
+    edited_variations: editedVariations
+  });
 }
 
 async function notifySubmissionReviewers(ad: Ad, submitter: Profile) {
