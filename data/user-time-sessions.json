@@ -1,33 +1,5 @@
 [
   {
-    "id": "53b27e91-c39c-4e9e-9dc7-3c813d74e7b9",
-    "user_id": "4a206a68-c5a4-4d12-be76-90468ea3df44",
-    "user_name": "Kritika",
-    "user_role": "admin",
-    "date": "2026-11-20",
-    "session_started_at": "2026-11-20T12:28:46.648+00:00",
-    "session_ended_at": null,
-    "last_active_at": "2026-11-20T12:33:17.456Z",
-    "duration_seconds": 271,
-    "end_reason": "active",
-    "activities": [
-      {
-        "path": "/dashboard",
-        "type": "page_view",
-        "timestamp": "2026-11-20T12:28:46.648Z",
-        "description": "Opened Dashboard"
-      },
-      {
-        "path": "/library",
-        "type": "page_view",
-        "timestamp": "2026-11-20T12:29:10.798Z",
-        "description": "Navigated to Creative Library"
-      }
-    ],
-    "created_at": "2026-11-20T12:28:46.648+00:00",
-    "updated_at": "2026-11-20T12:33:17.456Z"
-  },
-  {
     "id": "df094ee0-1219-4a51-98e7-a269e445bda9",
     "user_id": "4a206a68-c5a4-4d12-be76-90468ea3df44",
     "user_name": "Kritika",
